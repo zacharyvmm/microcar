@@ -86,4 +86,4 @@ event = "warning"
 value = "BMS_OFFLINE"
 
 [expect]
-trace = "expected/traces/lost_bms_heartbeat.trace"
+trace = "../expected/traces/lost_bms_heartbeat.trace"

@@ -74,4 +74,4 @@ event = "vehicle_mode"
 value = "DRIVE"
 
 [expect]
-trace = "expected/traces/dashboard_reboot.trace"
+trace = "../expected/traces/dashboard_reboot.trace"

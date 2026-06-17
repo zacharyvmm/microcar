@@ -11,7 +11,7 @@ Features needed from the `costar` simulator for the microcar demo.
 - [x] `costar run --scenario` — scenario execution from CLI
 - [x] `costar test` — headless CI scenario test runner
 - [x] Broadcast bus (CAN-like) — all-to-all with sender exclusion
-  - Implemented as N*(N-1) point-to-point FIFO links (Phase 2)
+  - Implemented as `CanBus` in sim-world with true broadcast semantics, fault injection, and deterministic ordering (Phase 3)
 - [ ] Plant/environment callbacks — external model integration
 - [x] `[[bus]]` and `[[bus.node]]` in scenario format
 - [x] `[[fault]]` in scenario format — timed fault injection (parsed, no-op for now)
@@ -36,6 +36,7 @@ Features needed from the `costar` simulator for the microcar demo.
 ## Needed Later
 
 - [ ] `sim-can` crate — generic CAN-like broadcast bus
+  - Implemented as `CanBus` in `sim-world/canbus.rs` (Phase 3)
 - [ ] `sim-assert` crate — generic scenario assertion engine
 - [ ] CAN arbitration and bus load timing
 - [ ] Virtual CAN controller device

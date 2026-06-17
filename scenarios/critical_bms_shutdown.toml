@@ -86,4 +86,4 @@ event = "warning"
 value = "CRITICAL_BMS_FAULT"
 
 [expect]
-trace = "expected/traces/critical_bms_shutdown.trace"
+trace = "../expected/traces/critical_bms_shutdown.trace"

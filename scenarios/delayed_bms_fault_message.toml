@@ -75,4 +75,4 @@ event = "vehicle_mode"
 value = "LIMP"
 
 [expect]
-trace = "expected/traces/delayed_bms_fault_message.trace"
+trace = "../expected/traces/delayed_bms_fault_message.trace"

@@ -1,4 +1,4 @@
-# boot_and_heartbeat — all ECUs boot successfully
+# boot_and_heartbeat — all 4 ECUs boot successfully
 
 name = "boot_and_heartbeat"
 duration_ms = 2000
@@ -48,6 +48,47 @@ machine = "bms"
 bus = "vcan0"
 machine = "dashboard"
 
+# ── Boot sequence: each ECU sends a heartbeat ────────────────────
+# Gateway boots first, sends heartbeat at 50 ms.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 50, 0, 0, 0]
+
+# Powertrain boots at 20 ms, sends heartbeat at 70 ms.
+[[bus_inject]]
+at_ms = 70
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 50, 0, 0, 0]
+
+# BMS boots at 30 ms, sends heartbeat at 80 ms.
+[[bus_inject]]
+at_ms = 80
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 50, 0, 0, 0]
+
+# Dashboard boots at 40 ms, sends heartbeat at 90 ms.
+[[bus_inject]]
+at_ms = 90
+bus = "vcan0"
+sender = "dashboard"
+id = 0x001
+data = [4, 50, 0, 0, 0]
+
+# Gateway repeats heartbeat at 150 ms.
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 150, 0, 0, 0]
+
 [plant]
 type = "microcar"
 tick_ms = 10
@@ -77,4 +118,4 @@ event = "vehicle_mode"
 value = "READY"
 
 [expect]
-trace = "expected/traces/boot_and_heartbeat.trace"
+trace = "../expected/traces/boot_and_heartbeat.trace"
