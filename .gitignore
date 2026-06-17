@@ -3,3 +3,4 @@ docs/tasks.toml
 docs/tasks.state.json
 *.state.json
 expected/traces/long_drive_10min.trace
+__pycache__/

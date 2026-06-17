@@ -104,9 +104,9 @@ cargo run -- --rtos zephyr --golden
 cd costar
 ZEPHYR_BASE=/path/to/zephyr-workspace/zephyr \
 ZEPHYR_APP_SOURCES=/path/to/microcar/firmware/dashboard_ecu_zephyr/src/main.c \
-ZEPHYR_EXTRA_SOURCES="/path/to/microcar/firmware/dashboard_ecu_zephyr/src/dashboard_state.c \
-                     /path/to/microcar/firmware/dashboard_ecu_zephyr/src/warning_display.c" \
-ZEPHYR_APP_INCLUDES="/path/to/microcar/common/include:/path/to/microcar/firmware/dashboard_ecu_zephyr/src" \
+ZEPHYR_EXTRA_SOURCES="/path/to/microcar/firmware/dashboard_ecu/src/dashboard_state.c \
+                     /path/to/microcar/firmware/dashboard_ecu/src/warning_display.c" \
+ZEPHYR_APP_INCLUDES="/path/to/microcar/common/include:/path/to/microcar/firmware/dashboard_ecu_zephyr/src:/path/to/microcar/firmware/dashboard_ecu/src" \
 cargo build --features zephyr_real
 ```
 
