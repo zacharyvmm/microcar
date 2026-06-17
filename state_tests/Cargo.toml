@@ -1,0 +1,5 @@
+[package]
+name = "microcar-state-tests"
+version = "0.1.0"
+edition = "2021"
+description = "State machine logic tests for microcar firmware"

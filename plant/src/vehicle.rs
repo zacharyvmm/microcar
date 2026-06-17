@@ -81,7 +81,10 @@ mod tests {
         }
 
         // Speed should have increased
-        assert!(plant.speed_kph_x10 > 0, "speed should increase with throttle");
+        assert!(
+            plant.speed_kph_x10 > 0,
+            "speed should increase with throttle"
+        );
     }
 
     #[test]
@@ -120,7 +123,10 @@ mod tests {
         for _ in 0..100 {
             plant.step(10); // 1000ms of drag
         }
-        assert!(plant.speed_kph_x10 < speed_under_torque, "drag should slow vehicle");
+        assert!(
+            plant.speed_kph_x10 < speed_under_torque,
+            "drag should slow vehicle"
+        );
     }
 
     #[test]
