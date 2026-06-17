@@ -1,0 +1,251 @@
+# mixed_rtos_boot — 3 FreeRTOS ECUs + 1 Zephyr dashboard ECU
+#
+# Gateway, powertrain, and BMS run FreeRTOS firmware.
+# Dashboard runs Zephyr firmware compiled via sim-zephyr-port.
+# All ECUs communicate over the deterministic vcan0 CAN bus.
+
+name = "mixed_rtos_boot"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "gateway"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+rtos = "zephyr"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+# ── Boot sequence: each ECU sends a heartbeat ────────────────────
+
+# Gateway boots, sends heartbeat at 50 ms.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 50, 0, 0, 0]
+
+# Powertrain boots, sends heartbeat at 70 ms.
+[[bus_inject]]
+at_ms = 70
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 50, 0, 0, 0]
+
+# BMS boots, sends heartbeat at 80 ms.
+[[bus_inject]]
+at_ms = 80
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 50, 0, 0, 0]
+
+# Dashboard (Zephyr) boots, sends heartbeat at 90 ms.
+[[bus_inject]]
+at_ms = 90
+bus = "vcan0"
+sender = "dashboard"
+id = 0x001
+data = [4, 50, 0, 0, 0]
+
+# ── Gateway publishes vehicle mode READY at 100 ms ──────────────
+
+[[bus_inject]]
+at_ms = 100
+bus = "vcan0"
+sender = "gateway"
+id = 0x010
+data = [1, 0]  # mode=READY, fault=0
+
+# ── Plant publishes wheel speed ──────────────────────────────────
+
+# Initial speed: 0.0 km/h
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "gateway"  # plant uses gateway as anonymous publisher
+id = 0x200
+data = [0, 0]  # speed = 0
+
+# Accelerating: 15.0 km/h
+[[bus_inject]]
+at_ms = 300
+bus = "vcan0"
+sender = "gateway"
+id = 0x200
+data = [0, 150]  # speed = 15.0 km/h
+
+# Cruising: 30.0 km/h
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "gateway"
+id = 0x200
+data = [1, 44]  # speed = 30.0 km/h
+
+# ── Plant publishes BMS status ───────────────────────────────────
+
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "gateway"  # plant publishes via gateway
+id = 0x300
+data = [85, 1, 44, 0, 250, 0, 0]  # SOC=85%, voltage=48.0V, temp=25.0°C
+
+# ── Gateway publishes vehicle mode DRIVE at 400 ms ───────────────
+
+[[bus_inject]]
+at_ms = 400
+bus = "vcan0"
+sender = "gateway"
+id = 0x010
+data = [2, 0]  # mode=DRIVE, fault=0
+
+# ── Periodic heartbeats ──────────────────────────────────────────
+
+# Gateway heartbeat at 150 ms
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 150, 0, 0, 0]
+
+# Powertrain heartbeat at 170 ms
+[[bus_inject]]
+at_ms = 170
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 150, 0, 0, 0]
+
+# BMS heartbeat at 180 ms
+[[bus_inject]]
+at_ms = 180
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 150, 0, 0, 0]
+
+# Dashboard (Zephyr) heartbeat at 190 ms
+[[bus_inject]]
+at_ms = 190
+bus = "vcan0"
+sender = "dashboard"
+id = 0x001
+data = [4, 150, 0, 0, 0]
+
+# Gateway heartbeat at 250 ms
+[[bus_inject]]
+at_ms = 250
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 250, 0, 0, 0]
+
+# Powertrain heartbeat at 270 ms
+[[bus_inject]]
+at_ms = 270
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 250, 0, 0, 0]
+
+# BMS heartbeat at 280 ms
+[[bus_inject]]
+at_ms = 280
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 250, 0, 0, 0]
+
+# Dashboard (Zephyr) heartbeat at 290 ms
+[[bus_inject]]
+at_ms = 290
+bus = "vcan0"
+sender = "dashboard"
+id = 0x001
+data = [4, 250, 0, 0, 0]
+
+# ── Vehicle mode LIMP at 600 ms (BMS overtemperature) ───────────
+
+[[bus_inject]]
+at_ms = 600
+bus = "vcan0"
+sender = "gateway"
+id = 0x010
+data = [3, 0]  # mode=LIMP, fault=0
+
+# ── Warning frame at 550 ms ──────────────────────────────────────
+
+[[bus_inject]]
+at_ms = 550
+bus = "vcan0"
+sender = "bms"
+id = 0x400
+data = [3, 1]  # source=BMS, warning=BMS_OVERTEMP
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[expect.event]]
+before_ms = 1000
+machine = "gateway"
+event = "node_online"
+node = "powertrain"
+
+[[expect.event]]
+before_ms = 1000
+machine = "gateway"
+event = "node_online"
+node = "bms"
+
+[[expect.event]]
+before_ms = 1000
+machine = "gateway"
+event = "node_online"
+node = "dashboard"
+
+[[expect.event]]
+before_ms = 1500
+machine = "gateway"
+event = "vehicle_mode"
+value = "READY"
+
+[expect]
+trace = "../expected/traces/mixed_rtos_boot.trace"

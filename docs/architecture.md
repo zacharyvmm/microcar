@@ -55,3 +55,74 @@ The plant is intentionally simple and deterministic — no real physics, all fix
 - All time is virtual — the sim runs as fast as possible, no wall-clock sleeps
 - Rust owns fiber lifecycle and scheduling; C firmware runs on corosensei fibers
 - Plant model is in `microcar` (application-specific), bus infrastructure in `costar` (generic)
+
+## Mixed-RTOS Support
+
+As of Phase 7, costar supports mixed-RTOS scenarios where different machines
+run different RTOS backends:
+
+| ECU         | Default RTOS | Alternative |
+|-------------|-------------|-------------|
+| Gateway     | FreeRTOS    | —           |
+| Powertrain  | FreeRTOS    | —           |
+| BMS         | FreeRTOS    | —           |
+| Dashboard   | FreeRTOS    | Zephyr      |
+
+### Scenario Configuration
+
+The `rtos` field in `[[machine]]` sections selects the RTOS backend:
+
+```toml
+[[machine]]
+id = 4
+name = "dashboard"
+rtos = "zephyr"   # or "freertos" (default)
+```
+
+### Machine struct
+
+`sim-world::Machine` stores the `rtos` field (type: `String`).  The
+`Scenario::build_world()` method reads the `rtos` field from `MachineDef`
+and passes it to `Machine::with_rtos()`.
+
+### Zephyr Dashboard ECU
+
+The Zephyr dashboard ECU (`firmware/dashboard_ecu_zephyr/`) reuses the
+same business logic (`dashboard_state.c`, `warning_display.c`) as the
+FreeRTOS version.  The main entry point (`main.c`) uses Zephyr threading
+APIs (`k_thread_create`, `k_sleep`) and is compiled via costar's
+`sim-zephyr-port` cc crate.
+
+**Standalone compilation** (standalone Zephyr test, no real Zephyr kernel):
+```bash
+cd costar
+cargo run -- --rtos zephyr --golden
+```
+
+**Full Zephyr kernel compilation** (requires Zephyr v4.1.0 source tree):
+```bash
+cd costar
+ZEPHYR_BASE=/path/to/zephyr-workspace/zephyr \
+ZEPHYR_APP_SOURCES=/path/to/microcar/firmware/dashboard_ecu_zephyr/src/main.c \
+ZEPHYR_EXTRA_SOURCES="/path/to/microcar/firmware/dashboard_ecu_zephyr/src/dashboard_state.c \
+                     /path/to/microcar/firmware/dashboard_ecu_zephyr/src/warning_display.c" \
+ZEPHYR_APP_INCLUDES="/path/to/microcar/common/include:/path/to/microcar/firmware/dashboard_ecu_zephyr/src" \
+cargo build --features zephyr_real
+```
+
+### Mixed-RTOS Scenario Test
+
+`scenarios/mixed_rtos_boot.toml` runs 3 FreeRTOS ECUs and 1 Zephyr
+dashboard on the same vcan0 bus.  The scenario is validated via
+`tests/check_assertions.py` which checks:
+
+- Dashboard receives vehicle mode, speed, and battery state from the bus
+- Dashboard publishes heartbeats at 100ms intervals
+- Gateway detects dashboard as "node_online" on first heartbeat
+- All traces are deterministic (golden trace comparison against
+  `expected/traces/mixed_rtos_boot.trace`)
+
+```bash
+cd microcar
+python3 tests/check_assertions.py scenarios/mixed_rtos_boot.toml
+```

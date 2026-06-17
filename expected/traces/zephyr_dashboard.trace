@@ -1,0 +1,140 @@
+           0 task-resume id=1 reason=scheduler
+           0 task-yield id=1 reason=SleepUntil(10)
+           0 user-u32 "boot" = 4
+           0 user-u32 "heartbeat" = 4
+          10 task-resume id=1 reason=scheduler
+          10 task-yield id=1 reason=SleepUntil(20)
+          20 task-resume id=1 reason=scheduler
+          20 task-yield id=1 reason=SleepUntil(30)
+          30 task-resume id=1 reason=scheduler
+          30 task-yield id=1 reason=SleepUntil(40)
+          40 task-resume id=1 reason=scheduler
+          40 task-yield id=1 reason=SleepUntil(50)
+          50 task-resume id=1 reason=scheduler
+          50 task-yield id=1 reason=SleepUntil(60)
+          50 user-u32 "vehicle_mode" = 1
+          60 task-resume id=1 reason=scheduler
+          60 task-yield id=1 reason=SleepUntil(70)
+          70 task-resume id=1 reason=scheduler
+          70 task-yield id=1 reason=SleepUntil(80)
+          80 task-resume id=1 reason=scheduler
+          80 task-yield id=1 reason=SleepUntil(90)
+          90 task-resume id=1 reason=scheduler
+          90 task-yield id=1 reason=SleepUntil(100)
+         100 task-resume id=1 reason=scheduler
+         100 task-yield id=1 reason=SleepUntil(110)
+         100 user-u32 "wheel_speed" = 150
+         100 user-u32 "heartbeat" = 4
+         110 task-resume id=1 reason=scheduler
+         110 task-yield id=1 reason=SleepUntil(120)
+         120 task-resume id=1 reason=scheduler
+         120 task-yield id=1 reason=SleepUntil(130)
+         130 task-resume id=1 reason=scheduler
+         130 task-yield id=1 reason=SleepUntil(140)
+         140 task-resume id=1 reason=scheduler
+         140 task-yield id=1 reason=SleepUntil(150)
+         150 task-resume id=1 reason=scheduler
+         150 task-yield id=1 reason=SleepUntil(160)
+         150 user-u32 "battery_status" = 85
+         160 task-resume id=1 reason=scheduler
+         160 task-yield id=1 reason=SleepUntil(170)
+         170 task-resume id=1 reason=scheduler
+         170 task-yield id=1 reason=SleepUntil(180)
+         180 task-resume id=1 reason=scheduler
+         180 task-yield id=1 reason=SleepUntil(190)
+         190 task-resume id=1 reason=scheduler
+         190 task-yield id=1 reason=SleepUntil(200)
+         200 task-resume id=1 reason=scheduler
+         200 task-yield id=1 reason=SleepUntil(210)
+         200 user-u32 "vehicle_mode" = 2
+         200 user-u32 "heartbeat" = 4
+         210 task-resume id=1 reason=scheduler
+         210 task-yield id=1 reason=SleepUntil(220)
+         220 task-resume id=1 reason=scheduler
+         220 task-yield id=1 reason=SleepUntil(230)
+         230 task-resume id=1 reason=scheduler
+         230 task-yield id=1 reason=SleepUntil(240)
+         240 task-resume id=1 reason=scheduler
+         240 task-yield id=1 reason=SleepUntil(250)
+         250 task-resume id=1 reason=scheduler
+         250 task-yield id=1 reason=SleepUntil(260)
+         260 task-resume id=1 reason=scheduler
+         260 task-yield id=1 reason=SleepUntil(270)
+         270 task-resume id=1 reason=scheduler
+         270 task-yield id=1 reason=SleepUntil(280)
+         280 task-resume id=1 reason=scheduler
+         280 task-yield id=1 reason=SleepUntil(290)
+         290 task-resume id=1 reason=scheduler
+         290 task-yield id=1 reason=SleepUntil(300)
+         300 task-resume id=1 reason=scheduler
+         300 task-yield id=1 reason=SleepUntil(310)
+         300 user-u32 "wheel_speed" = 300
+         300 user-u32 "heartbeat" = 4
+         310 task-resume id=1 reason=scheduler
+         310 task-yield id=1 reason=SleepUntil(320)
+         320 task-resume id=1 reason=scheduler
+         320 task-yield id=1 reason=SleepUntil(330)
+         330 task-resume id=1 reason=scheduler
+         330 task-yield id=1 reason=SleepUntil(340)
+         340 task-resume id=1 reason=scheduler
+         340 task-yield id=1 reason=SleepUntil(350)
+         350 task-resume id=1 reason=scheduler
+         350 task-yield id=1 reason=SleepUntil(360)
+         360 task-resume id=1 reason=scheduler
+         360 task-yield id=1 reason=SleepUntil(370)
+         370 task-resume id=1 reason=scheduler
+         370 task-yield id=1 reason=SleepUntil(380)
+         380 task-resume id=1 reason=scheduler
+         380 task-yield id=1 reason=SleepUntil(390)
+         390 task-resume id=1 reason=scheduler
+         390 task-yield id=1 reason=SleepUntil(400)
+         400 task-resume id=1 reason=scheduler
+         400 task-yield id=1 reason=SleepUntil(410)
+         400 user-u32 "warning" = 1
+         400 user-u32 "heartbeat" = 4
+         410 task-resume id=1 reason=scheduler
+         410 task-yield id=1 reason=SleepUntil(420)
+         420 task-resume id=1 reason=scheduler
+         420 task-yield id=1 reason=SleepUntil(430)
+         430 task-resume id=1 reason=scheduler
+         430 task-yield id=1 reason=SleepUntil(440)
+         440 task-resume id=1 reason=scheduler
+         440 task-yield id=1 reason=SleepUntil(450)
+         450 task-resume id=1 reason=scheduler
+         450 task-yield id=1 reason=SleepUntil(460)
+         460 task-resume id=1 reason=scheduler
+         460 task-yield id=1 reason=SleepUntil(470)
+         470 task-resume id=1 reason=scheduler
+         470 task-yield id=1 reason=SleepUntil(480)
+         480 task-resume id=1 reason=scheduler
+         480 task-yield id=1 reason=SleepUntil(490)
+         490 task-resume id=1 reason=scheduler
+         490 task-yield id=1 reason=SleepUntil(500)
+         500 task-resume id=1 reason=scheduler
+         500 task-yield id=1 reason=SleepUntil(510)
+         500 user-u32 "vehicle_mode" = 3
+         500 user-u32 "heartbeat" = 4
+         510 task-resume id=1 reason=scheduler
+         510 task-yield id=1 reason=SleepUntil(520)
+         520 task-resume id=1 reason=scheduler
+         520 task-yield id=1 reason=SleepUntil(530)
+         530 task-resume id=1 reason=scheduler
+         530 task-yield id=1 reason=SleepUntil(540)
+         540 task-resume id=1 reason=scheduler
+         540 task-yield id=1 reason=SleepUntil(550)
+         550 task-resume id=1 reason=scheduler
+         550 task-yield id=1 reason=SleepUntil(560)
+         560 task-resume id=1 reason=scheduler
+         560 task-yield id=1 reason=SleepUntil(570)
+         570 task-resume id=1 reason=scheduler
+         570 task-yield id=1 reason=SleepUntil(580)
+         580 task-resume id=1 reason=scheduler
+         580 task-yield id=1 reason=SleepUntil(590)
+         590 task-resume id=1 reason=scheduler
+         590 task-yield id=1 reason=SleepUntil(600)
+         600 task-resume id=1 reason=scheduler
+         600 task-yield id=1 reason=TaskExit
+         600 user-u32 "heartbeat" = 4
+         600 user-u32 "dashboard_update" = 1
+         600 user-u32 "scenario_done" = 600
+         600 user-u32 "zephyr_dashboard_exit" = 1
