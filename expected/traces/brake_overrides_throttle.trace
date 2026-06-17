@@ -27,14 +27,10 @@
 {"machine": 1, "at": 40500, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 40500, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 50000, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 50000, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 50000, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 50500, "event": "can-rx", "receiver": 1, "id": 257, "len": 2}
 {"machine": 1, "at": 50500, "event": "can-rx", "receiver": 1, "id": 512, "len": 2}
 {"machine": 1, "at": 50500, "event": "can-rx", "receiver": 1, "id": 513, "len": 7}
-{"machine": 1, "at": 50500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 50500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 50500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 50500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 50500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 50500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
@@ -53,7 +49,6 @@
 {"machine": 1, "at": 70000, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 70000, "event": "vehicle_mode", "value": "READY"}
 {"machine": 1, "at": 70500, "event": "can-rx", "receiver": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 70500, "event": "can-rx", "receiver": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 70500, "event": "can-rx", "receiver": 1, "id": 257, "len": 2}
 {"machine": 1, "at": 70500, "event": "can-rx", "receiver": 1, "id": 512, "len": 2}
 {"machine": 1, "at": 70500, "event": "can-rx", "receiver": 1, "id": 513, "len": 7}
@@ -63,7 +58,6 @@
 {"machine": 1, "at": 70500, "event": "node_online", "node": "bms"}
 {"machine": 1, "at": 80000, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 80500, "event": "can-rx", "receiver": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 80500, "event": "can-rx", "receiver": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 80500, "event": "can-rx", "receiver": 1, "id": 257, "len": 2}
 {"machine": 1, "at": 80500, "event": "can-rx", "receiver": 1, "id": 512, "len": 2}
 {"machine": 1, "at": 80500, "event": "can-rx", "receiver": 1, "id": 513, "len": 7}
@@ -72,7 +66,6 @@
 {"machine": 1, "at": 80500, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 80500, "event": "node_online", "node": "dashboard"}
 {"machine": 1, "at": 90000, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
-{"machine": 1, "at": 90500, "event": "can-rx", "receiver": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 90500, "event": "can-rx", "receiver": 1, "id": 257, "len": 2}
 {"machine": 1, "at": 90500, "event": "can-rx", "receiver": 1, "id": 512, "len": 2}
 {"machine": 1, "at": 90500, "event": "can-rx", "receiver": 1, "id": 513, "len": 7}
@@ -115,14 +108,10 @@
 {"machine": 1, "at": 140500, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 140500, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 150000, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 150000, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 150000, "event": "can-tx", "sender": 1, "id": 16, "len": 2}
 {"machine": 1, "at": 150500, "event": "can-rx", "receiver": 1, "id": 257, "len": 2}
 {"machine": 1, "at": 150500, "event": "can-rx", "receiver": 1, "id": 512, "len": 2}
 {"machine": 1, "at": 150500, "event": "can-rx", "receiver": 1, "id": 513, "len": 7}
-{"machine": 1, "at": 150500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 150500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
-{"machine": 1, "at": 150500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 150500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 150500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
 {"machine": 1, "at": 150500, "event": "can-tx", "sender": 1, "id": 1, "len": 5}
@@ -1578,7 +1567,6 @@
 {"machine": 2, "at": 40500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 50000, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 50500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
-{"machine": 2, "at": 50500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 50500, "event": "can-rx", "receiver": 2, "id": 16, "len": 2}
 {"machine": 2, "at": 50500, "event": "can-rx", "receiver": 2, "id": 512, "len": 2}
 {"machine": 2, "at": 50500, "event": "can-rx", "receiver": 2, "id": 513, "len": 7}
@@ -1596,20 +1584,15 @@
 {"machine": 2, "at": 60500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 60500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 60500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
-{"machine": 2, "at": 70000, "event": "can-tx", "sender": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 70000, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 70500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 70500, "event": "can-rx", "receiver": 2, "id": 16, "len": 2}
 {"machine": 2, "at": 70500, "event": "can-rx", "receiver": 2, "id": 512, "len": 2}
 {"machine": 2, "at": 70500, "event": "can-rx", "receiver": 2, "id": 513, "len": 7}
-{"machine": 2, "at": 70500, "event": "can-tx", "sender": 2, "id": 1, "len": 5}
-{"machine": 2, "at": 70500, "event": "can-tx", "sender": 2, "id": 1, "len": 5}
-{"machine": 2, "at": 70500, "event": "can-tx", "sender": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 70500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 70500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 70500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 80000, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
-{"machine": 2, "at": 80500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 80500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 80500, "event": "can-rx", "receiver": 2, "id": 16, "len": 2}
 {"machine": 2, "at": 80500, "event": "can-rx", "receiver": 2, "id": 512, "len": 2}
@@ -1618,7 +1601,6 @@
 {"machine": 2, "at": 80500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 80500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 90000, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
-{"machine": 2, "at": 90500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 90500, "event": "can-rx", "receiver": 2, "id": 16, "len": 2}
 {"machine": 2, "at": 90500, "event": "can-rx", "receiver": 2, "id": 512, "len": 2}
 {"machine": 2, "at": 90500, "event": "can-rx", "receiver": 2, "id": 513, "len": 7}
@@ -1633,6 +1615,7 @@
 {"machine": 2, "at": 100500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 100500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 110000, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
+{"machine": 2, "at": 110000, "event": "motor_command", "torque": 0}
 {"machine": 2, "at": 110500, "event": "can-rx", "receiver": 2, "id": 16, "len": 2}
 {"machine": 2, "at": 110500, "event": "can-rx", "receiver": 2, "id": 512, "len": 2}
 {"machine": 2, "at": 110500, "event": "can-rx", "receiver": 2, "id": 513, "len": 7}
@@ -1661,7 +1644,6 @@
 {"machine": 2, "at": 140500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 140500, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
 {"machine": 2, "at": 150000, "event": "can-tx", "sender": 2, "id": 257, "len": 2}
-{"machine": 2, "at": 150500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 150500, "event": "can-rx", "receiver": 2, "id": 1, "len": 5}
 {"machine": 2, "at": 150500, "event": "can-rx", "receiver": 2, "id": 16, "len": 2}
 {"machine": 2, "at": 150500, "event": "can-rx", "receiver": 2, "id": 512, "len": 2}
@@ -3107,7 +3089,6 @@
 {"machine": 3, "at": 40500, "event": "can-rx", "receiver": 3, "id": 512, "len": 2}
 {"machine": 3, "at": 40500, "event": "can-rx", "receiver": 3, "id": 513, "len": 7}
 {"machine": 3, "at": 50500, "event": "can-rx", "receiver": 3, "id": 1, "len": 5}
-{"machine": 3, "at": 50500, "event": "can-rx", "receiver": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 50500, "event": "can-rx", "receiver": 3, "id": 16, "len": 2}
 {"machine": 3, "at": 50500, "event": "can-rx", "receiver": 3, "id": 257, "len": 2}
 {"machine": 3, "at": 50500, "event": "can-rx", "receiver": 3, "id": 512, "len": 2}
@@ -3118,7 +3099,6 @@
 {"machine": 3, "at": 60500, "event": "can-rx", "receiver": 3, "id": 512, "len": 2}
 {"machine": 3, "at": 60500, "event": "can-rx", "receiver": 3, "id": 513, "len": 7}
 {"machine": 3, "at": 70000, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
-{"machine": 3, "at": 70500, "event": "can-rx", "receiver": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 70500, "event": "can-rx", "receiver": 3, "id": 16, "len": 2}
 {"machine": 3, "at": 70500, "event": "can-rx", "receiver": 3, "id": 257, "len": 2}
 {"machine": 3, "at": 70500, "event": "can-rx", "receiver": 3, "id": 512, "len": 2}
@@ -3126,16 +3106,11 @@
 {"machine": 3, "at": 70500, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 70500, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 70500, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
-{"machine": 3, "at": 80000, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 80500, "event": "can-rx", "receiver": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 80500, "event": "can-rx", "receiver": 3, "id": 16, "len": 2}
 {"machine": 3, "at": 80500, "event": "can-rx", "receiver": 3, "id": 257, "len": 2}
 {"machine": 3, "at": 80500, "event": "can-rx", "receiver": 3, "id": 512, "len": 2}
 {"machine": 3, "at": 80500, "event": "can-rx", "receiver": 3, "id": 513, "len": 7}
-{"machine": 3, "at": 80500, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
-{"machine": 3, "at": 80500, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
-{"machine": 3, "at": 80500, "event": "can-tx", "sender": 3, "id": 1, "len": 5}
-{"machine": 3, "at": 90500, "event": "can-rx", "receiver": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 90500, "event": "can-rx", "receiver": 3, "id": 16, "len": 2}
 {"machine": 3, "at": 90500, "event": "can-rx", "receiver": 3, "id": 257, "len": 2}
 {"machine": 3, "at": 90500, "event": "can-rx", "receiver": 3, "id": 512, "len": 2}
@@ -3160,7 +3135,6 @@
 {"machine": 3, "at": 140500, "event": "can-rx", "receiver": 3, "id": 257, "len": 2}
 {"machine": 3, "at": 140500, "event": "can-rx", "receiver": 3, "id": 512, "len": 2}
 {"machine": 3, "at": 140500, "event": "can-rx", "receiver": 3, "id": 513, "len": 7}
-{"machine": 3, "at": 150500, "event": "can-rx", "receiver": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 150500, "event": "can-rx", "receiver": 3, "id": 1, "len": 5}
 {"machine": 3, "at": 150500, "event": "can-rx", "receiver": 3, "id": 16, "len": 2}
 {"machine": 3, "at": 150500, "event": "can-rx", "receiver": 3, "id": 257, "len": 2}
@@ -4051,7 +4025,6 @@
 {"machine": 4, "at": 40500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
 {"machine": 4, "at": 40500, "event": "can-rx", "receiver": 4, "id": 513, "len": 7}
 {"machine": 4, "at": 50500, "event": "can-rx", "receiver": 4, "id": 1, "len": 5}
-{"machine": 4, "at": 50500, "event": "can-rx", "receiver": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 50500, "event": "can-rx", "receiver": 4, "id": 16, "len": 2}
 {"machine": 4, "at": 50500, "event": "can-rx", "receiver": 4, "id": 257, "len": 2}
 {"machine": 4, "at": 50500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
@@ -4062,13 +4035,11 @@
 {"machine": 4, "at": 60500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
 {"machine": 4, "at": 60500, "event": "can-rx", "receiver": 4, "id": 513, "len": 7}
 {"machine": 4, "at": 70500, "event": "can-rx", "receiver": 4, "id": 1, "len": 5}
-{"machine": 4, "at": 70500, "event": "can-rx", "receiver": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 70500, "event": "can-rx", "receiver": 4, "id": 16, "len": 2}
 {"machine": 4, "at": 70500, "event": "can-rx", "receiver": 4, "id": 257, "len": 2}
 {"machine": 4, "at": 70500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
 {"machine": 4, "at": 70500, "event": "can-rx", "receiver": 4, "id": 513, "len": 7}
 {"machine": 4, "at": 80000, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
-{"machine": 4, "at": 80500, "event": "can-rx", "receiver": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 80500, "event": "can-rx", "receiver": 4, "id": 16, "len": 2}
 {"machine": 4, "at": 80500, "event": "can-rx", "receiver": 4, "id": 257, "len": 2}
 {"machine": 4, "at": 80500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
@@ -4076,14 +4047,10 @@
 {"machine": 4, "at": 80500, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 80500, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 80500, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
-{"machine": 4, "at": 90000, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 90500, "event": "can-rx", "receiver": 4, "id": 16, "len": 2}
 {"machine": 4, "at": 90500, "event": "can-rx", "receiver": 4, "id": 257, "len": 2}
 {"machine": 4, "at": 90500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
 {"machine": 4, "at": 90500, "event": "can-rx", "receiver": 4, "id": 513, "len": 7}
-{"machine": 4, "at": 90500, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
-{"machine": 4, "at": 90500, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
-{"machine": 4, "at": 90500, "event": "can-tx", "sender": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 100500, "event": "can-rx", "receiver": 4, "id": 16, "len": 2}
 {"machine": 4, "at": 100500, "event": "can-rx", "receiver": 4, "id": 257, "len": 2}
 {"machine": 4, "at": 100500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
@@ -4104,7 +4071,6 @@
 {"machine": 4, "at": 140500, "event": "can-rx", "receiver": 4, "id": 257, "len": 2}
 {"machine": 4, "at": 140500, "event": "can-rx", "receiver": 4, "id": 512, "len": 2}
 {"machine": 4, "at": 140500, "event": "can-rx", "receiver": 4, "id": 513, "len": 7}
-{"machine": 4, "at": 150500, "event": "can-rx", "receiver": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 150500, "event": "can-rx", "receiver": 4, "id": 1, "len": 5}
 {"machine": 4, "at": 150500, "event": "can-rx", "receiver": 4, "id": 16, "len": 2}
 {"machine": 4, "at": 150500, "event": "can-rx", "receiver": 4, "id": 257, "len": 2}
