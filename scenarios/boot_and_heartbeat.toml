@@ -1,0 +1,80 @@
+# boot_and_heartbeat — all ECUs boot successfully
+
+name = "boot_and_heartbeat"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[expect.event]]
+before_ms = 1000
+machine = "gateway"
+event = "node_online"
+node = "bms"
+
+[[expect.event]]
+before_ms = 1000
+machine = "gateway"
+event = "node_online"
+node = "powertrain"
+
+[[expect.event]]
+before_ms = 1000
+machine = "gateway"
+event = "node_online"
+node = "dashboard"
+
+[[expect.event]]
+before_ms = 1500
+machine = "gateway"
+event = "vehicle_mode"
+value = "READY"
+
+[expect]
+trace = "expected/traces/boot_and_heartbeat.trace"

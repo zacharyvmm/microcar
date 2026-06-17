@@ -1,0 +1,77 @@
+# dashboard_reboot — dashboard failure should not inhibit drive
+
+name = "dashboard_reboot"
+duration_ms = 3000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[input]]
+at_ms = 100
+type = "driver_input"
+throttle_percent = 30
+brake_pressed = false
+
+[[fault]]
+at_ms = 1000
+target = "machine.dashboard"
+type = "reboot"
+
+[[expect.event]]
+before_ms = 1500
+machine = "gateway"
+event = "node_lost"
+node = "dashboard"
+
+# S7: Dashboard failure must NOT disable powertrain
+[[expect.event]]
+before_ms = 2000
+machine = "gateway"
+event = "vehicle_mode"
+value = "DRIVE"
+
+[expect]
+trace = "expected/traces/dashboard_reboot.trace"

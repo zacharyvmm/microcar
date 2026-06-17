@@ -1,0 +1,91 @@
+# bms_overtemp_limp_mode — flagship safety scenario
+
+name = "bms_overtemp_limp_mode"
+duration_ms = 5000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# Driver applies 50% throttle
+[[input]]
+at_ms = 100
+type = "driver_input"
+throttle_percent = 50
+brake_pressed = false
+
+# Force battery temperature to 82°C → BMS overtemperature
+[[fault]]
+at_ms = 1200
+target = "plant.battery"
+type = "force_temperature"
+value_c = 82
+
+# Within 300ms, gateway should enter LIMP mode
+[[expect.event]]
+before_ms = 1500
+machine = "gateway"
+event = "vehicle_mode"
+value = "LIMP"
+
+# Powertrain should cap torque after LIMP
+[[expect.event]]
+before_ms = 1600
+machine = "powertrain"
+event = "torque_limited"
+max_percent = 25
+
+# Dashboard should show BMS warning
+[[expect.event]]
+before_ms = 1700
+machine = "dashboard"
+event = "warning"
+value = "BMS_OVERTEMP"
+
+[expect]
+trace = "expected/traces/bms_overtemp_limp_mode.trace"
