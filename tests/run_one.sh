@@ -1,25 +1,49 @@
 #!/bin/bash
-# run_one.sh — run a single microcar scenario
+# run_one.sh — run a single microcar scenario through the assertion engine.
+#
+# Usage: ./tests/run_one.sh <scenario.toml>
+#
+# Runs check_assertions.py which:
+#   1. Generates a trace via check_trace.py (Python ECU simulation)
+#   2. Validates [[expect.event]] and [[assert]] stanzas
+#   3. Checks safety rules S1-S8
+#   4. Reports PASS/FAIL
+#
+# For golden trace comparison, pass the trace file as second arg:
+#   ./tests/run_one.sh scenarios/bms_overtemp_limp_mode.toml expected/traces/bms_overtemp_limp_mode.trace
+#
 set -euo pipefail
-SCENARIO="$1"
-cd "$(dirname "$0")/.."
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$PROJECT_DIR"
+
+SCENARIO="$1"
 if [ ! -f "$SCENARIO" ]; then
     echo "error: scenario file not found: $SCENARIO"
     exit 1
 fi
 
 name=$(basename "$SCENARIO" .toml)
+echo -n "  $name ... "
 
-# Try costar runner first (Rust-based, fast).
-COSTAR_BIN="../costar/target/debug/costar"
-if [ -x "$COSTAR_BIN" ] && [ "$name" != "long_drive_10min" ]; then
-    # costar runner with golden trace comparison.
-    if "$COSTAR_BIN" test "$SCENARIO" --verbose 2>/dev/null; then
-        exit 0
+if [ $# -ge 2 ]; then
+    # Compare against a golden trace file.
+    if python3 tests/check_assertions.py "$SCENARIO" "$2" >/dev/null 2>/dev/null; then
+        echo "PASS"
+    else
+        echo "FAIL"
+        python3 tests/check_assertions.py "$SCENARIO" "$2" 2>/dev/null || true
+        exit 1
     fi
-    # Fall through to Python runner if costar fails.
+else
+    # Generate trace and validate.
+    if python3 tests/check_assertions.py "$SCENARIO" >/dev/null 2>/dev/null; then
+        echo "PASS"
+    else
+        echo "FAIL"
+        python3 tests/check_assertions.py "$SCENARIO" 2>/dev/null || true
+        exit 1
+    fi
 fi
-
-# Python-based simulation (always works, good for CI).
-python3 tests/check_trace.py "$SCENARIO"
