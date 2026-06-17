@@ -8,9 +8,11 @@
 //! point non-determinism (all fixed-point or discrete math).
 
 pub mod battery;
+pub mod model;
 pub mod sensors;
 pub mod vehicle;
 
 pub use battery::BatteryModel;
+pub use model::MicrocarPlant;
 pub use sensors::SensorReadings;
 pub use vehicle::VehiclePlant;

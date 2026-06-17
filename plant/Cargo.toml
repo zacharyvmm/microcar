@@ -6,6 +6,7 @@ description = "Vehicle plant model for the microcar costar demo"
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
+sim-world = { path = "../../costar/crates/sim-world" }
 
 [features]
 default = []
