@@ -167,6 +167,21 @@ impl EnvironmentModel for MicrocarPlant {
         // Keep sorted by time (inputs should arrive in order from the scenario).
         self.pending_inputs.sort_by_key(|i| i.at);
     }
+
+    fn apply_fault(
+        &mut self,
+        target: &str,
+        fault_type: &str,
+        value: Option<u32>,
+    ) -> bool {
+        if target == "battery" && fault_type == "force_temperature" {
+            if let Some(temp_c) = value {
+                self.battery.force_temperature(temp_c as f32);
+                return true;
+            }
+        }
+        false
+    }
 }
 
 #[cfg(test)]

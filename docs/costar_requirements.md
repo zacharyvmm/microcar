@@ -12,7 +12,8 @@ Features needed from the `costar` simulator for the microcar demo.
 - [x] `costar test` — headless CI scenario test runner
 - [x] Broadcast bus (CAN-like) — all-to-all with sender exclusion
   - Implemented as `CanBus` in sim-world with true broadcast semantics, fault injection, and deterministic ordering (Phase 3)
-- [ ] Plant/environment callbacks — external model integration
+- [x] Plant/environment callbacks — external model integration
+  - Implemented as `EnvironmentModel` trait in sim-world with `MicrocarPlant` in microcar-plant crate (Phase 4)
 - [x] `[[bus]]` and `[[bus.node]]` in scenario format
 - [x] `[[fault]]` in scenario format — timed fault injection (parsed, no-op for now)
 - [x] `[[input]]` in scenario format — timed driver inputs (parsed, no-op for now)
@@ -27,7 +28,7 @@ Features needed from the `costar` simulator for the microcar demo.
 
 - [ ] Fault injection: drop/delay/corrupt bus frames
 - [ ] Node stop/reboot support
-- [ ] Plant/environment callback integration
+- [x] Plant/environment callback integration
 - [ ] Generic virtual ADC or sensor input
 - [ ] Scenario assertion support (`[[assert]]`)
 - [ ] Deterministic random seed support
@@ -78,4 +79,36 @@ Features needed from the `costar` simulator for the microcar demo.
 - The `sim-world` crate's current `Link` model is point-to-point FIFO, not broadcast
 - Scenario format now supports buses, plants, inputs, faults, and expected events
 - The `costar test` subcommand uses simple `[[machine]]`/`[[link]]` scenarios in `tests/scenarios/`
-- Plant integration likely needs a trait (`EnvironmentModel`) in `sim-world` with microcar providing the concrete implementation
+- Plant integration uses `EnvironmentModel` trait in `sim-world` with `MicrocarPlant` in `microcar-plant` crate
+- `[[input]]` entries are queued as driver inputs on the plant model and applied at their scheduled virtual times
+
+## Phase 4: Plant model integration (2026-06-17)
+
+### Completed
+- Added `EnvironmentModel` trait to `sim-world` crate (`crates/sim-world/src/plant.rs`)
+- Added plant support to `World`: `set_plant()`, `step_plant()`, `queue_plant_input()`
+- World run loop calls `plant.step()` at the configured tick rate (from `[plant].tick_ms`)
+- Plant ticks are included in `next_global_event_time()` for deterministic scheduling
+- `Scenario::attach_plant_to()` — attaches a plant model and queues all `[[input]]` entries
+- `Scenario::check_trace()` — public trace comparison logic for external callers
+- `run_scenario` and `run_scenario_test` create `MicrocarPlant` when `[plant].type = "microcar"`
+- World run loop continues stepping plant even when machines are idle
+- `duration_ms` from scenario bounds the simulation via `run_until()`
+- `MicrocarPlant` implements `EnvironmentModel`: publishes wheel speed (CAN ID 0x200) and BMS sensor readings (CAN ID 0x300) each tick
+- Golden trace files generated for `normal_drive_cycle` and `boot_and_heartbeat`
+
+### CAN protocol
+| ID     | Name                | Publisher | Format                              |
+|--------|---------------------|-----------|-------------------------------------|
+| 0x0001 | Heartbeat           | ECUs      | [machine_id, timestamp_msb, ...]    |
+| 0x0200 | MC_MSG_WHEEL_SPEED  | plant     | [speed_hi, speed_lo] (u16 BE)       |
+| 0x0300 | MC_MSG_BMS_STATUS   | plant     | [soc, volt_hi, volt_lo, temp_hi, temp_lo, current_hi, current_lo] |
+| 0x0100 | MC_MSG_MOTOR_COMMAND| powertrain| [torque_i8, 0, 0, 0, 0]            |
+
+### What works
+- `costar run --scenario ../microcar/scenarios/normal_drive_cycle.toml` runs plant model
+- Plant publishes wheel speed and BMS readings each tick
+- Driver inputs from `[[input]]` applied at scheduled virtual times
+- Speed increases with throttle, battery SOC decreases under load
+- Golden trace comparison passes for all updated scenarios
+- 13 plant tests pass, 82 sim-world tests pass
