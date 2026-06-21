@@ -149,6 +149,7 @@ void gateway_main(void *pvParameters)
 {
     (void)pvParameters;
     gateway_init();
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "gateway_main");
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t rx;

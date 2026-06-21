@@ -28,12 +28,11 @@ extern void dashboard_main(void *pvParameters);
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 
+/// Boot all 4 ECUs on a single machine (for standalone / single-machine tests).
 void microcar_boot(void)
 {
     sim_trace_u32("microcar_boot", 1);
 
-    // Create FreeRTOS tasks.  The sim-freertos-port build script patches
-    // FreeRTOS's tasks.c to wire task creation into the Rust scheduler.
     xTaskCreate(gateway_main,
                 "gateway",
                 GATEWAY_STACK_WORDS,
@@ -63,8 +62,36 @@ void microcar_boot(void)
                 NULL);
 
     sim_trace_u32("microcar_tasks_created", 4);
+}
 
-    // For multi-machine Worlds: do NOT call vTaskStartScheduler().
-    // The Rust host calls sim_scheduler_tick() which handles fiber
-    // creation (first call) and per-tick advancement.
+/// Boot only the gateway ECU on this machine.
+void microcar_boot_gateway(void)
+{
+    sim_trace_u32("microcar_boot_gateway", 1);
+    xTaskCreate(gateway_main, "gateway", GATEWAY_STACK_WORDS, NULL, GATEWAY_PRIORITY, NULL);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot only the powertrain ECU on this machine.
+void microcar_boot_powertrain(void)
+{
+    sim_trace_u32("microcar_boot_powertrain", 1);
+    xTaskCreate(powertrain_main, "powertrain", POWERTRAIN_STACK_WORDS, NULL, POWERTRAIN_PRIORITY, NULL);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot only the BMS ECU on this machine.
+void microcar_boot_bms(void)
+{
+    sim_trace_u32("microcar_boot_bms", 1);
+    xTaskCreate(bms_main, "bms", BMS_STACK_WORDS, NULL, BMS_PRIORITY, NULL);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot only the dashboard ECU on this machine.
+void microcar_boot_dashboard(void)
+{
+    sim_trace_u32("microcar_boot_dashboard", 1);
+    xTaskCreate(dashboard_main, "dashboard", DASHBOARD_STACK_WORDS, NULL, DASHBOARD_PRIORITY, NULL);
+    sim_trace_u32("microcar_tasks_created", 1);
 }

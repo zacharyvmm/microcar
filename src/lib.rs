@@ -15,6 +15,10 @@ use sim_core::Tick;
 // C ABI functions from the compiled firmware / sim-ffi.
 extern "C" {
     fn microcar_boot();
+    fn microcar_boot_gateway();
+    fn microcar_boot_powertrain();
+    fn microcar_boot_bms();
+    fn microcar_boot_dashboard();
     fn sim_scheduler_tick() -> u32;
 }
 
@@ -35,15 +39,28 @@ impl MicrocarFirmware {
 
 impl Firmware for MicrocarFirmware {
     fn init(&mut self, machine: &mut Machine) {
-        // Activate this machine's SimGlobal so C ABI functions
-        // use its task pool and trace sink.
         let _guard = machine.activate();
 
-        // Create FreeRTOS tasks (gateway, powertrain, bms, dashboard).
-        // The C function microcar_boot() calls xTaskCreate for each.
+        // Select the right boot function based on the machine name.
+        // Each machine runs only its designated ECU firmware.
         unsafe {
-            microcar_boot();
+            if self.name.starts_with("gateway") {
+                microcar_boot_gateway();
+            } else if self.name.starts_with("powertrain") {
+                microcar_boot_powertrain();
+            } else if self.name.starts_with("bms") {
+                microcar_boot_bms();
+            } else if self.name.starts_with("dashboard") {
+                microcar_boot_dashboard();
+            } else {
+                // Fallback: boot all 4 ECUs for unknown machine types.
+                microcar_boot();
+            }
         }
+
+        // Flush thread-local trace events into this machine's SimGlobal.
+        sim_ffi::flush_trace();
+
         self.booted = true;
     }
 
@@ -57,8 +74,14 @@ impl Firmware for MicrocarFirmware {
 
         // Advance the FreeRTOS scheduler by one cycle.
         // Returns 1 if more work remains, 0 if all tasks are done.
+        // sim_scheduler_tick() internally calls flush_trace() after each
+        // cycle, so firmware trace events are attributed to this machine.
         unsafe {
             sim_scheduler_tick();
         }
+
+        // Flush again in case any trace events remain (e.g., from the
+        // tickless idle path which may not have flushed).
+        sim_ffi::flush_trace();
     }
 }

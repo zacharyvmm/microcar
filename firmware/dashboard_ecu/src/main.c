@@ -117,6 +117,7 @@ void dashboard_main(void *pvParameters)
 {
     (void)pvParameters;
     dashboard_init();
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "dashboard_main");
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;

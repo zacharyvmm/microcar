@@ -120,6 +120,7 @@ void powertrain_main(void *pvParameters)
 {
     (void)pvParameters;
     powertrain_init();
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "powertrain_main");
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;

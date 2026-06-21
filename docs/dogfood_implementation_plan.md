@@ -911,41 +911,48 @@ Key changes:
 | **E1** | ✅ | `costar test --microcar --all` discovers and runs all 14 scenarios |
 | **Determinism** | ✅ | Identical SHA-256 hash across 3 runs |
 | **Test suite** | ✅ | All 290+ tests pass across entire costar workspace |
+| **CAN bridge** | ✅ | Firmware CAN TX/RX bridged to World CanBus: `deliver_buses()` injects delivered CAN frames into firmware CAN controller 0 RX via `sim_devices::CanFrame::new_data` + `inject_rx`; `step_firmware()` drains CAN controller 0 TX into World CanBus via `bus.send()` (see `sim-world/src/world.rs`) |
+| **Trace unification** | ✅ | `SimGlobal.trace` initialized with `Box::new(TraceSink::new())` in `Simulator::new()`; `sim_scheduler_tick()` calls `flush_trace()` each tick to flush `TL_TRACE`; firmware `sim_trace_u32`, `sim_can_send`, `sim_can_recv` events now appear in `drain_trace_prefixed` output |
+
+|| **Per-machine ECU firmware** | ✅ | Each machine boots only its designated ECU via per-ECU boot functions (`microcar_boot_gateway`, `microcar_boot_powertrain`, `microcar_boot_bms`, `microcar_boot_dashboard`) |
+|| **Trace attribution** | ✅ | `flush_trace()` called after each firmware `init()`/`step()` so TL_TRACE events are attributed to the correct machine's SimGlobal |
+|| **Golden traces** | ✅ | All 14 golden traces regenerated from real fiber execution in `expected/traces/` |
+|| **Symbolicated traces** | ✅ | `sim_register_symbol()` added to all 4 ECUs — task names now appear in trace output |
+|| **Soak test** | ✅ | `scenarios/soak_1hour.toml`: 1 hour virtual drive, passes clean via tickless idle fast-forward |
 
 ### Current State
 
 ```
 Target pipeline (working):
-  scenarios/*.toml → costar test runner → PASS (14/14)
+  scenarios/*.toml → costar test runner → PASS (15/15)
 
 Costar features exercised:
   ✅ sim-core:     event queue, virtual clock, deterministic trace
   ✅ sim-fiber:    fiber pool, task spawn, resume/yield (via sim_scheduler_tick)
-  ✅ sim-ffi:      per-Simulator isolation, C ABI bridge
+  ✅ sim-ffi:      per-Simulator isolation, C ABI bridge, trace flushing
   ✅ sim-freertos-port:  FreeRTOS kernel linked, tasks created on fibers
   ✅ sim-world:    World, Machine(×8), CanBus(×2), Plant, Scenario DSL
   ✅ sim-runner:   test discovery, --microcar shorthand
+  ✅ sim-devices:  VirtualCan TX/RX bridging to World CanBus
 ```
 
 ### Known Gaps
 
 | Gap | Severity | Description |
 |-----|----------|-------------|
-| **CAN bridge** | High | Firmware `sim_can_send()` goes to sim-ffi CAN controller; plant publishes to World CanBus. These are separate — firmware ECUs can't receive plant sensor data or talk to each other. Needs a bridge draining sim-ffi CAN TX → World CanBus and injecting World CanBus RX → sim-ffi CAN RX each tick. |
-| **Trace unification** | Medium | FreeRTOS task events go to `SimGlobal.trace` (separate from World's `SimulatorCore.trace`). `drain_trace_prefixed()` was patched to merge both, but firmware trace appears empty — likely needs explicit `#[link(name = "embedded_microcar_payload")]` for standalone examples. |
-| **Golden traces** | Medium | Old golden traces are Python-generated JSONL format. Need regeneration from real fiber output after CAN bridge + trace fix. |
 | **FreeRTOS API depth** | Low | ECUs only use `vTaskDelayUntil` + basic CAN. No mutexes, semaphores, event groups, timers yet (Phase C). |
-| **Long soak tests** | Low | No 1-hour or 8-hour soak scenarios (Phase F). |
-| **Symbolicated traces** | Low | Task names not registered via `sim_register_symbol` (Phase G). |
+| **Per-ECU firmware assignment** | Low | Machine-to-ECU mapping is name-based (`starts_with`). Could be made explicit via scenario `firmware` field. |
+| **Plant protocol mismatch** | Low | Plant publishes raw sensor data on CAN IDs 0x200/0x300 which collide with firmware protocol IDs. |
 
 ### Quick Verification
 
 ```bash
 cd /Users/zmm/projects/costar
 cargo test --workspace                          # 290+ passed
-cargo run -- test --microcar --all --verbose    # 14/14 PASS
+cargo run -- test --microcar --all --verbose    # 15/15 PASS
 
 cd /Users/zmm/projects/microcar
 cargo build                                     # clean
-cargo run --example show_trace -- scenarios/normal_drive_cycle.toml  # 2,394 events
+cargo run --example show_trace -- scenarios/normal_drive_cycle.toml  # firmware events + CAN bridge visible
+cargo run -- scenarios/soak_1hour.toml          # 1 hour virtual drive, PASS
 ```
