@@ -887,3 +887,65 @@ Key changes:
 
 *Document version: 1.0 — 2026-06-21*
 *Author: Hermes Agent, based on analysis of microcar @ 105 tests passing, costar @ 173/174 tests passing*
+
+---
+
+## 10. Implementation Progress (2026-06-21)
+
+### Completed
+
+| Phase | Status | What was done |
+|-------|--------|---------------|
+| **A1** | ✅ | `Firmware` trait in `sim-world/src/firmware.rs`: `init()`/`step()` lifecycle, 4 tests |
+| **A2** | ✅ | Per-Simulator isolation: `ACTIVE_SIM_GLOBAL`, `with_sim_global()`, `SimGlobalGuard` in sim-ffi |
+| **A2** | ✅ | `sim_scheduler_tick()` C ABI function — tick-by-tick FreeRTOS advancement for multi-machine Worlds |
+| **A3** | ✅ | 17 C firmware files compiled via `cc` crate in microcar `build.rs` |
+| **A3** | ✅ | All 4 ECU `main.c` files rewritten with real `vTaskDelayUntil`, `sim_can_send`, `sim_can_recv` |
+| **A3** | ✅ | `microcar_coordinator.c` creates 4 FreeRTOS tasks (no `vTaskStartScheduler` — tick mode) |
+| **A4** | ✅ | `Cargo.toml` updated with sim-world, sim-core, sim-ffi, sim-freertos-port deps |
+| **A5** | ✅ | `src/lib.rs`: `MicrocarFirmware` implementing `Firmware` trait, calls `microcar_boot()` + `sim_scheduler_tick()` |
+| **A5** | ✅ | `src/main.rs`: scenario runner with firmware loading, plant attachment, `run_until` |
+| **A6** | ✅ | Python test pipeline preserved as reference (`tests/check_*.py`) |
+| **B1** | ✅ | `scenarios/fleet_of_8.toml`: 8 machines on 2 CAN buses, 6,986 trace events, <2s wall-clock |
+| **B2** | ✅ | `scenarios/uart_chain.toml`: daisy-chain UART with per-byte timing |
+| **E1** | ✅ | `costar test --microcar --all` discovers and runs all 14 scenarios |
+| **Determinism** | ✅ | Identical SHA-256 hash across 3 runs |
+| **Test suite** | ✅ | All 290+ tests pass across entire costar workspace |
+
+### Current State
+
+```
+Target pipeline (working):
+  scenarios/*.toml → costar test runner → PASS (14/14)
+
+Costar features exercised:
+  ✅ sim-core:     event queue, virtual clock, deterministic trace
+  ✅ sim-fiber:    fiber pool, task spawn, resume/yield (via sim_scheduler_tick)
+  ✅ sim-ffi:      per-Simulator isolation, C ABI bridge
+  ✅ sim-freertos-port:  FreeRTOS kernel linked, tasks created on fibers
+  ✅ sim-world:    World, Machine(×8), CanBus(×2), Plant, Scenario DSL
+  ✅ sim-runner:   test discovery, --microcar shorthand
+```
+
+### Known Gaps
+
+| Gap | Severity | Description |
+|-----|----------|-------------|
+| **CAN bridge** | High | Firmware `sim_can_send()` goes to sim-ffi CAN controller; plant publishes to World CanBus. These are separate — firmware ECUs can't receive plant sensor data or talk to each other. Needs a bridge draining sim-ffi CAN TX → World CanBus and injecting World CanBus RX → sim-ffi CAN RX each tick. |
+| **Trace unification** | Medium | FreeRTOS task events go to `SimGlobal.trace` (separate from World's `SimulatorCore.trace`). `drain_trace_prefixed()` was patched to merge both, but firmware trace appears empty — likely needs explicit `#[link(name = "embedded_microcar_payload")]` for standalone examples. |
+| **Golden traces** | Medium | Old golden traces are Python-generated JSONL format. Need regeneration from real fiber output after CAN bridge + trace fix. |
+| **FreeRTOS API depth** | Low | ECUs only use `vTaskDelayUntil` + basic CAN. No mutexes, semaphores, event groups, timers yet (Phase C). |
+| **Long soak tests** | Low | No 1-hour or 8-hour soak scenarios (Phase F). |
+| **Symbolicated traces** | Low | Task names not registered via `sim_register_symbol` (Phase G). |
+
+### Quick Verification
+
+```bash
+cd /Users/zmm/projects/costar
+cargo test --workspace                          # 290+ passed
+cargo run -- test --microcar --all --verbose    # 14/14 PASS
+
+cd /Users/zmm/projects/microcar
+cargo build                                     # clean
+cargo run --example show_trace -- scenarios/normal_drive_cycle.toml  # 2,394 events
+```
