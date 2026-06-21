@@ -1,6 +1,7 @@
 // gateway_state.c — gateway ECU vehicle mode state machine implementation
 
 #include "gateway_state.h"
+#include "microcar_protocol.h"
 #include <string.h>
 
 void gateway_state_init(gateway_state_t *gs)

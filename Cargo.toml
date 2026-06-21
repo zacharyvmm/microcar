@@ -4,3 +4,27 @@ members = [
     "plant",
     "state_tests",
 ]
+
+[package]
+name = "microcar"
+version = "0.1.0"
+edition = "2021"
+description = "microcar — costar dogfood binary"
+
+[[bin]]
+name = "microcar"
+path = "src/main.rs"
+
+[features]
+default = []
+zephyr = []
+
+[dependencies]
+sim-world = { path = "../costar/crates/sim-world" }
+sim-core = { path = "../costar/crates/sim-core" }
+sim-ffi = { path = "../costar/crates/sim-ffi" }
+sim-freertos-port = { path = "../costar/crates/sim-freertos-port" }
+microcar-plant = { path = "plant" }
+
+[build-dependencies]
+cc = "1"

@@ -8,6 +8,9 @@
 //
 // Compiles as a FreeRTOS task running on the costar simulator.
 
+#include "FreeRTOS.h"
+#include "task.h"
+#include "sim_abi.h"
 #include "bms_state.h"
 #include "bms_limits.h"
 #include "microcar_protocol.h"
@@ -15,6 +18,8 @@
 #include "microcar_trace.h"
 #include "microcar_can.h"
 #include <string.h>
+
+#define CAN_BUS 0
 
 // ── Global state ──────────────────────────────────────────────────────────
 
@@ -55,6 +60,18 @@ static void handle_bms_status(const mc_can_frame_t *frame)
     }
 }
 
+/// Dispatch a received CAN frame to the appropriate handler.
+static void dispatch_frame(const mc_can_frame_t *frame)
+{
+    switch (frame->id) {
+    case MC_MSG_BMS_STATUS:
+        handle_bms_status(frame);
+        break;
+    default:
+        break;
+    }
+}
+
 // ── CAN frame construction ────────────────────────────────────────────────
 
 static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
@@ -84,38 +101,55 @@ static void send_bms_fault(mc_can_frame_t *tx)
 
 // ── Main loop ─────────────────────────────────────────────────────────────
 
-void bms_main(void)
+void bms_main(void *pvParameters)
 {
+    (void)pvParameters;
     bms_init();
 
-    uint32_t uptime_ms = 0;
+    TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
     uint8_t last_fault_published = MC_BMS_FAULT_NONE;
 
     send_heartbeat(0, &tx);
-    // tx → CAN controller
+    sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
 
     while (1) {
-        // vTaskDelay(pdMS_TO_TICKS(10));
-        uptime_ms += 10;
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
+        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // ── Receive phase ─────────────────────────────────────
+        uint32_t can_id;
+        uint32_t is_ext;
+        uint32_t is_remote;
+        while (1) {
+            mc_can_frame_t rx;
+            uint32_t dlc = sim_can_recv(0, rx.data, MC_MAX_PAYLOAD_SIZE,
+                                        &can_id, &is_ext, &is_remote);
+            if (dlc == 0) break;
+
+            rx.id = can_id;
+            rx.sender = rx.data[0];
+            rx.len = (uint8_t)dlc;
+            dispatch_frame(&rx);
+        }
 
         // ── Publish BMS limits every 50ms ─────────────────────
-        if (uptime_ms % 50 == 0) {
+        if (now_ms % 50 == 0) {
             send_bms_limits(&tx);
-            // sim_can_send(&tx);
+            sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
         }
 
         // ── Publish BMS fault on change ───────────────────────
         if (g_bs.fault_code != last_fault_published) {
             send_bms_fault(&tx);
-            // sim_can_send(&tx);
+            sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
             last_fault_published = g_bs.fault_code;
         }
 
         // ── Send heartbeat ────────────────────────────────────
-        if (uptime_ms % 100 == 0) {
-            send_heartbeat(uptime_ms, &tx);
-            // sim_can_send(&tx);
+        if (now_ms % 100 == 0) {
+            send_heartbeat(now_ms, &tx);
+            sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
         }
     }
 }

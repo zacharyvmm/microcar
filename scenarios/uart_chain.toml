@@ -1,0 +1,54 @@
+# uart_chain — daisy-chain UART topology
+#
+# Stresses: per-byte UART timing, multi-hop delivery,
+# link FIFO backpressure.
+
+name = "uart_chain"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "node_a"
+
+[[machine]]
+id = 2
+name = "node_b"
+
+[[machine]]
+id = 3
+name = "node_c"
+
+# ── Daisy-chain UART links ──
+[[link]]
+from = 1
+to = 2
+type = "uart"
+baud = 115200
+data_bits = 8
+parity = "N"
+stop_bits = 1
+
+[[link]]
+from = 2
+to = 3
+type = "uart"
+baud = 115200
+data_bits = 8
+parity = "N"
+stop_bits = 1
+
+# ── Inject packets at different times ──
+[[inject]]
+at = 10000
+link = { from = 1, to = 2 }
+data = "hello-from-a"
+
+[[inject]]
+at = 500000
+link = { from = 1, to = 2 }
+data = "second-message"
+
+[[inject]]
+at = 1000000
+link = { from = 2, to = 3 }
+data = "b-to-c-direct"

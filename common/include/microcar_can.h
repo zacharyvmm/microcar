@@ -27,4 +27,9 @@ typedef struct {
 }
 #endif
 
+/// Initialize a CAN frame with message ID, sender, and payload length.
+/// Does NOT fill the data bytes — caller must do that.
+void mc_frame_init(mc_can_frame_t *frame,
+                   uint32_t msg_id, uint8_t sender, uint8_t len);
+
 #endif // MICROCAR_CAN_H

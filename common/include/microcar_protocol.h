@@ -207,6 +207,21 @@ typedef struct {
 // Maximum payload size (for buffer allocation)
 #define MC_MAX_PAYLOAD_SIZE 8
 
+// ── Functions ──────────────────────────────────────────────────────
+
+/// Gateway vehicle mode state transition function.
+mc_vehicle_mode_t mc_gateway_determine_mode(mc_vehicle_mode_t current_mode,
+                                            uint8_t all_nodes_online,
+                                            uint8_t bms_fault_active,
+                                            uint8_t bms_limp_requested,
+                                            uint8_t powertrain_online);
+
+/// BMS fault severity lookup.
+uint8_t fault_manager_bms_severity(uint8_t fault_code);
+
+/// BMS state determination from temperature.
+mc_bms_state_t mc_bms_determine_state(int16_t temp_c_x10);
+
 #ifdef __cplusplus
 }
 #endif

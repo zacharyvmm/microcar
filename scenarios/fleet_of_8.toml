@@ -1,0 +1,120 @@
+# fleet_of_8 — 8-machine fleet stress test
+#
+# Stresses: World lockstep advancement across 8 machines,
+# CanBus broadcast at scale, gateway bridging between
+# two CAN buses.
+
+name = "fleet_of_8"
+duration_ms = 5000
+
+# ── Gateway (central coordinator, bridges vcan0 + vcan1) ──
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+# ── Powertrain nodes (4 independent motors) ──
+[[machine]]
+id = 2
+name = "powertrain_front_left"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "powertrain_front_right"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "powertrain_rear_left"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "powertrain_rear_right"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+# ── BMS nodes (2 independent battery packs) ──
+[[machine]]
+id = 6
+name = "bms_pack_a"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 7
+name = "bms_pack_b"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+# ── Dashboard ──
+[[machine]]
+id = 8
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+# ── Primary CAN bus (4 powertrain + 2 BMS + gateway) ──
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_front_left"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_front_right"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_rear_left"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_rear_right"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms_pack_a"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms_pack_b"
+
+# ── Secondary CAN bus (dashboard + gateway) ──
+[[bus]]
+name = "vcan1"
+type = "can"
+latency_us = 300
+
+[[bus.node]]
+bus = "vcan1"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan1"
+machine = "dashboard"
+
+# ── Plant (publishes wheel speed for front-left and BMS for pack A) ──
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# ── Driver applies 30% throttle at 500ms ──
+[[input]]
+at_ms = 500
+type = "driver_input"
+throttle_percent = 30
+brake_pressed = false

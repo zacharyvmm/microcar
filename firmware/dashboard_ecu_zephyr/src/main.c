@@ -22,6 +22,8 @@
 #include <zephyr/kernel.h>
 #include <string.h>
 
+#define CAN_BUS 0
+
 // ── ABI helpers (from costar sim-ffi) ─────────────────────────────────────
 // When compiled with the full Zephyr kernel, sim_abi.h is available.
 // When compiled standalone, trace calls are no-ops.
@@ -124,7 +126,7 @@ static void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
     mc_can_frame_t tx;
 
     send_heartbeat(0, &tx);
-    // tx → CAN controller
+    sim_can_send(CAN_BUS, tx.id, tx.data, tx.len, 0, 0);
 
     while (1) {
         k_sleep(K_MSEC(10));
@@ -140,7 +142,7 @@ static void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
         if (uptime_ms % 100 == 0) {
             send_heartbeat(uptime_ms, &tx);
             sim_trace_u32("dash_hb", uptime_ms);
-            // sim_can_send(&tx);
+            sim_can_send(CAN_BUS, tx.id, tx.data, tx.len, 0, 0);
         }
 
         // ── Publish dashboard status ──────────────────────────

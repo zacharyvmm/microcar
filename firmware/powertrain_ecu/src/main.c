@@ -9,6 +9,12 @@
 //
 // Compiles as a FreeRTOS task running on the costar simulator.
 
+#include "FreeRTOS.h"
+#include "task.h"
+#include "sim_abi.h"
+
+#define CAN_BUS 0
+
 #include "torque_controller.h"
 #include "safety_rules.h"
 #include "watchdog_task.h"
@@ -63,6 +69,30 @@ static void handle_gateway_heartbeat(uint32_t now_ms)
     watchdog_gateway_beat(&g_wd, now_ms);
 }
 
+/// Dispatch a received CAN frame to the appropriate handler.
+static void dispatch_frame(const mc_can_frame_t *frame)
+{
+    switch (frame->id) {
+    case MC_MSG_DRIVER_INPUT:
+        handle_driver_input(frame);
+        break;
+    case MC_MSG_VEHICLE_MODE:
+        handle_vehicle_mode(frame);
+        break;
+    case MC_MSG_BMS_LIMITS:
+        handle_bms_limits(frame);
+        break;
+    case MC_MSG_HEARTBEAT:
+        if (frame->sender == MC_NODE_GATEWAY) {
+            uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+            handle_gateway_heartbeat(now_ms);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 // ── CAN frame construction ────────────────────────────────────────────────
 
 static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
@@ -86,22 +116,39 @@ static void send_motor_command(int8_t torque, mc_can_frame_t *tx)
 
 // ── Main loop ─────────────────────────────────────────────────────────────
 
-void powertrain_main(void)
+void powertrain_main(void *pvParameters)
 {
+    (void)pvParameters;
     powertrain_init();
 
-    uint32_t uptime_ms = 0;
+    TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
 
     send_heartbeat(0, &tx);
-    // tx → CAN controller
+    sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
 
     while (1) {
-        // vTaskDelay(pdMS_TO_TICKS(10));
-        uptime_ms += 10;
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
+        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // ── Receive phase ─────────────────────────────────────
+        uint32_t can_id;
+        uint32_t is_ext;
+        uint32_t is_remote;
+        while (1) {
+            mc_can_frame_t rx;
+            uint32_t dlc = sim_can_recv(0, rx.data, MC_MAX_PAYLOAD_SIZE,
+                                        &can_id, &is_ext, &is_remote);
+            if (dlc == 0) break;
+
+            rx.id = can_id;
+            rx.sender = rx.data[0];
+            rx.len = (uint8_t)dlc;
+            dispatch_frame(&rx);
+        }
 
         // ── Watchdog check ────────────────────────────────────
-        uint8_t timeout = watchdog_check(&g_wd, uptime_ms);
+        uint8_t timeout = watchdog_check(&g_wd, now_ms);
         if (timeout) {
             // S4: Gateway heartbeat lost → disable torque.
             g_tc.motor_enable = 0;
@@ -112,12 +159,12 @@ void powertrain_main(void)
 
         // ── Send motor command ────────────────────────────────
         send_motor_command(torque, &tx);
-        // sim_can_send(&tx);
+        sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
 
         // ── Send heartbeat ────────────────────────────────────
-        if (uptime_ms % 100 == 0) {
-            send_heartbeat(uptime_ms, &tx);
-            // sim_can_send(&tx);
+        if (now_ms % 100 == 0) {
+            send_heartbeat(now_ms, &tx);
+            sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
         }
     }
 }

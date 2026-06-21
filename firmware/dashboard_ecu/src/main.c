@@ -9,6 +9,12 @@
 //
 // Compiles as a FreeRTOS task running on the costar simulator.
 
+#include "FreeRTOS.h"
+#include "task.h"
+#include "sim_abi.h"
+
+#define CAN_BUS 0
+
 #include "dashboard_state.h"
 #include "warning_display.h"
 #include "microcar_protocol.h"
@@ -71,6 +77,27 @@ static void handle_warning(const mc_can_frame_t *frame)
     warning_display_update(&g_wd, warning_code, severity);
 }
 
+/// Dispatch a received CAN frame to the appropriate handler.
+static void dispatch_frame(const mc_can_frame_t *frame)
+{
+    switch (frame->id) {
+    case MC_MSG_VEHICLE_MODE:
+        handle_vehicle_mode(frame);
+        break;
+    case MC_MSG_WHEEL_SPEED:
+        handle_wheel_speed(frame);
+        break;
+    case MC_MSG_BMS_STATUS:
+        handle_bms_status(frame);
+        break;
+    case MC_MSG_WARNING:
+        handle_warning(frame);
+        break;
+    default:
+        break;
+    }
+}
+
 // ── CAN frame construction ────────────────────────────────────────────────
 
 static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
@@ -86,31 +113,45 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
 
 // ── Main loop ─────────────────────────────────────────────────────────────
 
-void dashboard_main(void)
+void dashboard_main(void *pvParameters)
 {
+    (void)pvParameters;
     dashboard_init();
 
-    uint32_t uptime_ms = 0;
+    TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
 
     send_heartbeat(0, &tx);
-    // tx → CAN controller
+    sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
 
     while (1) {
-        // vTaskDelay(pdMS_TO_TICKS(10));
-        uptime_ms += 10;
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
+        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // ── Receive phase ─────────────────────────────────────
+        uint32_t can_id;
+        uint32_t is_ext;
+        uint32_t is_remote;
+        while (1) {
+            mc_can_frame_t rx;
+            uint32_t dlc = sim_can_recv(0, rx.data, MC_MAX_PAYLOAD_SIZE,
+                                        &can_id, &is_ext, &is_remote);
+            if (dlc == 0) break;
+
+            rx.id = can_id;
+            rx.sender = rx.data[0];
+            rx.len = (uint8_t)dlc;
+            dispatch_frame(&rx);
+        }
 
         // ── Check for top warning ──────────────────────────────
         uint8_t top_warning = dashboard_state_top_warning(&g_ds);
+        (void)top_warning;
 
         // ── Send heartbeat ────────────────────────────────────
-        if (uptime_ms % 100 == 0) {
-            send_heartbeat(uptime_ms, &tx);
-            // sim_can_send(&tx);
+        if (now_ms % 100 == 0) {
+            send_heartbeat(now_ms, &tx);
+            sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
         }
-
-        // ── Publish dashboard status ──────────────────────────
-        // On state changes, send dashboard_status (0x300) or
-        // warning frame (0x400) if active warning changed.
     }
 }
