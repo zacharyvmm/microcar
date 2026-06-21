@@ -7,10 +7,20 @@
 // 4. Computes safe motor torque
 // 5. Watches for gateway heartbeat timeout (S4)
 //
-// Compiles as a FreeRTOS task running on the costar simulator.
+// Multi-task: powertrain_main (prio 3) torque control + CAN,
+// sensor_poll (prio 3) throttle/brake read,
+// logger (prio 1) low-rate event logging.
+//
+// FreeRTOS primitives: Counting semaphore (CAN TX mailbox),
+// Software timer (watchdog periodic check), vTaskDelayUntil.
+//
+// Compiles as FreeRTOS tasks running on the costar simulator.
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
+#include "semphr.h"
+#include "timers.h"
 #include "sim_abi.h"
 
 #define CAN_BUS 0
@@ -29,7 +39,61 @@
 static torque_controller_t g_tc;
 static watchdog_task_t     g_wd;
 
+// ── Counting semaphore (CAN TX mailbox) ───────────────────────────────────
+
+/// Counting semaphore representing available CAN TX mailbox slots.
+/// Initialised to 3 (max 3 pending TX frames).
+static SemaphoreHandle_t g_can_tx_slots = NULL;
+
+// ── Software timer (watchdog check) ───────────────────────────────────────
+
+/// Software timer that fires every 50ms to call watchdog_check.
+/// Uses FreeRTOS software timer (xTimerCreate).
+static TimerHandle_t g_wd_timer = NULL;
+
+// ── Task handles ──────────────────────────────────────────────────────────
+
+static TaskHandle_t g_powertrain_task_handle = NULL;
+
+// ── Watchdog timer callback ───────────────────────────────────────────────
+
+/// Software timer callback: check gateway watchdog and trace status.
+static void watchdog_timer_cb(TimerHandle_t xTimer)
+{
+    (void)xTimer;
+    uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    uint8_t timeout = watchdog_check(&g_wd, now_ms);
+
+    if (timeout) {
+        // S4: Gateway heartbeat lost → disable torque.
+        g_tc.motor_enable = 0;
+        sim_trace_u32("gateway_timeout", now_ms);
+    } else {
+        sim_trace_u32("watchdog_ok", now_ms);
+    }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────
+
+/// Allocate FreeRTOS primitives. Called once from powertrain_main.
+static void powertrain_primitives_init(void)
+{
+    g_can_tx_slots = xSemaphoreCreateCounting(3, 3);
+
+    g_wd_timer = xTimerCreate(
+        "wd_timer",
+        pdMS_TO_TICKS(50),
+        pdTRUE,   // auto-reload
+        NULL,
+        watchdog_timer_cb);
+
+    if (g_wd_timer != NULL) {
+        xTimerStart(g_wd_timer, 0);
+    }
+
+    sim_trace_u32("pt_can_sem", (uint32_t)(uintptr_t)g_can_tx_slots);
+    sim_trace_u32("pt_wd_timer", (uint32_t)(uintptr_t)g_wd_timer);
+}
 
 void powertrain_init(void)
 {
@@ -93,6 +157,19 @@ static void dispatch_frame(const mc_can_frame_t *frame)
     }
 }
 
+// ── CAN TX with counting semaphore ────────────────────────────────────────
+
+/// Send a CAN frame using the counting semaphore as mailbox.
+/// Takes a slot, sends, then gives it back after a short delay.
+static void can_tx_with_semaphore(mc_can_frame_t *frame)
+{
+    if (xSemaphoreTake(g_can_tx_slots, pdMS_TO_TICKS(2)) == pdTRUE) {
+        sim_can_send(0, frame->id, frame->data, frame->len, 0, 0);
+        // Release the mailbox slot (simulates TX completion interrupt).
+        xSemaphoreGive(g_can_tx_slots);
+    }
+}
+
 // ── CAN frame construction ────────────────────────────────────────────────
 
 static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
@@ -114,13 +191,67 @@ static void send_motor_command(int8_t torque, mc_can_frame_t *tx)
     tx->data[1] = g_tc.motor_enable;
 }
 
+// ── Sensor poll task ──────────────────────────────────────────────────────
+
+/// Reads throttle/brake sensor values via a simple poll.
+/// Runs at 5ms period, prio 3 (same as powertrain_main).
+void sensor_poll(void *pvParameters)
+{
+    (void)pvParameters;
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "sensor_poll");
+
+    TickType_t last_wake = xTaskGetTickCount();
+
+    while (1) {
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(5));
+
+        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // Emit sensor poll trace every 200ms.
+        if (now_ms % 200 == 0) {
+            sim_trace_u32("sensor_poll_tick", now_ms);
+        }
+    }
+}
+
+// ── Logger task ───────────────────────────────────────────────────────────
+
+/// Low-rate event logger. Runs at 100ms period, prio 1.
+/// Traces torque commands and gateway status.
+void logger(void *pvParameters)
+{
+    (void)pvParameters;
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "logger");
+
+    TickType_t last_wake = xTaskGetTickCount();
+
+    while (1) {
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(100));
+
+        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // Log current torque and gateway online status.
+        uint8_t gw_online = watchdog_gateway_online(&g_wd);
+        uint32_t log_val = ((uint32_t)gw_online << 16) | (g_tc.motor_enable & 1);
+        sim_trace_u32("logger_event", log_val);
+
+        (void)now_ms;
+    }
+}
+
 // ── Main loop ─────────────────────────────────────────────────────────────
 
 void powertrain_main(void *pvParameters)
 {
     (void)pvParameters;
     powertrain_init();
+    powertrain_primitives_init();
     sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "powertrain_main");
+    g_powertrain_task_handle = xTaskGetCurrentTaskHandle();
+
+    // Create subordinate tasks.
+    xTaskCreate(sensor_poll, "sensor", 512, NULL, 3, NULL);
+    xTaskCreate(logger, "logger", 512, NULL, 1, NULL);
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
@@ -148,24 +279,17 @@ void powertrain_main(void *pvParameters)
             dispatch_frame(&rx);
         }
 
-        // ── Watchdog check ────────────────────────────────────
-        uint8_t timeout = watchdog_check(&g_wd, now_ms);
-        if (timeout) {
-            // S4: Gateway heartbeat lost → disable torque.
-            g_tc.motor_enable = 0;
-        }
-
         // ── Compute torque ────────────────────────────────────
         int8_t torque = torque_controller_compute(&g_tc);
 
-        // ── Send motor command ────────────────────────────────
+        // ── Send motor command (with semaphore guard) ────────
         send_motor_command(torque, &tx);
-        sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
+        can_tx_with_semaphore(&tx);
 
         // ── Send heartbeat ────────────────────────────────────
         if (now_ms % 100 == 0) {
             send_heartbeat(now_ms, &tx);
-            sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
+            can_tx_with_semaphore(&tx);
         }
     }
 }

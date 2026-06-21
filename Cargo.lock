@@ -229,6 +229,7 @@ dependencies = [
  "sim-ffi",
  "sim-freertos-port",
  "sim-world",
+ "sim-zephyr-port",
 ]
 
 [[package]]

@@ -1,0 +1,107 @@
+# software_timer_watchdog — verifies software timer fires watchdog check
+#
+# The powertrain creates a software timer (xTimerCreate) that fires every 50ms
+# to check the gateway heartbeat watchdog. The timer callback traces either
+# watchdog_ok or gateway_timeout.
+#
+# This scenario verifies:
+#   - pt_wd_timer trace (timer created)
+#   - watchdog_ok traces appear (timer fires, gateway is online)
+#   - If gateway heartbeat stops, gateway_timeout trace appears
+
+name = "software_timer_watchdog"
+duration_ms = 3000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+# Gateway sends heartbeats so the watchdog stays OK.
+# Heartbeat format: [node_id(1), uptime_be32]
+# For uptime_ms=50:  [1, 0, 0, 0, 50]
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 50]
+
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 150]
+
+[[bus_inject]]
+at_ms = 250
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 250]
+
+[[bus_inject]]
+at_ms = 350
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 1, 94]
+
+[[bus_inject]]
+at_ms = 450
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 1, 194]
+
+[[bus_inject]]
+at_ms = 550
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 2, 38]
+
+# Then stop sending gateway heartbeats after 600ms.
+# The watchdog will time out after 250ms of silence.
+
+[plant]
+type = "microcar"
+tick_ms = 10

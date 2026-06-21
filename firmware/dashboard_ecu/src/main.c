@@ -7,7 +7,10 @@
 // 4. Displays warning messages based on severity
 // 5. Sends periodic heartbeats
 //
-// Compiles as a FreeRTOS task running on the costar simulator.
+// Multi-task: dashboard_main (prio 1) handles CAN I/O,
+// display_update (prio 2) processes warning notifications.
+//
+// Compiles as FreeRTOS tasks running on the costar simulator.
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -28,6 +31,11 @@
 static dashboard_state_t g_ds;
 static warning_display_t g_wd;
 
+// ── Task notification ─────────────────────────────────────────────────────
+
+/// Task handle for display_update (needed for xTaskNotify).
+static TaskHandle_t g_display_task_handle = NULL;
+
 // ── Boot ──────────────────────────────────────────────────────────────────
 
 void dashboard_init(void)
@@ -45,16 +53,16 @@ static void handle_vehicle_mode(const mc_can_frame_t *frame)
     dashboard_state_set_mode(&g_ds, (mc_vehicle_mode_t)mode);
 }
 
-/// Process wheel speed frame (0x200) from plant.
+/// Process wheel speed frame (0x102) from plant.
 static void handle_wheel_speed(const mc_can_frame_t *frame)
 {
     uint16_t speed_kph_x10 = ((uint16_t)frame->data[0] << 8) | frame->data[1];
     dashboard_state_set_speed(&g_ds, speed_kph_x10);
 }
 
-/// Process BMS status frame (0x300) from plant.
+/// Process plant sensor data frame (0x500).
 /// Format: [soc, volt_hi, volt_lo, temp_hi, temp_lo, current_hi, current_lo]
-static void handle_bms_status(const mc_can_frame_t *frame)
+static void handle_plant_sensors(const mc_can_frame_t *frame)
 {
     if (frame->len < 7) return;
 
@@ -75,6 +83,13 @@ static void handle_warning(const mc_can_frame_t *frame)
 
     uint8_t severity = warning_display_severity_for(warning_code);
     warning_display_update(&g_wd, warning_code, severity);
+
+    // Notify the display_update task of a new/updated warning.
+    // The notification value carries the warning code + severity.
+    if (g_display_task_handle != NULL) {
+        uint32_t notify_val = ((uint32_t)severity << 8) | warning_code;
+        xTaskNotify(g_display_task_handle, notify_val, eSetValueWithoutOverwrite);
+    }
 }
 
 /// Dispatch a received CAN frame to the appropriate handler.
@@ -87,8 +102,8 @@ static void dispatch_frame(const mc_can_frame_t *frame)
     case MC_MSG_WHEEL_SPEED:
         handle_wheel_speed(frame);
         break;
-    case MC_MSG_BMS_STATUS:
-        handle_bms_status(frame);
+    case MC_MSG_PLANT_SENSORS:
+        handle_plant_sensors(frame);
         break;
     case MC_MSG_WARNING:
         handle_warning(frame);
@@ -111,6 +126,44 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
     tx->data[4] = (uint8_t)(now_ms);
 }
 
+// ── Display update task ────────────────────────────────────────────────────
+
+/// Background task that processes warning notifications via xTaskNotifyWait.
+/// Runs at lower frequency (50ms) and updates the display.
+void display_update(void *pvParameters)
+{
+    (void)pvParameters;
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "display_update");
+
+    uint32_t prev_notify_val = 0;
+
+    while (1) {
+        // Wait for a notification or timeout at 50ms.
+        uint32_t notify_val = 0;
+        BaseType_t notified = xTaskNotifyWait(
+            0x00000000,           // Don't clear any bits on entry
+            0xFFFFFFFF,           // Clear all bits on exit
+            &notify_val,
+            pdMS_TO_TICKS(50));
+
+        if (notified == pdTRUE && notify_val != prev_notify_val) {
+            uint8_t warning_code = (uint8_t)(notify_val & 0xFF);
+            uint8_t severity     = (uint8_t)(notify_val >> 8);
+            sim_trace_u32("display_warning", notify_val);
+            (void)severity;
+            (void)warning_code;
+            prev_notify_val = notify_val;
+        }
+
+        // Periodic refresh: emit display_update trace every 500ms.
+        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        if (now_ms % 500 == 0) {
+            uint8_t top = dashboard_state_top_warning(&g_ds);
+            sim_trace_u32("display_update", top);
+        }
+    }
+}
+
 // ── Main loop ─────────────────────────────────────────────────────────────
 
 void dashboard_main(void *pvParameters)
@@ -118,6 +171,10 @@ void dashboard_main(void *pvParameters)
     (void)pvParameters;
     dashboard_init();
     sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "dashboard_main");
+
+    // Create the display_update task (prio 2, lower freq).
+    xTaskCreate(display_update, "display", 512,
+                NULL, 2, &g_display_task_handle);
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;

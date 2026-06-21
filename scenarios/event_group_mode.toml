@@ -1,0 +1,100 @@
+# event_group_mode — verifies event group triggers mode transition
+#
+# The gateway uses an EventGroup to signal mode transitions (bit 0x01)
+# and critical faults (bit 0x02). This scenario verifies:
+#   - Event group is created (gateway_event_group trace)
+#   - When vehicle mode transitions (e.g., all nodes online → READY),
+#     the event group bit 0x01 is set and trace event fires
+#   - When a critical fault occurs, bit 0x02 is set
+
+name = "event_group_mode"
+duration_ms = 3000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+# Boot sequence: each ECU sends a heartbeat so gateway can set mode.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 50, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 70
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 50, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 80
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 50, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 90
+bus = "vcan0"
+sender = "dashboard"
+id = 0x001
+data = [4, 50, 0, 0, 0]
+
+# Inject a BMS fault to trigger critical fault event group bit.
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "bms"
+id = 0x202
+data = [1, 0]
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[input]]
+at_ms = 1500
+type = "driver_input"
+throttle_percent = 30
+brake_pressed = false

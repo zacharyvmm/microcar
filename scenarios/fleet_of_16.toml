@@ -1,0 +1,206 @@
+# fleet_of_16 — 16-machine fleet stress test
+#
+# Stresses: World lockstep advancement across 16 machines,
+# multi-bus broadcast at scale, gateway bridging between 4 CAN buses.
+# Extends the fleet_of_8 pattern to double the machine count.
+
+name = "fleet_of_16"
+duration_ms = 5000
+
+# ── Gateway (central coordinator, bridges all CAN buses) ──
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+# ── Powertrain nodes (8 independent motors) ──
+[[machine]]
+id = 2
+name = "powertrain_fl"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "powertrain_fr"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "powertrain_rl"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "powertrain_rr"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 6
+name = "powertrain_fl2"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 7
+name = "powertrain_fr2"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 8
+name = "powertrain_rl2"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 9
+name = "powertrain_rr2"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+# ── BMS nodes (4 independent battery packs) ──
+[[machine]]
+id = 10
+name = "bms_pack_a"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 11
+name = "bms_pack_b"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 12
+name = "bms_pack_c"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 13
+name = "bms_pack_d"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+# ── Dashboard nodes (2 displays) ──
+[[machine]]
+id = 14
+name = "dashboard_primary"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 15
+name = "dashboard_secondary"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+# ── Telemetry node ──
+[[machine]]
+id = 16
+name = "gateway_telemetry"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+# ── Bus A: Powertrain group 1 (4 nodes) + gateway ──
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_fl"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_fr"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_rl"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_rr"
+
+# ── Bus B: Powertrain group 2 (4 nodes) + gateway ──
+[[bus]]
+name = "vcan1"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan1"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_fl2"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_fr2"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_rl2"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_rr2"
+
+# ── Bus C: BMS + gateway ──
+[[bus]]
+name = "vcan2"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan2"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_pack_a"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_pack_b"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_pack_c"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_pack_d"
+
+# ── Bus D: Dashboard + telemetry + gateway ──
+[[bus]]
+name = "vcan3"
+type = "can"
+latency_us = 300
+
+[[bus.node]]
+bus = "vcan3"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan3"
+machine = "dashboard_primary"
+[[bus.node]]
+bus = "vcan3"
+machine = "dashboard_secondary"
+[[bus.node]]
+bus = "vcan3"
+machine = "gateway_telemetry"
+
+# ── Plant (publishes speed data) ──
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# ── Driver input at 500ms ──
+[[input]]
+at_ms = 500
+type = "driver_input"
+throttle_percent = 30
+brake_pressed = false

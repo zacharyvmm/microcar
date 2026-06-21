@@ -1,0 +1,92 @@
+# ecu_reboot — an ECU reboots mid-drive, gateway detects heartbeat loss/recovery
+#
+# Simulates a BMS ECU rebooting while driving. The gateway must:
+#   1. Detect heartbeat loss from the BMS
+#   2. Transition to a safe state (LIMP or reduced power)
+#   3. Detect heartbeat recovery after BMS comes back online
+#   4. Restore normal operation
+#
+# This is a complement to gateway_reboot.toml (gateway itself reboots)
+# and dashboard_reboot.toml (dashboard reboots — non-critical).
+
+name = "ecu_reboot"
+duration_ms = 4000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# Start driving at 30% throttle
+[[input]]
+at_ms = 200
+type = "driver_input"
+throttle_percent = 30
+brake_pressed = false
+
+# BMS reboots at t=1500ms
+[[fault]]
+at_ms = 1500
+target = "machine.bms"
+type = "reboot"
+
+# Gateway must detect BMS heartbeat loss
+[[expect.event]]
+before_ms = 1800
+machine = "gateway"
+event = "node_lost"
+node = "bms"
+
+# After reconnect, BMS should be detected again
+[[expect.event]]
+before_ms = 3500
+machine = "gateway"
+event = "node_online"
+node = "bms"
+
+# Vehicle should eventually return to a drivable state
+[[expect.event]]
+before_ms = 4000
+machine = "gateway"
+event = "vehicle_mode"

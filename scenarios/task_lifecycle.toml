@@ -1,0 +1,60 @@
+# task_lifecycle — verifies xTaskCreateStatic, vTaskDelete, no leaks
+#
+# The BMS creates a calibration_task using xTaskCreateStatic (static TCB/stack),
+# and later creates another one dynamically (xTaskCreate). Each task runs a
+# calibration cycle, then calls vTaskDelete(NULL) to delete itself.
+#
+# Verifies:
+#   - calib_created trace with value=1 (static create)
+#   - calib_start / calib_step / calib_done traces
+#   - calib_restart trace (second dynamic create at t=2000ms)
+#   - No fiber leaks: vTaskDelete → traceTASK_DELETE → sim_task_deleted
+
+name = "task_lifecycle"
+duration_ms = 4000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10

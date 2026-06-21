@@ -1,0 +1,91 @@
+# asymmetric_ticks — exercise different tick rate configurations
+#
+# NOTE: The World event loop uses a single shared virtual clock. Per-machine
+# tick_rate_hz is not yet a first-class field on MachineDef (it exists on
+# LinkDef for UART links). When per-machine tick rates are implemented,
+# this scenario will exercise:
+#   - gateway at 1000 Hz (1ms tick)
+#   - powertrain at 10000 Hz (100µs tick) — fast torque computation
+#   - bms at 1000 Hz
+#   - dashboard at 500 Hz (2ms tick, slower update)
+#
+# For now, all machines share the same virtual clock and advance together
+# at the World's event-loop granularity. This scenario verifies that trace
+# event interleaving is correct despite the topology that implies different
+# update rates.
+
+name = "asymmetric_ticks"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# Ramp throttle slowly to exercise the torque control loop
+[[input]]
+at_ms = 100
+type = "driver_input"
+throttle_percent = 15
+brake_pressed = false
+
+[[input]]
+at_ms = 800
+type = "driver_input"
+throttle_percent = 45
+brake_pressed = false
+
+# Verify that powertrain processes motor commands despite
+# the implied rate differential
+[[expect.event]]
+before_ms = 1500
+machine = "powertrain"
+event = "motor_command"
+
+# Verify dashboard can receive speed updates
+[[expect.event]]
+before_ms = 2000
+machine = "dashboard"
+event = "speed"
+value = ">0"

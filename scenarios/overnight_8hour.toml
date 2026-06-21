@@ -1,0 +1,90 @@
+# overnight_8hour — 8-hour virtual-time endurance stress test
+#
+# STRESS TEST — not for CI. Verifies no memory leaks, no time drift,
+# and no deadlocks over very long virtual simulation runs.
+# Wall-clock target: < 30s (fast-forward with tickless idle).
+#
+# 8 hours = 28,800,000 ms = 28,800,000,000 virtual ticks.
+# This is a purely computational stress test; no I/O is performed
+# during the simulation.
+
+name = "overnight_8hour"
+duration_ms = 28800000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# Start driving at 30% throttle early in the run
+[[input]]
+at_ms = 1000
+type = "driver_input"
+throttle_percent = 30
+brake_pressed = false
+
+# Vary throttle to exercise control loops over long duration
+[[input]]
+at_ms = 3600000
+type = "driver_input"
+throttle_percent = 50
+brake_pressed = false
+
+[[input]]
+at_ms = 7200000
+type = "driver_input"
+throttle_percent = 20
+brake_pressed = false
+
+[[input]]
+at_ms = 14400000
+type = "driver_input"
+throttle_percent = 70
+brake_pressed = false
+
+[[input]]
+at_ms = 21600000
+type = "driver_input"
+throttle_percent = 10
+brake_pressed = true

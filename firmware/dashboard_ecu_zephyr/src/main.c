@@ -56,7 +56,7 @@ static void handle_vehicle_mode(const mc_can_frame_t *frame)
     sim_trace_u32("dash_mode", mode);
 }
 
-/// Process wheel speed frame (0x200) from plant.
+/// Process wheel speed frame (0x102) from plant.
 static void handle_wheel_speed(const mc_can_frame_t *frame)
 {
     uint16_t speed_kph_x10 = ((uint16_t)frame->data[0] << 8) | frame->data[1];
@@ -64,9 +64,9 @@ static void handle_wheel_speed(const mc_can_frame_t *frame)
     sim_trace_u32("dash_speed", speed_kph_x10);
 }
 
-/// Process BMS status frame (0x300) from plant.
+/// Process plant sensor data frame (0x500).
 /// Format: [soc, volt_hi, volt_lo, temp_hi, temp_lo, current_hi, current_lo]
-static void handle_bms_status(const mc_can_frame_t *frame)
+static void handle_plant_sensors(const mc_can_frame_t *frame)
 {
     if (frame->len < 7) return;
 
@@ -110,12 +110,12 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
 #define DASHBOARD_STACK_SIZE 4096
 #define DASHBOARD_PRIORITY 4
 
-static K_THREAD_STACK_DEFINE(dashboard_stack, DASHBOARD_STACK_SIZE);
+K_THREAD_STACK_DEFINE(dashboard_stack, DASHBOARD_STACK_SIZE);
 static struct k_thread dashboard_thread_data;
 
 // ── Dashboard thread entry ────────────────────────────────────────────────
 
-static void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
+void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
 {
     (void)arg1; (void)arg2; (void)arg3;
 

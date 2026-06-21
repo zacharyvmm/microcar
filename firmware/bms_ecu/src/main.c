@@ -6,7 +6,13 @@
 // 3. Publishes BMS limits and fault codes
 // 4. Sends periodic heartbeats
 //
-// Compiles as a FreeRTOS task running on the costar simulator.
+// Multi-task: bms_main (prio 2) main loop,
+// calibration_task (prio 2) created/destroyed dynamically.
+//
+// FreeRTOS primitives: xTaskCreateStatic (pre-allocated stacks),
+// vTaskDelete (dynamic calibration task lifecycle).
+//
+// Compiles as FreeRTOS tasks running on the costar simulator.
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -21,6 +27,24 @@
 
 #define CAN_BUS 0
 
+// ── Static task support ───────────────────────────────────────────────────
+
+/// Pre-allocated stack for calibration_task (if created via xTaskCreateStatic).
+/// Size: 512 words.
+static StackType_t g_calib_stack[512];
+
+/// Pre-allocated TCB for calibration_task.
+static StaticTask_t g_calib_tcb;
+
+/// Handle to the dynamic calibration task (created at runtime).
+static TaskHandle_t g_calib_task_handle = NULL;
+
+/// Flag: 1 when calibration is requested, 0 otherwise.
+static volatile uint8_t g_calib_requested = 0;
+
+/// Flag: 1 when calibration is complete.
+static volatile uint8_t g_calib_done = 0;
+
 // ── Global state ──────────────────────────────────────────────────────────
 
 static bms_state_t g_bs;
@@ -32,6 +56,89 @@ void bms_init(void)
 {
     bms_state_init(&g_bs);
     bms_limits_init(&g_bl);
+}
+
+// ── Calibration task ──────────────────────────────────────────────────────
+
+/// Dynamic calibration task. Created at runtime (xTaskCreate or
+/// xTaskCreateStatic), runs one calibration cycle, then deletes itself.
+///
+/// Uses xTaskCreateStatic for pre-allocated stack if static alloc
+/// is preferred; otherwise uses dynamic xTaskCreate.
+static void calibration_task(void *pvParameters)
+{
+    (void)pvParameters;
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "calibration_task");
+    sim_trace_u32("calib_start", 1);
+
+    // Simulate a multi-step calibration cycle.
+    TickType_t start_tick = xTaskGetTickCount();
+    uint32_t step = 0;
+
+    while (step < 3) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+        step++;
+        sim_trace_u32("calib_step", step);
+    }
+
+    uint32_t duration = (uint32_t)(xTaskGetTickCount() - start_tick);
+    sim_trace_u32("calib_done", duration);
+
+    g_calib_done = 1;
+    g_calib_task_handle = NULL;
+
+    // Delete self: the task deletes itself after completing work.
+    // This exercises vTaskDelete and the task lifecycle hooks in the
+    // simulator (traceTASK_DELETE → sim_task_deleted → fiber cleanup).
+    vTaskDelete(NULL);
+}
+
+/// Request that a calibration task be created (if not already running).
+/// Returns 1 if the task was successfully created, 0 if already running.
+uint8_t bms_request_calibration(uint8_t use_static)
+{
+    if (g_calib_task_handle != NULL) {
+        return 0; // Already running.
+    }
+
+    g_calib_requested = 1;
+    g_calib_done = 0;
+
+    if (use_static) {
+        // Use xTaskCreateStatic with pre-allocated stack and TCB.
+        g_calib_task_handle = xTaskCreateStatic(
+            calibration_task,
+            "calibration",
+            512,
+            NULL,
+            2,
+            g_calib_stack,
+            &g_calib_tcb);
+    } else {
+        // Use dynamic allocation.
+        xTaskCreate(calibration_task, "calibration", 512,
+                    NULL, 2, &g_calib_task_handle);
+    }
+
+    if (g_calib_task_handle != NULL) {
+        sim_trace_u32("calib_created", (uint32_t)(use_static ? 1 : 0));
+        return 1;
+    }
+
+    g_calib_requested = 0;
+    return 0;
+}
+
+/// Returns 1 if calibration is still running.
+uint8_t bms_calibration_running(void)
+{
+    return (g_calib_task_handle != NULL) ? 1 : 0;
+}
+
+/// Returns 1 if the last calibration completed successfully.
+uint8_t bms_calibration_done(void)
+{
+    return g_calib_done;
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -114,9 +221,21 @@ void bms_main(void *pvParameters)
     send_heartbeat(0, &tx);
     sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
 
+    // At boot time, start a static calibration.
+    bms_request_calibration(1);
+
     while (1) {
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
         uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // ── Calibration lifecycle management ────────────────────
+        // After calibration completes, request a new dynamic one
+        // at t=2000ms to demonstrate repeated create/delete cycles.
+        if (bms_calibration_done() && !bms_calibration_running() &&
+            now_ms >= 2000 && now_ms < 2500) {
+            bms_request_calibration(0); // dynamic create
+            sim_trace_u32("calib_restart", now_ms);
+        }
 
         // ── Receive phase ─────────────────────────────────────
         uint32_t can_id;

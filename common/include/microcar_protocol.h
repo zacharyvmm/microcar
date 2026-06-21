@@ -38,6 +38,9 @@ extern "C" {
 #define MC_MSG_DASHBOARD_STATUS   0x300
 #define MC_MSG_WARNING            0x400
 
+// Plant-published sensor data (SOC, voltage, temperature, current).
+#define MC_MSG_PLANT_SENSORS      0x500
+
 // ── Vehicle Modes ────────────────────────────────────────────────────────
 
 typedef enum {

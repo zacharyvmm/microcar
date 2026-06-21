@@ -4,9 +4,32 @@
 //! trait.  Each microcar ECU gets its own firmware instance.
 //!
 //! In `init()`, the firmware activates the machine's SimGlobal and calls
-//! `microcar_boot()` from C to create FreeRTOS tasks.  In `step()`, it
+//! the appropriate per-ECU C boot function.  In `step()`, it
 //! calls `sim_scheduler_tick()` to advance the FreeRTOS scheduler by one
 //! cycle on the machine's fiber pool.
+//!
+//! ## ECU selection
+//!
+//! Firmware is selected via the scenario's `firmware` field (e.g.
+//! `firmware = "firmware/gateway_ecu"`).  The firmware path determines
+//! which ECU boot function is called:
+//!
+//! | firmware field                | boot function          |
+//! |-------------------------------|------------------------|
+//! | `firmware/gateway_ecu`        | `microcar_boot_gateway` |
+//! | `firmware/powertrain_ecu`     | `microcar_boot_powertrain` |
+//! | `firmware/bms_ecu`            | `microcar_boot_bms` |
+//! | `firmware/dashboard_ecu`      | `microcar_boot_dashboard` |
+//!
+//! If the firmware field does not contain a recognised ECU name the
+//! machine name is used as a fallback (backwards-compatible).
+//!
+//! ## Zephyr support (feature = "zephyr")
+//!
+//! When the `zephyr` feature is enabled, [`ZephyrDashboardFirmware`] is
+//! available for machines with `rtos = "zephyr"`.  It boots the Zephyr
+//! dashboard ECU firmware and advances the scheduler via
+//! `sim_zephyr_scheduler_tick()`.
 
 use sim_world::firmware::Firmware;
 use sim_world::Machine;
@@ -22,9 +45,21 @@ extern "C" {
     fn sim_scheduler_tick() -> u32;
 }
 
-/// Firmware for a single microcar ECU.
+// Zephyr C ABI functions (available when feature = "zephyr" is enabled).
+// These link to the Zephyr dashboard firmware compiled by build.rs and
+// the new `sim_zephyr_scheduler_tick()` in sim-ffi.
+#[cfg(feature = "zephyr")]
+extern "C" {
+    fn microcar_boot_dashboard_zephyr();
+    fn sim_zephyr_scheduler_tick() -> u32;
+}
+
+/// Firmware for a single microcar FreeRTOS ECU.
 pub struct MicrocarFirmware {
+    /// Machine name (e.g. "gateway").
     pub name: String,
+    /// Firmware path from the scenario (e.g. "firmware/gateway_ecu").
+    pub firmware_path: Option<String>,
     booted: bool,
 }
 
@@ -32,8 +67,35 @@ impl MicrocarFirmware {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
+            firmware_path: None,
             booted: false,
         }
+    }
+
+    pub fn with_firmware_path(name: impl Into<String>, firmware_path: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            firmware_path: Some(firmware_path.into()),
+            booted: false,
+        }
+    }
+
+    fn ecu_type(&self) -> &str {
+        if let Some(ref path) = self.firmware_path {
+            if path.contains("gateway") {
+                return "gateway";
+            }
+            if path.contains("powertrain") {
+                return "powertrain";
+            }
+            if path.contains("bms") {
+                return "bms";
+            }
+            if path.contains("dashboard") {
+                return "dashboard";
+            }
+        }
+        &self.name
     }
 }
 
@@ -41,26 +103,22 @@ impl Firmware for MicrocarFirmware {
     fn init(&mut self, machine: &mut Machine) {
         let _guard = machine.activate();
 
-        // Select the right boot function based on the machine name.
-        // Each machine runs only its designated ECU firmware.
+        let ecu = self.ecu_type();
         unsafe {
-            if self.name.starts_with("gateway") {
+            if ecu.starts_with("gateway") {
                 microcar_boot_gateway();
-            } else if self.name.starts_with("powertrain") {
+            } else if ecu.starts_with("powertrain") {
                 microcar_boot_powertrain();
-            } else if self.name.starts_with("bms") {
+            } else if ecu.starts_with("bms") {
                 microcar_boot_bms();
-            } else if self.name.starts_with("dashboard") {
+            } else if ecu.starts_with("dashboard") {
                 microcar_boot_dashboard();
             } else {
-                // Fallback: boot all 4 ECUs for unknown machine types.
                 microcar_boot();
             }
         }
 
-        // Flush thread-local trace events into this machine's SimGlobal.
         sim_ffi::flush_trace();
-
         self.booted = true;
     }
 
@@ -69,19 +127,53 @@ impl Firmware for MicrocarFirmware {
             return;
         }
 
-        // Activate this machine's SimGlobal for the scheduler tick.
         let _guard = machine.activate();
-
-        // Advance the FreeRTOS scheduler by one cycle.
-        // Returns 1 if more work remains, 0 if all tasks are done.
-        // sim_scheduler_tick() internally calls flush_trace() after each
-        // cycle, so firmware trace events are attributed to this machine.
         unsafe {
             sim_scheduler_tick();
         }
+        sim_ffi::flush_trace();
+    }
+}
 
-        // Flush again in case any trace events remain (e.g., from the
-        // tickless idle path which may not have flushed).
+// ── Zephyr Dashboard Firmware ─────────────────────────────────────────────
+
+/// Firmware adapter for the Zephyr dashboard ECU.
+///
+/// Only available when the `zephyr` feature is enabled.
+/// Uses `sim_zephyr_scheduler_tick()` to advance the Zephyr scheduler
+/// one cycle per step.
+#[cfg(feature = "zephyr")]
+pub struct ZephyrDashboardFirmware {
+    booted: bool,
+}
+
+#[cfg(feature = "zephyr")]
+impl ZephyrDashboardFirmware {
+    pub fn new() -> Self {
+        Self { booted: false }
+    }
+}
+
+#[cfg(feature = "zephyr")]
+impl Firmware for ZephyrDashboardFirmware {
+    fn init(&mut self, machine: &mut Machine) {
+        let _guard = machine.activate();
+        unsafe {
+            microcar_boot_dashboard_zephyr();
+        }
+        sim_ffi::flush_trace();
+        self.booted = true;
+    }
+
+    fn step(&mut self, _now: Tick, machine: &mut Machine) {
+        if !self.booted {
+            return;
+        }
+
+        let _guard = machine.activate();
+        unsafe {
+            sim_zephyr_scheduler_tick();
+        }
         sim_ffi::flush_trace();
     }
 }

@@ -8,6 +8,8 @@
 
 use sim_world::scenario::Scenario;
 use microcar::MicrocarFirmware;
+#[cfg(feature = "zephyr")]
+use microcar::ZephyrDashboardFirmware;
 use microcar_plant::MicrocarPlant;
 
 fn main() {
@@ -33,7 +35,30 @@ fn main() {
     for m in &scenario.machine {
         if m.firmware.is_some() {
             if let Some(machine) = world.machine_mut(m.id) {
-                machine.load_firmware(Box::new(MicrocarFirmware::new(&m.name)));
+                let fw = m.firmware.as_deref().unwrap_or("");
+                let rtos = m.rtos.as_deref().unwrap_or("freertos");
+                if rtos == "zephyr" {
+                    #[cfg(feature = "zephyr")]
+                    {
+                        machine.load_firmware(Box::new(ZephyrDashboardFirmware::new()));
+                    }
+                    #[cfg(not(feature = "zephyr"))]
+                    {
+                        eprintln!(
+                            "warning: machine '{}' uses rtos=zephyr but \
+                             the 'zephyr' feature is not enabled — \
+                             falling back to FreeRTOS firmware",
+                            m.name
+                        );
+                        machine.load_firmware(Box::new(
+                            MicrocarFirmware::with_firmware_path(&m.name, fw)
+                        ));
+                    }
+                } else {
+                    machine.load_firmware(Box::new(
+                        MicrocarFirmware::with_firmware_path(&m.name, fw)
+                    ));
+                }
             }
         }
     }

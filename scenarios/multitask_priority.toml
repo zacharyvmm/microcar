@@ -1,0 +1,64 @@
+# multitask_priority — verifies priority ordering via trace interleaving
+#
+# All ECUs now have multiple tasks. This scenario verifies:
+# - Gateway: heartbeat_rx(4), gateway_main(3), fault_aggregator(2)
+# - Powertrain: powertrain_main(3), sensor_poll(3), logger(1)
+# - BMS: bms_main(2), calibration_task(2, dynamic)
+# - Dashboard: display_update(2), dashboard_main(1)
+#
+# Every task must produce trace events proving it runs.
+
+name = "multitask_priority"
+duration_ms = 5000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[input]]
+at_ms = 1000
+type = "driver_input"
+throttle_percent = 20
+brake_pressed = false

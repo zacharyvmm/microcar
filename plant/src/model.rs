@@ -3,16 +3,16 @@
 //!
 //! # CAN protocol
 //!
-//! | ID     | Name                | Publisher | Format                              |
-//! |--------|---------------------|-----------|-------------------------------------|
-//! | 0x200  | MC_MSG_WHEEL_SPEED  | plant     | [speed_hi, speed_lo] (u16 BE)       |
-//! | 0x300  | MC_MSG_BMS_STATUS   | plant     | [soc, volt_hi, volt_lo, temp_hi,    |
-//! |        |                     |           |  temp_lo, current_hi, current_lo]   |
-//! | 0x100  | MC_MSG_MOTOR_COMMAND| powertrain| [torque_i8, 0, 0, 0, 0]            |
+//! | ID     | Name                 | Publisher | Format                              |
+//! |--------|----------------------|-----------|-------------------------------------|
+//! | 0x102  | MC_MSG_WHEEL_SPEED   | plant     | [speed_hi, speed_lo] (u16 BE)       |
+//! | 0x500  | MC_MSG_PLANT_SENSORS | plant     | [soc, volt_hi, volt_lo, temp_hi,    |
+//! |        |                      |           |  temp_lo, current_hi, current_lo]   |
+//! | 0x100  | MC_MSG_MOTOR_COMMAND | powertrain| [torque_i8, 0, 0, 0, 0]            |
 //!
 //! Motor commands are read via the driver-input queue (not from bus frames),
 //! since firmware ECUs aren't running in the MVP.  The plant publishes
-//! wheel speed and BMS status each tick so other ECUs can receive them
+//! wheel speed and sensor readings each tick so other ECUs can receive them
 //! when firmware is loaded.
 
 use sim_world::plant::EnvironmentModel;
@@ -23,10 +23,13 @@ use crate::sensors::SensorReadings;
 use crate::vehicle::VehiclePlant;
 
 /// CAN frame ID for wheel speed messages (published by plant).
-pub const CAN_ID_WHEEL_SPEED: u32 = 0x200;
+/// Matches MC_MSG_WHEEL_SPEED (0x102) in the microcar protocol.
+pub const CAN_ID_WHEEL_SPEED: u32 = 0x102;
 
-/// CAN frame ID for BMS status messages (published by plant).
-pub const CAN_ID_BMS_STATUS: u32 = 0x300;
+/// CAN frame ID for plant sensor readings (published by plant).
+/// Non-conflicting with BMS ECU's MC_MSG_BMS_STATUS (0x200) and
+/// dashboard's MC_MSG_DASHBOARD_STATUS (0x300).
+pub const CAN_ID_PLANT_SENSORS: u32 = 0x500;
 
 /// CAN frame ID for motor torque command (read by plant from bus-inject).
 pub const CAN_ID_MOTOR_COMMAND: u32 = 0x100;
@@ -122,7 +125,7 @@ impl MicrocarPlant {
         // ── Publish sensor readings onto CAN bus ─────────────────
         let readings = SensorReadings::from_plant(&self.vehicle, &self.battery);
 
-        // Wheel speed: 0x200, 2 bytes (u16 BE, in 0.1 km/h)
+        // Wheel speed: 0x102, 2 bytes (u16 BE, in 0.1 km/h)
         let speed = readings.wheel_speed_kph_x10;
         let speed_data = speed.to_be_bytes().to_vec();
         world.inject_can_frame(
@@ -133,7 +136,7 @@ impl MicrocarPlant {
             now,
         );
 
-        // BMS status: 0x300, 7 bytes
+        // Plant sensor readings: 0x500, 7 bytes
         // [soc, volt_hi, volt_lo, temp_hi, temp_lo, current_hi, current_lo]
         let voltage = readings.pack_voltage_mv;
         let temp = readings.pack_temp_c_x10;
@@ -146,7 +149,7 @@ impl MicrocarPlant {
         world.inject_can_frame(
             &self.bus_name,
             self.plant_machine_id,
-            CAN_ID_BMS_STATUS,
+            CAN_ID_PLANT_SENSORS,
             &bms_data,
             now,
         );
@@ -225,8 +228,8 @@ mod tests {
         // speed = 0 at rest
         assert_eq!(u16::from_be_bytes([data[0], data[1]]), 0);
 
-        // BMS frames.
-        let bms_frames: Vec<_> = frames.iter().filter(|(_, _, id, _)| *id == CAN_ID_BMS_STATUS).collect();
+        // Plant sensor frames.
+        let bms_frames: Vec<_> = frames.iter().filter(|(_, _, id, _)| *id == CAN_ID_PLANT_SENSORS).collect();
         assert_eq!(bms_frames.len(), 2);
         let (_rx, _sender, _id, data) = bms_frames[0];
         assert_eq!(data.len(), 7);

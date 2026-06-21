@@ -1,0 +1,80 @@
+# mutex_fault_queue — stress mutex-guarded fault queue with concurrent access
+#
+# The gateway has a mutex-protected fault_manager. Two tasks access it:
+#   1. gateway_main (prio 3) — reports faults when heartbeats are lost
+#   2. fault_aggregator (prio 2) — reads fault stats every 100ms
+#
+# This scenario injects BMS fault frames and verifies:
+#   - fault_aggregate traces appear (proving fault_aggregator runs)
+#   - No crashes or deadlocks from concurrent mutex access
+
+name = "mutex_fault_queue"
+duration_ms = 3000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+# Inject BMS fault frames to stress the fault manager.
+[[bus_inject]]
+at_ms = 100
+bus = "vcan0"
+sender = "bms"
+id = 0x202
+data = [1, 0]
+
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "bms"
+id = 0x202
+data = [2, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "bms"
+id = 0x202
+data = [5, 0]
+
+[plant]
+type = "microcar"
+tick_ms = 10

@@ -1,0 +1,74 @@
+name: Microcar CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build-and-test:
+    name: Build & test (ubuntu-latest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout costar
+        uses: actions/checkout@v4
+        with:
+          repository: zacharyvmm/costar
+          path: costar
+
+      - name: Checkout microcar
+        uses: actions/checkout@v4
+        with:
+          path: microcar
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            costar/target/
+          key: ${{ runner.os }}-cargo-microcar-${{ hashFiles('costar/**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-microcar-
+
+      - name: Build costar
+        working-directory: costar
+        run: cargo build --workspace
+
+      - name: Run costar tests
+        working-directory: costar
+        run: cargo test --workspace
+
+      - name: Build microcar
+        working-directory: microcar
+        run: cargo build
+
+      - name: Run microcar scenario tests
+        working-directory: costar
+        run: cargo run -- test --microcar --all --verbose
+
+      - name: Deterministic verification (bms_overtemp_limp_mode x3)
+        working-directory: costar
+        run: |
+          set -e
+          HASH1=$(cargo run -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
+          echo "Run 1: $HASH1"
+          HASH2=$(cargo run -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
+          echo "Run 2: $HASH2"
+          HASH3=$(cargo run -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
+          echo "Run 3: $HASH3"
+          if [ "$HASH1" != "$HASH2" ] || [ "$HASH2" != "$HASH3" ]; then
+            echo "ERROR: Deterministic trace hashes do not match!"
+            exit 1
+          fi
+          echo "Deterministic verification PASSED: all 3 hashes match ($HASH1)"

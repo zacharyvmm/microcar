@@ -1,0 +1,632 @@
+# fleet_of_64 — 64-machine fleet extreme stress test
+#
+# STRESS TEST — not for CI. 64 machines on 8 CAN buses, central
+# gateway bridging all buses. Exercises the extreme upper bound of
+# the World event loop's O(n) scheduling across a very large machine
+# set.  Wall-clock target: < 10s for 5s virtual time.
+#
+# Machine distribution:
+#   - 1 gateway
+#   - 32 powertrain ECUs (8 groups of 4)
+#   - 16 BMS ECUs
+#   - 8 dashboard ECUs
+#   - 7 telemetry/logging ECUs
+#
+# To skip this test in CI, exclude this file from scenario discovery
+# or run with: costar test --microcar --all --exclude fleet_of_64
+
+name = "fleet_of_64"
+duration_ms = 5000
+
+# ── Gateway (central coordinator) ──
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+# ── Powertrain ECUs (id 2-33) ──
+[[machine]]
+id = 2
+name = "powertrain_01"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 3
+name = "powertrain_02"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 4
+name = "powertrain_03"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 5
+name = "powertrain_04"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 6
+name = "powertrain_05"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 7
+name = "powertrain_06"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 8
+name = "powertrain_07"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 9
+name = "powertrain_08"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 10
+name = "powertrain_09"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 11
+name = "powertrain_10"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 12
+name = "powertrain_11"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 13
+name = "powertrain_12"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 14
+name = "powertrain_13"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 15
+name = "powertrain_14"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 16
+name = "powertrain_15"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 17
+name = "powertrain_16"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 18
+name = "powertrain_17"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 19
+name = "powertrain_18"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 20
+name = "powertrain_19"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 21
+name = "powertrain_20"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 22
+name = "powertrain_21"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 23
+name = "powertrain_22"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 24
+name = "powertrain_23"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 25
+name = "powertrain_24"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 26
+name = "powertrain_25"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 27
+name = "powertrain_26"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 28
+name = "powertrain_27"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 29
+name = "powertrain_28"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 30
+name = "powertrain_29"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 31
+name = "powertrain_30"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 32
+name = "powertrain_31"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+[[machine]]
+id = 33
+name = "powertrain_32"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+# ── BMS ECUs (id 34-49) ──
+[[machine]]
+id = 34
+name = "bms_01"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 35
+name = "bms_02"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 36
+name = "bms_03"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 37
+name = "bms_04"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 38
+name = "bms_05"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 39
+name = "bms_06"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 40
+name = "bms_07"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 41
+name = "bms_08"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 42
+name = "bms_09"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 43
+name = "bms_10"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 44
+name = "bms_11"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 45
+name = "bms_12"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 46
+name = "bms_13"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 47
+name = "bms_14"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 48
+name = "bms_15"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+[[machine]]
+id = 49
+name = "bms_16"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+# ── Dashboard ECUs (id 50-57) ──
+[[machine]]
+id = 50
+name = "dashboard_01"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+[[machine]]
+id = 51
+name = "dashboard_02"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+[[machine]]
+id = 52
+name = "dashboard_03"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+[[machine]]
+id = 53
+name = "dashboard_04"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+[[machine]]
+id = 54
+name = "dashboard_05"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+[[machine]]
+id = 55
+name = "dashboard_06"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+[[machine]]
+id = 56
+name = "dashboard_07"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+[[machine]]
+id = 57
+name = "dashboard_08"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+# ── Telemetry/logging ECUs (id 58-64) ──
+[[machine]]
+id = 58
+name = "gateway_telemetry_01"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+[[machine]]
+id = 59
+name = "gateway_telemetry_02"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+[[machine]]
+id = 60
+name = "gateway_telemetry_03"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+[[machine]]
+id = 61
+name = "gateway_telemetry_04"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+[[machine]]
+id = 62
+name = "gateway_telemetry_05"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+[[machine]]
+id = 63
+name = "gateway_telemetry_06"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+[[machine]]
+id = 64
+name = "gateway_telemetry_07"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+# ── CAN Bus topology: 8 buses, gateway on all, ECUs distributed ──
+
+# Bus 0: Powertrain 01-04 + gateway
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_01"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_02"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_03"
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain_04"
+
+# Bus 1: Powertrain 05-08 + gateway
+[[bus]]
+name = "vcan1"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan1"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_05"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_06"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_07"
+[[bus.node]]
+bus = "vcan1"
+machine = "powertrain_08"
+
+# Bus 2: Powertrain 09-16 + BMS 01-04 + gateway
+[[bus]]
+name = "vcan2"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan2"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_09"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_10"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_11"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_12"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_13"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_14"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_15"
+[[bus.node]]
+bus = "vcan2"
+machine = "powertrain_16"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_01"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_02"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_03"
+[[bus.node]]
+bus = "vcan2"
+machine = "bms_04"
+
+# Bus 3: Powertrain 17-24 + BMS 05-08 + gateway
+[[bus]]
+name = "vcan3"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan3"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_17"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_18"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_19"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_20"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_21"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_22"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_23"
+[[bus.node]]
+bus = "vcan3"
+machine = "powertrain_24"
+[[bus.node]]
+bus = "vcan3"
+machine = "bms_05"
+[[bus.node]]
+bus = "vcan3"
+machine = "bms_06"
+[[bus.node]]
+bus = "vcan3"
+machine = "bms_07"
+[[bus.node]]
+bus = "vcan3"
+machine = "bms_08"
+
+# Bus 4: Powertrain 25-32 + BMS 09-12 + gateway
+[[bus]]
+name = "vcan4"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan4"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_25"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_26"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_27"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_28"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_29"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_30"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_31"
+[[bus.node]]
+bus = "vcan4"
+machine = "powertrain_32"
+[[bus.node]]
+bus = "vcan4"
+machine = "bms_09"
+[[bus.node]]
+bus = "vcan4"
+machine = "bms_10"
+[[bus.node]]
+bus = "vcan4"
+machine = "bms_11"
+[[bus.node]]
+bus = "vcan4"
+machine = "bms_12"
+
+# Bus 5: BMS 13-16 + gateway
+[[bus]]
+name = "vcan5"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan5"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan5"
+machine = "bms_13"
+[[bus.node]]
+bus = "vcan5"
+machine = "bms_14"
+[[bus.node]]
+bus = "vcan5"
+machine = "bms_15"
+[[bus.node]]
+bus = "vcan5"
+machine = "bms_16"
+
+# Bus 6: Dashboards 01-04 + telemetry 01-04 + gateway
+[[bus]]
+name = "vcan6"
+type = "can"
+latency_us = 300
+
+[[bus.node]]
+bus = "vcan6"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan6"
+machine = "dashboard_01"
+[[bus.node]]
+bus = "vcan6"
+machine = "dashboard_02"
+[[bus.node]]
+bus = "vcan6"
+machine = "dashboard_03"
+[[bus.node]]
+bus = "vcan6"
+machine = "dashboard_04"
+[[bus.node]]
+bus = "vcan6"
+machine = "gateway_telemetry_01"
+[[bus.node]]
+bus = "vcan6"
+machine = "gateway_telemetry_02"
+[[bus.node]]
+bus = "vcan6"
+machine = "gateway_telemetry_03"
+[[bus.node]]
+bus = "vcan6"
+machine = "gateway_telemetry_04"
+
+# Bus 7: Dashboards 05-08 + telemetry 05-07 + gateway
+[[bus]]
+name = "vcan7"
+type = "can"
+latency_us = 300
+
+[[bus.node]]
+bus = "vcan7"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan7"
+machine = "dashboard_05"
+[[bus.node]]
+bus = "vcan7"
+machine = "dashboard_06"
+[[bus.node]]
+bus = "vcan7"
+machine = "dashboard_07"
+[[bus.node]]
+bus = "vcan7"
+machine = "dashboard_08"
+[[bus.node]]
+bus = "vcan7"
+machine = "gateway_telemetry_05"
+[[bus.node]]
+bus = "vcan7"
+machine = "gateway_telemetry_06"
+[[bus.node]]
+bus = "vcan7"
+machine = "gateway_telemetry_07"
+
+# ── Plant ──
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# ── Driver input ──
+[[input]]
+at_ms = 500
+type = "driver_input"
+throttle_percent = 30
+brake_pressed = false

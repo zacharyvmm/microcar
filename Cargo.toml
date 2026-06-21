@@ -15,6 +15,10 @@ description = "microcar — costar dogfood binary"
 name = "microcar"
 path = "src/main.rs"
 
+[[bench]]
+name = "bench_main"
+harness = false
+
 [features]
 default = []
 zephyr = []
@@ -24,6 +28,7 @@ sim-world = { path = "../costar/crates/sim-world" }
 sim-core = { path = "../costar/crates/sim-core" }
 sim-ffi = { path = "../costar/crates/sim-ffi" }
 sim-freertos-port = { path = "../costar/crates/sim-freertos-port" }
+sim-zephyr-port = { path = "../costar/crates/sim-zephyr-port", optional = true }
 microcar-plant = { path = "plant" }
 
 [build-dependencies]

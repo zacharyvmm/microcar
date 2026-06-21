@@ -23,11 +23,19 @@ fn main() {
     println!("cargo:rerun-if-changed=firmware/gateway_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/powertrain_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/microcar_coordinator.c");
+    println!("cargo:rerun-if-changed=firmware/microcar_zephyr_boot.c");
+    println!("cargo:rerun-if-changed=firmware/zephyr_mock/");
 
     // Also re-run if the FreeRTOS config or sim ABI headers change.
     println!("cargo:rerun-if-changed={}", freertos_port.join("c/FreeRTOSConfig.h").display());
     println!("cargo:rerun-if-changed={}", freertos_port.join("c/portmacro.h").display());
     println!("cargo:rerun-if-changed={}", sim_ffi_include.join("sim_abi.h").display());
+
+    // Also re-run if sim-zephyr-port headers change.
+    let zephyr_port = costar_root.join("crates/sim-zephyr-port");
+    println!("cargo:rerun-if-changed={}", zephyr_port.join("c/sim_zephyr_abi.h").display());
+    println!("cargo:rerun-if-changed={}", zephyr_port.join("c/zephyr_arch.c").display());
+    println!("cargo:rerun-if-changed={}", zephyr_port.join("c/zephyr_glue.c").display());
 
     let mut build = cc::Build::new();
 
@@ -64,14 +72,39 @@ fn main() {
     build.file("firmware/microcar_coordinator.c");
 
     // ── Zephyr dashboard (only when feature enabled) ─────────────────
-    // The Zephyr dashboard uses <zephyr/kernel.h> which is only
-    // available when the Zephyr SDK or sim-zephyr-port is present.
+    // The Zephyr dashboard uses <zephyr/kernel.h> which is provided by
+    // our mock headers in firmware/zephyr_mock/.  The mock z_impl_*
+    // functions bridge to sim-zephyr-port's sim_zephyr_abi.h.
     #[cfg(feature = "zephyr")]
     {
+        // ── Zephyr mock kernel (bridges z_impl_* to sim ABI) ────
+        build.file("firmware/zephyr_mock/kernel_impl.c");
+
+        // ── Zephyr dashboard firmware ────────────────────────────
         build.file("firmware/dashboard_ecu_zephyr/src/main.c")
              .file("firmware/dashboard_ecu_zephyr/src/dashboard_state.c")
              .file("firmware/dashboard_ecu_zephyr/src/warning_display.c");
-        // Zephyr include paths would be added here when the feature is active.
+
+        // ── Zephyr boot entry ────────────────────────────────────
+        build.file("firmware/microcar_zephyr_boot.c");
+
+        // ── sim-zephyr-port runtime (standalone mode) ────────────
+        build.file(zephyr_port.join("c/zephyr_arch.c"))
+             .file(zephyr_port.join("c/zephyr_glue.c"));
+
+        // ── Zephyr include paths ─────────────────────────────────
+        // Order matters:
+        //   1. Our mock zephyr/kernel.h (overrides real Zephyr)
+        //   2. sim-zephyr-port config (generated syscalls)
+        //   3. sim-zephyr-port c (sim_zephyr_abi.h, zephyr_arch.h)
+        //   4. sim-ffi include (sim_abi.h)
+        build.include("firmware/zephyr_mock")
+             .include(zephyr_port.join("config"))
+             .include(zephyr_port.join("c"))
+             .include(&sim_ffi_include);
+
+        // ── Zephyr-specific defines ──────────────────────────────
+        build.define("SIMULATION_HOST_MODE", Some("1"));
     }
 
     // ── Include paths ────────────────────────────────────────────────
