@@ -77,9 +77,6 @@ fn main() {
     // ── Lifecycle stress ECU ─────────────────────────────────────────
     build.file("firmware/lifecycle_stress_ecu/src/main.c");
 
-    // ── Test fiber ECU ───────────────────────────────────────────────
-    build.file("firmware/test_fiber_ecu/src/main.c");
-
     // ── Coordinator (boot entry) ─────────────────────────────────────
     build.file("firmware/microcar_coordinator.c");
 
@@ -136,8 +133,7 @@ fn main() {
         .include("firmware/gateway_ecu/src")
         .include("firmware/powertrain_ecu/src")
         .include("firmware/priority_inversion_demo/src")
-        .include("firmware/lifecycle_stress_ecu/src")
-        .include("firmware/test_fiber_ecu/src");
+        .include("firmware/lifecycle_stress_ecu/src");
 
     // ── Defines ──────────────────────────────────────────────────────
     build

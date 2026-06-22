@@ -44,7 +44,6 @@ extern "C" {
     fn microcar_boot_dashboard();
     fn microcar_boot_priority_inversion();
     fn microcar_boot_lifecycle_stress();
-    fn microcar_boot_test_fiber();
     fn sim_scheduler_tick() -> u32;
 }
 
@@ -118,8 +117,6 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_priority_inversion();
             } else if ecu.starts_with("lifecycle_stress") {
                 microcar_boot_lifecycle_stress();
-            } else if ecu.starts_with("test_fiber") {
-                microcar_boot_test_fiber();
             } else if ecu.starts_with("gateway") {
                 microcar_boot_gateway();
             } else if ecu.starts_with("powertrain") {
