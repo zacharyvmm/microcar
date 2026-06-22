@@ -1,0 +1,20 @@
+[machine.1]            0 task-created id=1 name="task_a"
+[machine.1]            0 task-created id=2 name="task_b"
+[machine.1]            0 user-u32 "pi_boot" = 1
+[machine.1]            0 user-u32 "pi_tasks_created" = 2
+[machine.1]            0 task-resume id=2 reason=scheduler
+[machine.1]            0 task-yield id=2 reason=SleepUntil(5)
+[machine.1]            0 user-u32 "task_b_ran" = 2
+[machine.1]            0 task-resume id=1 reason=scheduler
+[machine.1]            0 task-yield id=1 reason=SleepUntil(10)
+[machine.1]            0 user-u32 "task_a_ran" = 1
+[machine.1]            5 task-resume id=2 reason=scheduler
+[machine.1]            5 task-yield id=2 reason=RtosPortYield
+[machine.1]            5 task-resume id=2 reason=scheduler
+[machine.1]            5 task-yield id=2 reason=TaskExit
+[machine.1]            5 user-u32 "task_b_delayed" = 3
+[machine.1]           10 task-resume id=1 reason=scheduler
+[machine.1]           10 task-yield id=1 reason=RtosPortYield
+[machine.1]           10 task-resume id=1 reason=scheduler
+[machine.1]           10 task-yield id=1 reason=TaskExit
+[machine.1]           10 user-u32 "task_a_delayed" = 1

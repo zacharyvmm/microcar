@@ -91,8 +91,8 @@ static void powertrain_primitives_init(void)
         xTimerStart(g_wd_timer, 0);
     }
 
-    sim_trace_u32("pt_can_sem", (uint32_t)(uintptr_t)g_can_tx_slots);
-    sim_trace_u32("pt_wd_timer", (uint32_t)(uintptr_t)g_wd_timer);
+    sim_trace_u32("pt_can_sem", g_can_tx_slots != NULL ? 1 : 0);
+    sim_trace_u32("pt_wd_timer", g_wd_timer != NULL ? 1 : 0);
 }
 
 void powertrain_init(void)
@@ -198,7 +198,6 @@ static void send_motor_command(int8_t torque, mc_can_frame_t *tx)
 void sensor_poll(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "sensor_poll");
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -224,7 +223,6 @@ void sensor_poll(void *pvParameters)
 void deadline_monitor(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "deadline_mon");
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -258,7 +256,6 @@ void deadline_monitor(void *pvParameters)
 void logger(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "logger");
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -283,7 +280,6 @@ void powertrain_main(void *pvParameters)
     (void)pvParameters;
     powertrain_init();
     powertrain_primitives_init();
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "powertrain_main");
     g_powertrain_task_handle = xTaskGetCurrentTaskHandle();
 
     // Create subordinate tasks.

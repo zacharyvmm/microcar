@@ -51,7 +51,6 @@ void lifecycle_stress_worker(void *pvParameters)
 void lifecycle_stress_supervisor(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "stress_sup");
 
     sim_trace_u32("stress_create_start", 100);
     for (uint32_t i = 0; i < 100; i++) {

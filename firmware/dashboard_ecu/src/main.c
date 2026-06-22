@@ -133,7 +133,6 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
 void display_update(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "display_update");
 
     uint32_t prev_notify_val = 0;
 
@@ -170,7 +169,6 @@ void dashboard_main(void *pvParameters)
 {
     (void)pvParameters;
     dashboard_init();
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "dashboard_main");
 
     // Create the display_update task (prio 2, lower freq).
     xTaskCreate(display_update, "display", 512,

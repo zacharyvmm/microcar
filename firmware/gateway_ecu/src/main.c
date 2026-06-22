@@ -83,10 +83,10 @@ static void gateway_primitives_init(void)
     g_hb_queue     = xQueueCreate(16, sizeof(hb_event_t));
     g_can_frame_sem = xSemaphoreCreateCounting(64, 0);
 
-    sim_trace_u32("gateway_mutex", (uint32_t)(uintptr_t)g_fm_mutex);
-    sim_trace_u32("gateway_event_group", (uint32_t)(uintptr_t)g_mode_events);
-    sim_trace_u32("gateway_queue", (uint32_t)(uintptr_t)g_hb_queue);
-    sim_trace_u32("gateway_can_sem", (uint32_t)(uintptr_t)g_can_frame_sem);
+    sim_trace_u32("gateway_mutex", g_fm_mutex != NULL ? 1 : 0);
+    sim_trace_u32("gateway_event_group", g_mode_events != NULL ? 1 : 0);
+    sim_trace_u32("gateway_queue", g_hb_queue != NULL ? 1 : 0);
+    sim_trace_u32("gateway_can_sem", g_can_frame_sem != NULL ? 1 : 0);
 }
 
 void gateway_init(void)
@@ -225,7 +225,6 @@ static void send_vehicle_mode(mc_can_frame_t *tx)
 void heartbeat_rx(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "heartbeat_rx");
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -260,7 +259,6 @@ void heartbeat_rx(void *pvParameters)
 void fault_aggregator(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "fault_aggregator");
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -299,7 +297,6 @@ void fault_aggregator(void *pvParameters)
 void can_frame_processor(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "can_frame_processor");
 
     uint32_t proc_count = 0;
 
@@ -329,7 +326,6 @@ void gateway_main(void *pvParameters)
     (void)pvParameters;
     gateway_init();
     gateway_primitives_init();
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "gateway_main");
     g_gateway_task_handle = xTaskGetCurrentTaskHandle();
 
     // Create subordinate tasks.
@@ -380,7 +376,7 @@ void gateway_main(void *pvParameters)
 
         if (new_mode != old_mode) {
             const char *mode_str = gateway_mode_string(new_mode);
-            sim_trace_u32("vehicle_mode", (uint32_t)(uintptr_t)mode_str);
+            sim_trace_u32("vehicle_mode", (uint32_t)new_mode);
             // Signal mode change to event group.
             xEventGroupSetBits(g_mode_events, 0x01);
         }

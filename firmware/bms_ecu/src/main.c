@@ -68,7 +68,6 @@ void bms_init(void)
 static void calibration_task(void *pvParameters)
 {
     (void)pvParameters;
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "calibration_task");
     sim_trace_u32("calib_start", 1);
 
     // Simulate a multi-step calibration cycle.
@@ -212,7 +211,6 @@ void bms_main(void *pvParameters)
 {
     (void)pvParameters;
     bms_init();
-    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "bms_main");
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
