@@ -64,6 +64,11 @@ static EventGroupHandle_t g_mode_events = NULL;
 /// Depth: 16 items, each sizeof(hb_event_t).
 static QueueHandle_t g_hb_queue = NULL;
 
+/// Counting semaphore for CAN frame preemption.
+/// heartbeat_rx (prio 4) gives → can_frame_processor (prio 5) takes.
+/// Max count 64, initial 0.
+static SemaphoreHandle_t g_can_frame_sem = NULL;
+
 /// Task handle for gateway_main (receives task notifications for
 /// urgent fault alerts).
 static TaskHandle_t g_gateway_task_handle = NULL;
@@ -76,10 +81,12 @@ static void gateway_primitives_init(void)
     g_fm_mutex     = xSemaphoreCreateMutex();
     g_mode_events  = xEventGroupCreate();
     g_hb_queue     = xQueueCreate(16, sizeof(hb_event_t));
+    g_can_frame_sem = xSemaphoreCreateCounting(64, 0);
 
     sim_trace_u32("gateway_mutex", (uint32_t)(uintptr_t)g_fm_mutex);
     sim_trace_u32("gateway_event_group", (uint32_t)(uintptr_t)g_mode_events);
     sim_trace_u32("gateway_queue", (uint32_t)(uintptr_t)g_hb_queue);
+    sim_trace_u32("gateway_can_sem", (uint32_t)(uintptr_t)g_can_frame_sem);
 }
 
 void gateway_init(void)
@@ -238,6 +245,10 @@ void heartbeat_rx(void *pvParameters)
             rx.sender = rx.data[0];
             rx.len = (uint8_t)dlc;
             dispatch_frame_in_rx(&rx);
+
+            // Give semaphore to preempt: can_frame_processor (prio 5)
+            // will wake and process this frame.
+            xSemaphoreGive(g_can_frame_sem);
         }
     }
 }
@@ -278,6 +289,33 @@ void fault_aggregator(void *pvParameters)
     }
 }
 
+// ── CAN frame processor task ──────────────────────────────────────────
+
+/// Highest-priority task (5) that processes CAN frames via counting
+/// semaphore.  heartbeat_rx (prio 4) gives the semaphore for each
+/// received frame, which preempts lower-priority tasks so this
+/// processor runs immediately.
+/// Each activation traces a counter showing preemption count.
+void can_frame_processor(void *pvParameters)
+{
+    (void)pvParameters;
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "can_frame_processor");
+
+    uint32_t proc_count = 0;
+
+    while (1) {
+        // Block until heartbeat_rx gives the semaphore.
+        xSemaphoreTake(g_can_frame_sem, portMAX_DELAY);
+
+        proc_count++;
+
+        // Trace the processing event to show preemption occurred.
+        // The value is the activation count — proves every give
+        // caused a preemption wakeup.
+        sim_trace_u32("can_frame_proc", proc_count);
+    }
+}
+
 // ── Main loop ─────────────────────────────────────────────────────────────
 
 /// Gateway main task entry point.
@@ -297,6 +335,7 @@ void gateway_main(void *pvParameters)
     // Create subordinate tasks.
     xTaskCreate(heartbeat_rx, "hb_rx", 768, NULL, 4, NULL);
     xTaskCreate(fault_aggregator, "fault_agg", 512, NULL, 2, NULL);
+    xTaskCreate(can_frame_processor, "can_proc", 768, NULL, 5, NULL);
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;

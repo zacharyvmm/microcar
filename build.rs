@@ -22,6 +22,9 @@ fn main() {
     println!("cargo:rerun-if-changed=firmware/dashboard_ecu_zephyr/src/");
     println!("cargo:rerun-if-changed=firmware/gateway_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/powertrain_ecu/src/");
+    println!("cargo:rerun-if-changed=firmware/priority_inversion_demo/src/");
+    println!("cargo:rerun-if-changed=firmware/lifecycle_stress_ecu/src/");
+    println!("cargo:rerun-if-changed=firmware/test_fiber_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/microcar_coordinator.c");
     println!("cargo:rerun-if-changed=firmware/microcar_zephyr_boot.c");
     println!("cargo:rerun-if-changed=firmware/zephyr_mock/");
@@ -67,6 +70,15 @@ fn main() {
         .file("firmware/powertrain_ecu/src/torque_controller.c")
         .file("firmware/powertrain_ecu/src/safety_rules.c")
         .file("firmware/powertrain_ecu/src/watchdog_task.c");
+
+    // ── Priority inversion demo ──────────────────────────────────────
+    build.file("firmware/priority_inversion_demo/src/main.c");
+
+    // ── Lifecycle stress ECU ─────────────────────────────────────────
+    build.file("firmware/lifecycle_stress_ecu/src/main.c");
+
+    // ── Test fiber ECU ───────────────────────────────────────────────
+    build.file("firmware/test_fiber_ecu/src/main.c");
 
     // ── Coordinator (boot entry) ─────────────────────────────────────
     build.file("firmware/microcar_coordinator.c");
@@ -122,7 +134,10 @@ fn main() {
         .include("firmware/dashboard_ecu/src")
         .include("firmware/dashboard_ecu_zephyr/src")
         .include("firmware/gateway_ecu/src")
-        .include("firmware/powertrain_ecu/src");
+        .include("firmware/powertrain_ecu/src")
+        .include("firmware/priority_inversion_demo/src")
+        .include("firmware/lifecycle_stress_ecu/src")
+        .include("firmware/test_fiber_ecu/src");
 
     // ── Defines ──────────────────────────────────────────────────────
     build

@@ -2,6 +2,11 @@
 //
 // This file creates all 4 ECU FreeRTOS tasks and starts the scheduler.
 // It is the C entry point called from the Rust host.
+//
+// Pattern: sim_create_task() creates the Rust fiber,
+// xTaskCreate() creates the FreeRTOS TCB,
+// sim_bridge_register() links them.
+// This matches the proven pattern in costar's own demos.
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -26,6 +31,21 @@ extern void dashboard_main(void *pvParameters);
 #define BMS_PRIORITY        2
 #define DASHBOARD_PRIORITY  1
 
+// ── Helper: create a task with sim_create_task + xTaskCreate ──────────────
+
+static sim_task_handle_t microcar_create_task(
+    const char *name,
+    TaskFunction_t entry,
+    uint32_t stack_words,
+    uint32_t priority)
+{
+    TaskHandle_t th = NULL;
+    xTaskCreate(entry, name, stack_words, NULL, priority, &th);
+    sim_task_handle_t h = sim_create_task(name, (sim_task_entry_fn)entry, NULL, stack_words, priority);
+    sim_bridge_register(h, (void*)th);
+    return h;
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────
 
 /// Boot all 4 ECUs on a single machine (for standalone / single-machine tests).
@@ -33,33 +53,10 @@ void microcar_boot(void)
 {
     sim_trace_u32("microcar_boot", 1);
 
-    xTaskCreate(gateway_main,
-                "gateway",
-                GATEWAY_STACK_WORDS,
-                NULL,
-                GATEWAY_PRIORITY,
-                NULL);
-
-    xTaskCreate(powertrain_main,
-                "powertrain",
-                POWERTRAIN_STACK_WORDS,
-                NULL,
-                POWERTRAIN_PRIORITY,
-                NULL);
-
-    xTaskCreate(bms_main,
-                "bms",
-                BMS_STACK_WORDS,
-                NULL,
-                BMS_PRIORITY,
-                NULL);
-
-    xTaskCreate(dashboard_main,
-                "dashboard",
-                DASHBOARD_STACK_WORDS,
-                NULL,
-                DASHBOARD_PRIORITY,
-                NULL);
+    microcar_create_task("gateway",    gateway_main,    GATEWAY_STACK_WORDS,    GATEWAY_PRIORITY);
+    microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
+    microcar_create_task("bms",        bms_main,        BMS_STACK_WORDS,        BMS_PRIORITY);
+    microcar_create_task("dashboard",  dashboard_main,  DASHBOARD_STACK_WORDS,  DASHBOARD_PRIORITY);
 
     sim_trace_u32("microcar_tasks_created", 4);
 }
@@ -68,7 +65,7 @@ void microcar_boot(void)
 void microcar_boot_gateway(void)
 {
     sim_trace_u32("microcar_boot_gateway", 1);
-    xTaskCreate(gateway_main, "gateway", GATEWAY_STACK_WORDS, NULL, GATEWAY_PRIORITY, NULL);
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }
 
@@ -76,7 +73,7 @@ void microcar_boot_gateway(void)
 void microcar_boot_powertrain(void)
 {
     sim_trace_u32("microcar_boot_powertrain", 1);
-    xTaskCreate(powertrain_main, "powertrain", POWERTRAIN_STACK_WORDS, NULL, POWERTRAIN_PRIORITY, NULL);
+    microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }
 
@@ -84,7 +81,7 @@ void microcar_boot_powertrain(void)
 void microcar_boot_bms(void)
 {
     sim_trace_u32("microcar_boot_bms", 1);
-    xTaskCreate(bms_main, "bms", BMS_STACK_WORDS, NULL, BMS_PRIORITY, NULL);
+    microcar_create_task("bms", bms_main, BMS_STACK_WORDS, BMS_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }
 
@@ -92,6 +89,6 @@ void microcar_boot_bms(void)
 void microcar_boot_dashboard(void)
 {
     sim_trace_u32("microcar_boot_dashboard", 1);
-    xTaskCreate(dashboard_main, "dashboard", DASHBOARD_STACK_WORDS, NULL, DASHBOARD_PRIORITY, NULL);
+    microcar_create_task("dashboard", dashboard_main, DASHBOARD_STACK_WORDS, DASHBOARD_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

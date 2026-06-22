@@ -1,0 +1,22 @@
+# lifecycle_stress — rapid create/delete cycling (100 workers)
+#
+# Verifies:
+#   - stress_create_start / stress_create_done traces
+#   - worker_start / worker_done traces for 100 workers
+#   - No leaks from rapid xTaskCreate / vTaskDelete(NULL) cycling
+
+name = "lifecycle_stress"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "lifecycle_stress"
+firmware = "firmware/lifecycle_stress_ecu"
+rtos = "freertos"
+
+[plant]
+type = "microcar"
+tick_ms = 1
+
+[expect]
+trace = "../expected/traces/lifecycle_stress.trace"

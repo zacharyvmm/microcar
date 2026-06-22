@@ -78,6 +78,11 @@ fn main() {
     let trace = world.drain_all_traces();
     let result = scenario.check_trace(trace).unwrap();
 
+    // Print trace events for golden trace capture.
+    for event in &result.trace {
+        println!("{}", event);
+    }
+
     if result.trace_match {
         println!("PASS");
     } else {

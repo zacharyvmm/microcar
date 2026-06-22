@@ -42,6 +42,9 @@ extern "C" {
     fn microcar_boot_powertrain();
     fn microcar_boot_bms();
     fn microcar_boot_dashboard();
+    fn microcar_boot_priority_inversion();
+    fn microcar_boot_lifecycle_stress();
+    fn microcar_boot_test_fiber();
     fn sim_scheduler_tick() -> u32;
 }
 
@@ -82,6 +85,12 @@ impl MicrocarFirmware {
 
     fn ecu_type(&self) -> &str {
         if let Some(ref path) = self.firmware_path {
+            if path.contains("priority_inversion") {
+                return "priority_inversion";
+            }
+            if path.contains("lifecycle_stress") {
+                return "lifecycle_stress";
+            }
             if path.contains("gateway") {
                 return "gateway";
             }
@@ -105,7 +114,13 @@ impl Firmware for MicrocarFirmware {
 
         let ecu = self.ecu_type();
         unsafe {
-            if ecu.starts_with("gateway") {
+            if ecu.starts_with("priority_inversion") {
+                microcar_boot_priority_inversion();
+            } else if ecu.starts_with("lifecycle_stress") {
+                microcar_boot_lifecycle_stress();
+            } else if ecu.starts_with("test_fiber") {
+                microcar_boot_test_fiber();
+            } else if ecu.starts_with("gateway") {
                 microcar_boot_gateway();
             } else if ecu.starts_with("powertrain") {
                 microcar_boot_powertrain();

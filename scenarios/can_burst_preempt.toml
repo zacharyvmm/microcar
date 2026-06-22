@@ -1,0 +1,184 @@
+# can_burst_preempt — ISR-driven preemption under CAN burst
+#
+# The gateway ECU has a can_frame_processor task (prio 5) that blocks on
+# a counting semaphore. When heartbeat_rx (prio 4) receives a CAN frame,
+# it gives the semaphore, which preempts lower-priority tasks (gateway_main
+# prio 3, fault_aggregator prio 2). This scenario injects 20 heartbeat
+# frames at t=500ms to verify deterministic preemption interleaving.
+
+name = "can_burst_preempt"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# ── CAN burst: 20 heartbeat frames from powertrain at t=500ms ───────
+# Each frame: id=0x001 (MC_MSG_HEARTBEAT), sender=2 (powertrain)
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 0]
+
+[expect]
+trace = "../expected/traces/can_burst_preempt.trace"

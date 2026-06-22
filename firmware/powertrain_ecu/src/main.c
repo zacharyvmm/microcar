@@ -214,6 +214,43 @@ void sensor_poll(void *pvParameters)
     }
 }
 
+// ── Deadline monitor task ──────────────────────────────────────────────────
+
+/// Measures jitter between expected and actual wake time via vTaskDelayUntil.
+/// If jitter > 2 ticks, traces `deadline_miss` with the jitter value.
+/// This makes scheduler performance regressions immediately visible in trace
+/// output — if a costar change introduces timing drift, golden trace
+/// comparison catches it.
+void deadline_monitor(void *pvParameters)
+{
+    (void)pvParameters;
+    sim_register_symbol((uint64_t)xTaskGetCurrentTaskHandle(), "deadline_mon");
+
+    TickType_t last_wake = xTaskGetTickCount();
+
+    while (1) {
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(50));
+
+        TickType_t now = xTaskGetTickCount();
+        TickType_t expected = last_wake;
+        // last_wake was updated by vTaskDelayUntil to the target wake time.
+        // actual wake time is 'now'. Jitter = |now - expected|.
+        // Note: vTaskDelayUntil advances last_wake, so expected = last_wake
+        // after the call minus the increment. We capture expected before
+        // vTaskDelayUntil modifies it.
+
+        // Compute jitter (signed, then abs)
+        int32_t jitter = (int32_t)(now - expected);
+        if (jitter < 0) jitter = -jitter;
+
+        if (jitter > 2) {
+            sim_trace_u32("deadline_miss", (uint32_t)jitter);
+        } else {
+            sim_trace_u32("deadline_ok", (uint32_t)jitter);
+        }
+    }
+}
+
 // ── Logger task ───────────────────────────────────────────────────────────
 
 /// Low-rate event logger. Runs at 100ms period, prio 1.
@@ -252,6 +289,7 @@ void powertrain_main(void *pvParameters)
     // Create subordinate tasks.
     xTaskCreate(sensor_poll, "sensor", 512, NULL, 3, NULL);
     xTaskCreate(logger, "logger", 512, NULL, 1, NULL);
+    xTaskCreate(deadline_monitor, "dl_mon", 384, NULL, 2, NULL);
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
