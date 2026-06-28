@@ -44,6 +44,9 @@ extern "C" {
     fn microcar_boot_dashboard();
     fn microcar_boot_priority_inversion();
     fn microcar_boot_lifecycle_stress();
+    fn microcar_boot_net_demo();
+    fn microcar_boot_storage_demo();
+    fn microcar_boot_bt_demo();
     fn sim_scheduler_tick() -> u32;
 }
 
@@ -90,6 +93,15 @@ impl MicrocarFirmware {
             if path.contains("lifecycle_stress") {
                 return "lifecycle_stress";
             }
+            if path.contains("net_demo") {
+                return "net_demo";
+            }
+            if path.contains("storage_demo") {
+                return "storage_demo";
+            }
+            if path.contains("bt_demo") {
+                return "bt_demo";
+            }
             if path.contains("gateway") {
                 return "gateway";
             }
@@ -117,6 +129,12 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_priority_inversion();
             } else if ecu.starts_with("lifecycle_stress") {
                 microcar_boot_lifecycle_stress();
+            } else if ecu.starts_with("net_demo") {
+                microcar_boot_net_demo();
+            } else if ecu.starts_with("storage_demo") {
+                microcar_boot_storage_demo();
+            } else if ecu.starts_with("bt_demo") {
+                microcar_boot_bt_demo();
             } else if ecu.starts_with("gateway") {
                 microcar_boot_gateway();
             } else if ecu.starts_with("powertrain") {

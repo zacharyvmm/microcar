@@ -62,4 +62,4 @@ event = "motor_command"
 torque = 0
 
 [expect]
-trace = "../expected/traces/brake_overrides_throttle.trace"
+trace = "../microcar/expected/traces/brake_overrides_throttle.trace"

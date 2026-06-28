@@ -118,4 +118,4 @@ event = "vehicle_mode"
 value = "READY"
 
 [expect]
-trace = "../expected/traces/boot_and_heartbeat.trace"
+trace = "../microcar/expected/traces/boot_and_heartbeat.trace"

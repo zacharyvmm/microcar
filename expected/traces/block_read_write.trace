@@ -1,0 +1,20 @@
+[machine.1]            0 task-created id=1 name="storage_demo"
+[machine.1]            0 user-u32 "microcar_boot_storage_demo" = 1
+[machine.1]            0 user-u32 "microcar_tasks_created" = 1
+[machine.1]            0 task-resume id=1 reason=scheduler
+[machine.1]            0 task-yield id=1 reason=SleepUntil(100)
+[machine.1]            0 user-u32 "storage_demo_start" = 1
+[machine.1]            0 user-u32 "block_create_result" = 0
+[machine.1]            0 user-u32 "block_page_size" = 256
+[machine.1]            0 user-u32 "block_page_count" = 16
+[machine.1]            0 user-u32 "write_result" = 22
+[machine.1]            0 user-u32 "read_result" = 22
+[machine.1]            0 user-u32 "verify_MATCH" = 1
+[machine.1]            0 user-u32 "erase_page_0" = 1
+[machine.1]            0 user-u32 "erase_read_result" = 256
+[machine.1]            0 user-u32 "erase_verify_all_0xFF" = 1
+[machine.1]            0 user-u32 "storage_demo_complete" = 1
+[machine.1]          100 task-resume id=1 reason=scheduler
+[machine.1]          100 task-yield id=1 reason=RtosPortYield
+[machine.1]          100 task-resume id=1 reason=scheduler
+[machine.1]          100 task-yield id=1 reason=SleepUntil(200)

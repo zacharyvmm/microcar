@@ -18,6 +18,9 @@ extern void gateway_main(void *pvParameters);
 extern void powertrain_main(void *pvParameters);
 extern void bms_main(void *pvParameters);
 extern void dashboard_main(void *pvParameters);
+extern void net_demo_main(void *pvParameters);
+extern void storage_demo_main(void *pvParameters);
+extern void bt_demo_main(void *pvParameters);
 
 // ── Stack sizes and priorities ────────────────────────────────────────────
 
@@ -25,11 +28,13 @@ extern void dashboard_main(void *pvParameters);
 #define POWERTRAIN_STACK_WORDS 1024
 #define BMS_STACK_WORDS        1024
 #define DASHBOARD_STACK_WORDS  1024
+#define DEMO_STACK_WORDS       1024
 
 #define GATEWAY_PRIORITY    3
 #define POWERTRAIN_PRIORITY 2
 #define BMS_PRIORITY        2
 #define DASHBOARD_PRIORITY  1
+#define DEMO_PRIORITY       2
 
 // ── Helper: create a task with sim_create_task + xTaskCreate ──────────────
 
@@ -90,5 +95,29 @@ void microcar_boot_dashboard(void)
 {
     sim_trace_u32("microcar_boot_dashboard", 1);
     microcar_create_task("dashboard", dashboard_main, DASHBOARD_STACK_WORDS, DASHBOARD_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot the networking demo ECU on this machine.
+void microcar_boot_net_demo(void)
+{
+    sim_trace_u32("microcar_boot_net_demo", 1);
+    microcar_create_task("net_demo", net_demo_main, DEMO_STACK_WORDS, DEMO_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot the storage (filesystem) demo ECU on this machine.
+void microcar_boot_storage_demo(void)
+{
+    sim_trace_u32("microcar_boot_storage_demo", 1);
+    microcar_create_task("storage_demo", storage_demo_main, DEMO_STACK_WORDS, DEMO_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot the Bluetooth demo ECU on this machine.
+void microcar_boot_bt_demo(void)
+{
+    sim_trace_u32("microcar_boot_bt_demo", 1);
+    microcar_create_task("bt_demo", bt_demo_main, DEMO_STACK_WORDS, DEMO_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

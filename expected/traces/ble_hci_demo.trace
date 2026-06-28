@@ -1,0 +1,31 @@
+[machine.1]            0 task-created id=1 name="bt_demo"
+[machine.1]            0 user-u32 "microcar_boot_bt_demo" = 1
+[machine.1]            0 user-u32 "microcar_tasks_created" = 1
+[machine.1]            0 task-resume id=1 reason=scheduler
+[machine.1]            0 task-yield id=1 reason=SleepUntil(1)
+[machine.1]            0 user-u32 "bt_demo_started" = 1
+[machine.1]            0 user-u32 "bt_register_id" = 0
+[machine.1]            0 user-u32 "bt_cmd_sent_bytes" = 3
+[machine.1]            1 task-resume id=1 reason=scheduler
+[machine.1]            1 task-yield id=1 reason=RtosPortYield
+[machine.1]            1 task-resume id=1 reason=scheduler
+[machine.1]            1 task-yield id=1 reason=SleepUntil(1001)
+[machine.1]            1 user-u32 "bt_polling_events" = 1
+[machine.1]            1 user-u32 "bt_recv_bytes" = 6
+[machine.1]            1 user-u32 "bt_recv_pkt_type" = 4
+[machine.1]            1 user-u32 "bt_evt_code" = 14
+[machine.1]            1 user-u32 "bt_CC_event" = 1
+[machine.1]            1 user-u32 "bt_CC_param_len" = 4
+[machine.1]            1 user-u32 "bt_CC_num_pkts" = 1
+[machine.1]            1 user-u32 "bt_CC_opcode" = 3075
+[machine.1]            1 user-u32 "bt_CC_status" = 0
+[machine.1]            1 user-u32 "bt_total_recv" = 6
+[machine.1]            1 user-u32 "bt_demo_finished" = 1
+[machine.1]         1001 task-resume id=1 reason=scheduler
+[machine.1]         1001 task-yield id=1 reason=RtosPortYield
+[machine.1]         1001 task-resume id=1 reason=scheduler
+[machine.1]         1001 task-yield id=1 reason=SleepUntil(2001)
+[machine.1]         2001 task-resume id=1 reason=scheduler
+[machine.1]         2001 task-yield id=1 reason=RtosPortYield
+[machine.1]         2001 task-resume id=1 reason=scheduler
+[machine.1]         2001 task-yield id=1 reason=SleepUntil(3001)

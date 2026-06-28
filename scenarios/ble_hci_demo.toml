@@ -1,0 +1,17 @@
+# ble_hci_demo — single-machine Bluetooth HCI controller demo
+
+name = "ble_hci_demo"
+duration_ms = 100
+
+[[machine]]
+id = 1
+name = "bt_host"
+firmware = "firmware/bt_demo_ecu"
+rtos = "freertos"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[expect]
+trace = "../microcar/expected/traces/ble_hci_demo.trace"

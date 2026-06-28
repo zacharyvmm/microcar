@@ -88,4 +88,4 @@ event = "warning"
 value = "BMS_OVERTEMP"
 
 [expect]
-trace = "../expected/traces/bms_overtemp_limp_mode.trace"
+trace = "../microcar/expected/traces/bms_overtemp_limp_mode.trace"

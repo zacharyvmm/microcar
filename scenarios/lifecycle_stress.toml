@@ -19,4 +19,4 @@ type = "microcar"
 tick_ms = 1
 
 [expect]
-trace = "../expected/traces/lifecycle_stress.trace"
+trace = "../microcar/expected/traces/lifecycle_stress.trace"

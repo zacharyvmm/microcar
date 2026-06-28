@@ -73,4 +73,4 @@ event = "motor_command"
 torque = 0
 
 [expect]
-trace = "../expected/traces/gateway_reboot.trace"
+trace = "../microcar/expected/traces/gateway_reboot.trace"

@@ -1,0 +1,35 @@
+# eth_ping_pong — two net_demo ECUs exchange HELLO frames over Ethernet
+
+name = "eth_ping_pong"
+duration_ms = 500
+
+[[machine]]
+id = 1
+name = "net_a"
+firmware = "firmware/net_demo_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "net_b"
+firmware = "firmware/net_demo_ecu"
+rtos = "freertos"
+
+[[link]]
+type = "eth"
+from = 1
+to = 2
+latency = 1000
+
+[[link]]
+type = "eth"
+from = 2
+to = 1
+latency = 1000
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[expect]
+trace = "../microcar/expected/traces/eth_ping_pong.trace"

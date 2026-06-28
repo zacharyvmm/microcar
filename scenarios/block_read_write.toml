@@ -1,0 +1,17 @@
+# block_read_write — storage demo exercising FlatMemoryStore block device
+
+name = "block_read_write"
+duration_ms = 50
+
+[[machine]]
+id = 1
+name = "storage"
+firmware = "firmware/storage_demo_ecu"
+rtos = "freertos"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[expect]
+trace = "../microcar/expected/traces/block_read_write.trace"

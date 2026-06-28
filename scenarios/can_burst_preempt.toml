@@ -181,4 +181,4 @@ id = 0x001
 data = [2, 0, 0, 0, 0]
 
 [expect]
-trace = "../expected/traces/can_burst_preempt.trace"
+trace = "../microcar/expected/traces/can_burst_preempt.trace"

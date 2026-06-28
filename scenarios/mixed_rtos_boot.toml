@@ -248,4 +248,4 @@ event = "vehicle_mode"
 value = "READY"
 
 [expect]
-trace = "../expected/traces/mixed_rtos_boot.trace"
+trace = "../microcar/expected/traces/mixed_rtos_boot.trace"
