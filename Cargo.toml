@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "plant",
     "state_tests",
+    "dogfood",
 ]
 
 [package]

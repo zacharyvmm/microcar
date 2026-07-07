@@ -36,8 +36,8 @@ fn main() {
         if m.firmware.is_some() {
             if let Some(machine) = world.machine_mut(m.id) {
                 let fw = m.firmware.as_deref().unwrap_or("");
-                let rtos = m.rtos.as_deref().unwrap_or("freertos");
-                if rtos == "zephyr" {
+                let is_zephyr = matches!(m.rtos, Some(sim_world::RtosBackend::Zephyr));
+                if is_zephyr {
                     #[cfg(feature = "zephyr")]
                     {
                         machine.load_firmware(Box::new(ZephyrDashboardFirmware::new()));
