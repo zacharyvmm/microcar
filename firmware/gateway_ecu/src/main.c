@@ -88,6 +88,20 @@ static uint8_t             g_ota_crc_check_bug = 0;
 static uint8_t             g_diag_extra_pt_fault = 0;
 static uint8_t             g_diag_clear_all_bug = 0;
 
+// diagnostics "start session while driving" dogfood extension — drives the
+// debug_gym `start_session_in_drive` seed.
+//
+//   g_diag_startdrive_script       — run the start-session-in-DRIVE script: put
+//     the vehicle in DRIVE, then attempt to open a diagnostic session mid-drive.
+//   g_diag_startsession_drive_bug  — SEEDED DEBUG-GYM BUG: skip the safety guard
+//     that refuses START_SESSION while the vehicle is in DRIVE, so a service
+//     session wrongly opens mid-drive (commanding the vehicle out of DRIVE into
+//     SERVICE while moving). Off by default; only reachable via the dedicated
+//     gateway_diag_startdrivebug firmware path, so the default firmware and
+//     every other lane stay byte-identical.
+static uint8_t             g_diag_startdrive_script = 0;
+static uint8_t             g_diag_startsession_drive_bug = 0;
+
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
 /// Mutex protecting fault_manager_t (guards concurrent access from
@@ -162,6 +176,18 @@ void gateway_enable_dogfood_diag_clear_dtcs(uint8_t buggy)
     g_diag_dogfood_inject_fault = 1; // BMS DTC at 300ms
     g_diag_extra_pt_fault = 1;       // + powertrain DTC at 310ms
     g_diag_clear_all_bug = buggy ? 1 : 0;
+}
+
+// diagnostics "start session while driving" dogfood lane / debug_gym
+// `start_session_in_drive` seed. Runs a script that puts the vehicle in DRIVE
+// then attempts to open a diagnostic session mid-drive. The correct firmware
+// (buggy=0) refuses (START_SESSION rejected, vehicle stays in DRIVE); the buggy
+// firmware (buggy=1) skips the guard and opens the session (vehicle drops to
+// SERVICE while moving).
+void gateway_enable_dogfood_diag_startdrive(uint8_t buggy)
+{
+    g_diag_startdrive_script = 1;
+    g_diag_startsession_drive_bug = buggy ? 1 : 0;
 }
 
 void gateway_enable_dogfood_charging_script(void)
@@ -315,9 +341,17 @@ static void handle_diag_request(const mc_can_frame_t *frame)
 
     switch (service) {
     case MC_DIAG_START_SESSION:
-        if (g_gs.mode == VEHICLE_DRIVE) {
+        if (g_gs.mode == VEHICLE_DRIVE && !g_diag_startsession_drive_bug) {
+            // Safety guard: refuse to open a diagnostic service session while
+            // the vehicle is driving. Report the current mode so the tool sees
+            // why it was rejected.
             status = MC_DIAG_REJECTED;
+            value0 = (uint8_t)g_gs.mode;
         } else {
+            // SEEDED DEBUG-GYM BUG (start_session_in_drive): when
+            // g_diag_startsession_drive_bug is set the DRIVE guard above is
+            // skipped, so a service session opens mid-drive — commanding the
+            // vehicle out of DRIVE into SERVICE while moving.
             g_diag_session_active = 1;
             g_gs.mode = VEHICLE_SERVICE;
             value0 = (uint8_t)g_gs.mode;
@@ -454,6 +488,35 @@ static void run_dogfood_diag_script(uint32_t *script_ms, uint32_t *sent_mask)
     if (*script_ms >= 750 && !(*sent_mask & 0x40)) {
         synth_diag_request(MC_DIAG_READ_DTCS, 5);
         *sent_mask |= 0x40;
+    }
+}
+
+// Drive the "start diagnostic session while driving" dogfood lane / debug_gym
+// `start_session_in_drive` seed inside gateway firmware.
+//
+// At 100ms the vehicle is put in DRIVE (a dogfood trigger, like the charging
+// script's plug event) and a diagnostic tool attempts to open a service session
+// mid-drive (START_SESSION, req 1). The correct firmware refuses it
+// (gateway_diag_response status=REJECTED, value0=DRIVE); the seeded-bug firmware
+// skips the guard and accepts it (status=OK, value0=SERVICE). At 200ms a
+// READ_MODE (req 2) reads back the resulting mode. The mode is forced in the
+// same tick immediately before the request, so update_vehicle_mode (which runs
+// later in the loop) cannot perturb the mode the handler observes.
+static void run_dogfood_diag_startdrive_script(uint32_t *script_ms, uint32_t *sent_mask)
+{
+    if (!g_diag_startdrive_script) return;
+
+    *script_ms += 10;
+
+    if (*script_ms >= 100 && !(*sent_mask & 0x01)) {
+        g_gs.mode = VEHICLE_DRIVE;
+        sim_trace_u32("vehicle_mode", (uint32_t)g_gs.mode);
+        synth_diag_request(MC_DIAG_START_SESSION, 1);
+        *sent_mask |= 0x01;
+    }
+    if (*script_ms >= 200 && !(*sent_mask & 0x02)) {
+        synth_diag_request(MC_DIAG_READ_MODE, 2);
+        *sent_mask |= 0x02;
     }
 }
 
@@ -839,6 +902,8 @@ void gateway_main(void *pvParameters)
     uint32_t charging_script_sent = 0;
     uint32_t ota_script_ms = 0;
     uint32_t ota_script_sent = 0;
+    uint32_t startdrive_script_ms = 0;
+    uint32_t startdrive_script_sent = 0;
 
     // Send initial heartbeat at boot.
     send_heartbeat(0, &tx);
@@ -855,6 +920,7 @@ void gateway_main(void *pvParameters)
         }
 
         run_dogfood_diag_script(&diag_script_ms, &diag_script_sent);
+        run_dogfood_diag_startdrive_script(&startdrive_script_ms, &startdrive_script_sent);
         run_dogfood_charging_script(&charging_script_ms, &charging_script_sent);
         run_dogfood_ota_script(&ota_script_ms, &ota_script_sent);
 

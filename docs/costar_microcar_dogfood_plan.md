@@ -1185,6 +1185,64 @@ torque clamp, clear-all-DTCs); the remaining diagnostics-seeded case
 telematics/OTA-network/BMS-stale-sensor/dashboard-missed-warning seeds stay
 firmware-gated.
 
+## Milestone 22 status (this branch)
+
+The twenty-second milestone adds the **fourth debug_gym seeded-bug corpus case**
+— the diagnostics-seeded **START_SESSION-in-DRIVE bug** (UNBLOCKING.md §4
+Strategy A, "start with diagnostics bugs" — the last named candidate), reusing
+the M19 `debug-gym-corpus` harness. **microcar-only**, gated behind opt-in buggy
+firmware, so every existing golden trace stays **byte-identical** (verified:
+`debug_gym` hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` /
+`fa7f03709681` unchanged, and `diagnostics` stays 2/2 — the default diag firmware
+path is untouched).
+
+Genuinely exercised, not fabricated — a real buggy firmware variant paired with
+the real correct firmware, both run through the product binary:
+
+- **The guard under test.** The gateway's `handle_diag_request` START_SESSION
+  case already refuses a session while `g_gs.mode == VEHICLE_DRIVE` (safety: no
+  service session mid-drive). The reject branch now also reports the current
+  mode in `value0` (previously left 0) so a rejected response carries DRIVE —
+  this only affects a response that is *never emitted* by existing scenarios (they
+  send START_SESSION at a non-DRIVE mode), so all existing lanes stay
+  byte-identical.
+- **Script.** A new `gateway_enable_dogfood_diag_startdrive(buggy)` +
+  `run_dogfood_diag_startdrive_script`: at 100 ms the vehicle is put in DRIVE (a
+  dogfood trigger, exactly like the M13 charging script's plug event) and a
+  diagnostic tool attempts START_SESSION mid-drive; at 200 ms a READ_MODE reads
+  back the mode. The mode is forced in the *same tick* immediately before the
+  request, so `update_vehicle_mode` (which runs later in the loop) cannot perturb
+  the mode the handler observes.
+- **Buggy firmware** (`gateway_diag_startdrivebug`, `g_diag_startsession_drive_bug`,
+  default `0`): the DRIVE guard is skipped, so the mid-drive START_SESSION is
+  *accepted* (`gateway_diag_response` status=OK, mode=SERVICE) — the vehicle
+  drops out of DRIVE into SERVICE while moving. The **fixed** reference
+  (`gateway_diag_startdrive`) rejects it (status=REJECTED, mode=DRIVE). Both wired
+  via `microcar_boot_gateway_diag_startdrive{,bug}()` (coordinator) and the
+  `src/lib.rs` resolver (`gateway_diag_startdrivebug` matched **before**
+  `gateway_diag_startdrive`, both **before** `gateway_diag_fault` /
+  `gateway_diag`).
+- **Corpus.** `dogfood/debug_gym/start_session_drive_bug/{failing,fixed}.toml` +
+  a new `SeedKind::StartSessionInDrive` in `debug_gym_corpus.rs` that decodes the
+  START_SESSION `gateway_diag_response` `(status, value0=mode)` and asserts
+  **bug-reproduced** (buggy: status=OK, mode=SERVICE — accepted mid-drive),
+  **bug-fixed** (fixed: status=REJECTED, mode=DRIVE — refused, still driving), and
+  **traces-diverge** (status OK vs REJECTED) — localizable by breakpointing on the
+  START_SESSION `gateway_diag_response`.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**100 unit tests** (96 → 100, +4) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **4/4** green (`ota_rollback`, `service_torque`,
+`clear_all_dtcs`, `start_session_in_drive`); every other lane is unregressed
+(`debug-gym` 4/4 with unchanged hashes, `diagnostics` 2/2, `ota` 5/5,
+`charging` 1/1, `topology` 7/7, `toml-zoo` 11/11); the new Rust is
+clippy/fmt-clean. The debug_gym corpus now covers **4 of the plan's 7 seeds** (OTA
+rollback, SERVICE torque clamp, clear-all-DTCs, START_SESSION-in-DRIVE) — all four
+diagnostics/OTA-seeded cases reachable without new firmware are done. The
+remaining 3 seeds (BMS stale sensor, dashboard missed warning, telematics
+partial-write) stay firmware-gated (Strategy C); the gateway-bridge-loop bug is
+already exercised structurally by the topology `gateway_loop_prevention` scenario.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

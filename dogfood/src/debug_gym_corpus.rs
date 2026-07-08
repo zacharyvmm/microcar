@@ -49,6 +49,17 @@ const REQ_READ_DTCS_PRE: u8 = 3;
 /// Request id the clear-DTCs script uses for the READ_DTCS *after* the clear.
 const REQ_READ_DTCS_POST: u8 = 5;
 
+/// Diagnostic service id for a "start diagnostic session" request.
+const DIAG_START_SESSION: u8 = 1;
+/// Diagnostic response status: request accepted.
+const DIAG_OK: u8 = 0;
+/// Diagnostic response status: request rejected.
+const DIAG_REJECTED: u8 = 1;
+/// Vehicle mode: DRIVE.
+const VEHICLE_DRIVE: u8 = 2;
+/// Vehicle mode: SERVICE.
+const VEHICLE_SERVICE: u8 = 6;
+
 /// A user-u32 firmware trace event: `[machine.N] <t> user-u32 "label" = value`.
 #[derive(Debug, Clone)]
 struct UserTrace {
@@ -146,6 +157,17 @@ fn dtc_count(trace: &[UserTrace], req: u8) -> Option<u8> {
     diag_response_value0(trace, DIAG_READ_DTCS, req)
 }
 
+/// Decode `(status, value0)` of a `gateway_diag_response` for the given
+/// service + request (`(req<<24)|(service<<16)|(status<<8)|value0`).
+fn diag_response_status_value0(trace: &[UserTrace], service: u8, req: u8) -> Option<(u8, u8)> {
+    trace
+        .iter()
+        .filter(|e| e.machine == NODE_GATEWAY && e.label == "gateway_diag_response")
+        .map(|e| e.value)
+        .find(|v| ((v >> 24) & 0xff) as u8 == req && ((v >> 16) & 0xff) as u8 == service)
+        .map(|v| (((v >> 8) & 0xff) as u8, (v & 0xff) as u8))
+}
+
 /// Which built-in bug a seed represents (selects the assertion logic).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeedKind {
@@ -158,6 +180,10 @@ pub enum SeedKind {
     /// Clear-all-DTCs bug: a BMS-scoped CLEAR_DTCS wrongly clears every node's
     /// DTCs, silently dropping an unrelated (powertrain) fault.
     ClearAllDtcs,
+    /// START_SESSION-in-DRIVE bug: the gateway skips the safety guard that
+    /// refuses a diagnostic session while driving, so a service session opens
+    /// mid-drive.
+    StartSessionInDrive,
 }
 
 /// A seeded-bug corpus entry: metadata + the buggy/fixed scenario pair.
@@ -228,6 +254,23 @@ pub fn builtin_seeds() -> Vec<Seed> {
                     where the fix reports 1, so the runs diverge at the clear.",
             failing_scenario: "clear_dtcs_bug/failing.toml",
             fixed_scenario: "clear_dtcs_bug/fixed.toml",
+        },
+        Seed {
+            name: "start_session_in_drive",
+            kind: SeedKind::StartSessionInDrive,
+            description: "The gateway skips the safety guard that refuses a \
+                      diagnostic START_SESSION while the vehicle is in DRIVE, so \
+                      a service session opens mid-drive and the vehicle is \
+                      commanded out of DRIVE into SERVICE while moving.",
+            symptom: "A START_SESSION request sent while in DRIVE is accepted \
+                  (gateway_diag_response status=OK, mode=SERVICE) instead of \
+                  rejected — the drivetrain state machine leaves DRIVE mid-drive.",
+            primitive: "message breakpoint / continue_until on the \
+                    gateway_diag_response trace: stop at the START_SESSION \
+                    response and inspect its status + mode — the buggy firmware \
+                    reports OK/SERVICE where the fix reports REJECTED/DRIVE.",
+            failing_scenario: "start_session_drive_bug/failing.toml",
+            fixed_scenario: "start_session_drive_bug/fixed.toml",
         },
     ]
 }
@@ -321,7 +364,73 @@ fn evaluate(kind: SeedKind, traces: &SeedTraces) -> Vec<CorpusCheck> {
         SeedKind::OtaRollback => evaluate_ota_rollback(traces),
         SeedKind::ServiceTorqueClamp => evaluate_service_torque_clamp(traces),
         SeedKind::ClearAllDtcs => evaluate_clear_all_dtcs(traces),
+        SeedKind::StartSessionInDrive => evaluate_start_session_in_drive(traces),
     }
+}
+
+fn evaluate_start_session_in_drive(traces: &SeedTraces) -> Vec<CorpusCheck> {
+    // The START_SESSION response (service=1, req=1): (status, value0=mode).
+    let f = diag_response_status_value0(&traces.failing, DIAG_START_SESSION, 1);
+    let x = diag_response_status_value0(&traces.fixed, DIAG_START_SESSION, 1);
+
+    // bug-reproduced: the buggy firmware ACCEPTS the mid-drive START_SESSION
+    // (status OK) and opens a SERVICE session.
+    let bug_reproduced = f == Some((DIAG_OK, VEHICLE_SERVICE));
+    let reproduced_detail = if bug_reproduced {
+        "buggy firmware accepted START_SESSION mid-drive (status=OK, mode=SERVICE) — the \
+         DRIVE guard was skipped"
+            .to_string()
+    } else {
+        format!(
+            "expected the buggy firmware to accept START_SESSION mid-drive (status=OK, \
+             mode=SERVICE); got {f:?}"
+        )
+    };
+
+    // bug-fixed: the correct firmware REJECTS the request and stays in DRIVE.
+    let bug_fixed = x == Some((DIAG_REJECTED, VEHICLE_DRIVE));
+    let fixed_detail = if bug_fixed {
+        "fixed firmware rejected START_SESSION mid-drive (status=REJECTED, mode=DRIVE) — the \
+         vehicle stayed in DRIVE"
+            .to_string()
+    } else {
+        format!(
+            "expected the fixed firmware to reject START_SESSION mid-drive (status=REJECTED, \
+             mode=DRIVE); got {x:?}"
+        )
+    };
+
+    // traces-diverge: the START_SESSION status is the localizing signal — OK
+    // (buggy, session opened) vs REJECTED (fixed, session refused).
+    let f_status = f.map(|(s, _)| s);
+    let x_status = x.map(|(s, _)| s);
+    let diverge = f_status == Some(DIAG_OK) && x_status == Some(DIAG_REJECTED);
+    let diverge_detail = if diverge {
+        "START_SESSION status diverges: OK/accepted (buggy) vs REJECTED (fixed)".to_string()
+    } else {
+        format!(
+            "expected START_SESSION status OK (buggy) vs REJECTED (fixed); got {f_status:?} vs \
+             {x_status:?}"
+        )
+    };
+
+    vec![
+        CorpusCheck {
+            name: "bug-reproduced".into(),
+            passed: bug_reproduced,
+            detail: reproduced_detail,
+        },
+        CorpusCheck {
+            name: "bug-fixed".into(),
+            passed: bug_fixed,
+            detail: fixed_detail,
+        },
+        CorpusCheck {
+            name: "traces-diverge".into(),
+            passed: diverge,
+            detail: diverge_detail,
+        },
+    ]
 }
 
 fn evaluate_clear_all_dtcs(traces: &SeedTraces) -> Vec<CorpusCheck> {
@@ -847,6 +956,94 @@ mod tests {
             fixed: clear_bug_trace(),
         };
         let checks = evaluate(SeedKind::ClearAllDtcs, &traces);
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "bug-fixed")
+                .unwrap()
+                .passed
+        );
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "traces-diverge")
+                .unwrap()
+                .passed
+        );
+    }
+
+    /// A gateway_diag_response for a START_SESSION request (req 1) with the given
+    /// status + mode (value0).
+    fn start_session_resp(status: u8, mode: u8) -> UserTrace {
+        UserTrace {
+            machine: NODE_GATEWAY,
+            label: "gateway_diag_response".into(),
+            value: (1u32 << 24)
+                | ((DIAG_START_SESSION as u32) << 16)
+                | ((status as u32) << 8)
+                | (mode as u32),
+        }
+    }
+
+    // Real buggy trace: START_SESSION mid-drive accepted (OK, mode SERVICE).
+    fn start_drive_bug_trace() -> Vec<UserTrace> {
+        vec![start_session_resp(DIAG_OK, VEHICLE_SERVICE)]
+    }
+
+    // Real fixed trace: START_SESSION mid-drive rejected (REJECTED, mode DRIVE).
+    fn start_drive_fixed_trace() -> Vec<UserTrace> {
+        vec![start_session_resp(DIAG_REJECTED, VEHICLE_DRIVE)]
+    }
+
+    #[test]
+    fn start_session_decodes_status_and_mode() {
+        let (status, mode) =
+            diag_response_status_value0(&[start_session_resp(DIAG_OK, VEHICLE_SERVICE)], 1, 1)
+                .unwrap();
+        assert_eq!(status, DIAG_OK);
+        assert_eq!(mode, VEHICLE_SERVICE);
+    }
+
+    #[test]
+    fn start_session_in_drive_seed_passes_on_real_trace_pair() {
+        let traces = SeedTraces {
+            failing: start_drive_bug_trace(),
+            fixed: start_drive_fixed_trace(),
+        };
+        let checks = evaluate(SeedKind::StartSessionInDrive, &traces);
+        assert_eq!(checks.len(), 3);
+        for c in &checks {
+            assert!(c.passed, "{}: {}", c.name, c.detail);
+        }
+    }
+
+    #[test]
+    fn start_session_in_drive_fails_when_buggy_firmware_rejects() {
+        // If the "buggy" firmware rejected the mid-drive session, the bug did
+        // not reproduce.
+        let traces = SeedTraces {
+            failing: start_drive_fixed_trace(),
+            fixed: start_drive_fixed_trace(),
+        };
+        let checks = evaluate(SeedKind::StartSessionInDrive, &traces);
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "bug-reproduced")
+                .unwrap()
+                .passed
+        );
+    }
+
+    #[test]
+    fn start_session_in_drive_fails_when_fixed_firmware_still_accepts() {
+        // If the "fixed" firmware still accepts the mid-drive session, it is not
+        // fixed and the traces do not diverge.
+        let traces = SeedTraces {
+            failing: start_drive_bug_trace(),
+            fixed: start_drive_bug_trace(),
+        };
+        let checks = evaluate(SeedKind::StartSessionInDrive, &traces);
         assert!(
             !checks
                 .iter()
