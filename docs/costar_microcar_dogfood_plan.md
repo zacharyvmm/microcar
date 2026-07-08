@@ -618,6 +618,30 @@ that will populate them. Still opt-in: a scenario's default stdout is
 byte-identical with and without `--trace-v2` (re-verified). sim-world has 106
 tests; the topology lane's JSONL parser is unaffected by the added fields.
 
+## Milestone 7 status (this branch)
+
+The seventh milestone adds the first **debugging primitives** from the plan's
+"Add Topology and Debugging Primitives" costar section:
+
+- `World::step()` advances the simulation by exactly one virtual-time event,
+  returning `StepOutcome::Advanced(now)` or `StepOutcome::Done`. `run()` and
+  `run_until()` are refactored to `while running { step()? }`, so a stepped
+  replay is **trace-identical to a continuous run by construction** — the
+  debug_gym "run-to-completion trace equals stepped trace" invariant. Verified
+  by `test_stepped_equals_continuous` and by re-running all 29 non-soak
+  scenarios (golden traces unchanged).
+- `World::continue_until(predicate, deadline)` steps until a `FnMut(&World)`
+  predicate holds (returning whether it matched, or `false` at the deadline / on
+  completion) — the `continue_until(predicate)` primitive and the basis for
+  breakpoints. Verified by `test_continue_until_stops_at_predicate`.
+
+These build directly on the existing deterministic run loop with no new firmware
+or external dependencies. sim-world now has 108 tests; the run-loop refactor is
+byte-identical for every existing scenario (golden traces intact) and
+clippy/fmt-clean. The remaining debug_gym pieces (keyframe-restore replay
+wiring, the seeded-bug corpus with golden failing/fixed traces, and a microcar
+`--step` harness mode) build on these primitives.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
