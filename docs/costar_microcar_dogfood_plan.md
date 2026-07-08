@@ -689,6 +689,28 @@ The topology lane now covers every scenario listed in the plan
 `bus_isolation_fault`, `gateway_loop_prevention`, `fleet_16_nodes`,
 `fleet_64_nodes`), all green.
 
+## Milestone 10 status (this branch)
+
+The tenth milestone adds **keyframe save/restore + deterministic replay** — the
+costar "keyframe save/restore and deterministic replay" primitive and the
+debug_gym "keyframe restore reproduces the same future" invariant:
+
+- `World::replay_from_keyframe(kf)` reconstructs the World at a keyframe by a
+  **replay checkpoint** (the plan's explicitly preferred approach over
+  coroutine-stack snapshots): it rebuilds a fresh World from the keyframe's
+  stored `scenario_toml` and deterministically runs forward to `kf.now`. Because
+  the engine is deterministic, replaying to the checkpoint reproduces the exact
+  state, and continuing reproduces the exact future.
+- Covered by `test_keyframe_replay_reproduces_future`: a single continuous run's
+  trace is byte-identical to (replay to a mid-run keyframe) + (continue to
+  completion) from a freshly-rebuilt World. sim-world now has 109 tests;
+  clippy/fmt-clean; `run`/`run_until` unchanged (no scenario regression).
+
+Firmware-driven replay (reconstructing guest firmware state, not just bus/link
+delivery) remains a later milestone — costar's `build_world` produces bare
+machines, so this replay path is exact today for scenarios whose observable
+trace is driven by bus/link delivery (e.g. `bus_inject`).
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
