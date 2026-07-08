@@ -598,6 +598,26 @@ is covered by the costar `test_gateway_forwarding_dedups_multiple_bridges` engin
 test (sim-world now has 106 tests). Only `fleet_64_nodes` (a nightly-scale
 variant of `fleet_16_nodes`) remains deferred.
 
+## Milestone 6 status (this branch)
+
+The sixth milestone completes the **Trace v2 product data model** field set. In
+addition to the identity/causality fields from M4–M5 (`trace_id`,
+`correlation_id`, `parent_id`, `virtual_time`, `event_type`, `direction`,
+`bus_or_link_id`, `message_id`, `source`, `destination`, `len`),
+`sim_core::TraceV2` now carries `machine_id`, `machine_name`, `component_id`,
+`component_type`, `port_id`, `payload_summary`, `task_id`, and `rtos` — the full
+list from the plan's "Make Trace v2 the Product Data Model".
+
+For CAN delivery edges these are populated as: `machine_id`/`machine_name` = the
+primary machine (receiver for `rx`, sender for `tx`, name resolved from the
+World); `component_id` = 0 / `component_type` = `"can_controller"`;
+`payload_summary` = a compact lowercase-hex of the first 8 payload bytes (handy
+for GUI packet animation / AI debugging). `port_id`, `task_id`, and `rtos` are
+reserved (empty / 0) for the typed-port-topology and task/device event types
+that will populate them. Still opt-in: a scenario's default stdout is
+byte-identical with and without `--trace-v2` (re-verified). sim-world has 106
+tests; the topology lane's JSONL parser is unaffected by the added fields.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
