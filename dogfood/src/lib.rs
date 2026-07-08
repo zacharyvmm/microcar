@@ -27,6 +27,7 @@
 
 pub mod charging;
 pub mod debug_gym;
+pub mod debug_gym_corpus;
 pub mod determinism;
 pub mod diagnostics;
 pub mod invariants;
@@ -44,6 +45,10 @@ pub use charging::{
     DEFAULT_CHARGING_DIR,
 };
 pub use debug_gym::{run_debug_gym, DebugGymReport, DebugGymScenarioResult, DEFAULT_SCENARIOS};
+pub use debug_gym_corpus::{
+    builtin_seeds, run_corpus, run_seed, CorpusCheck, CorpusReport, Seed, SeedKind, SeedResult,
+    DEFAULT_CORPUS_DIR as DEFAULT_DEBUG_GYM_CORPUS_DIR,
+};
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
 pub use diagnostics::{
     run_diagnostics, run_diagnostics_scenario, DiagnosticsCheck, DiagnosticsReport,

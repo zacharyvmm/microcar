@@ -51,6 +51,7 @@ extern "C" {
     fn microcar_boot_gateway_ota_intwrite();
     fn microcar_boot_gateway_ota_badhealth();
     fn microcar_boot_gateway_ota_powercut();
+    fn microcar_boot_gateway_ota_crcbug();
     fn microcar_boot_powertrain_charging();
     fn microcar_boot_bms();
     fn microcar_boot_dashboard();
@@ -136,6 +137,9 @@ impl MicrocarFirmware {
             if path.contains("gateway_ota_powercut") {
                 return "gateway_ota_powercut";
             }
+            if path.contains("gateway_ota_crcbug") {
+                return "gateway_ota_crcbug";
+            }
             if path.contains("gateway_ota") {
                 return "gateway_ota";
             }
@@ -195,6 +199,8 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_gateway_ota_badhealth();
             } else if ecu.starts_with("gateway_ota_powercut") {
                 microcar_boot_gateway_ota_powercut();
+            } else if ecu.starts_with("gateway_ota_crcbug") {
+                microcar_boot_gateway_ota_crcbug();
             } else if ecu.starts_with("gateway_ota") {
                 microcar_boot_gateway_ota();
             } else if ecu.starts_with("gateway_charging") {

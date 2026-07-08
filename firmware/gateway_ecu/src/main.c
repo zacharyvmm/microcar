@@ -65,6 +65,15 @@ static uint8_t             g_ota_dogfood_script = 0;
 #define OTA_FAULT_POWERCUT_PRECOMMIT 4u
 static uint8_t             g_ota_fault_mode = OTA_FAULT_NONE;
 
+// SEEDED DEBUG-GYM BUG (ota_rollback corpus case). When set, the gateway's CRC
+// verification is *broken*: it reports a corrupt image as valid, so the slot
+// model arms and boots the bad slot instead of rolling back. This is the buggy
+// firmware paired against the correct gateway_ota_badcrc in the debug_gym
+// seeded-bug corpus. It is off by default and only reachable via the dedicated
+// gateway_ota_crcbug firmware path, so the default firmware and every other lane
+// stay byte-identical.
+static uint8_t             g_ota_crc_check_bug = 0;
+
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
 /// Mutex protecting fault_manager_t (guards concurrent access from
@@ -173,6 +182,19 @@ void gateway_enable_dogfood_ota_fault_powercut_precommit(void)
 {
     g_ota_dogfood_script = 1;
     g_ota_fault_mode = OTA_FAULT_POWERCUT_PRECOMMIT;
+}
+
+// SEEDED DEBUG-GYM BUG (ota_rollback): enable the buggy CRC-check firmware. The
+// image really is corrupt (OTA_FAULT_BAD_CRC), but the broken CRC check reports
+// it valid (g_ota_crc_check_bug), so the update commits and boots the bad slot
+// instead of rolling back. The fixed reference firmware is
+// gateway_enable_dogfood_ota_fault_bad_crc (gateway_ota_badcrc), which reports
+// crc_ok=0 and rolls back to slot A.
+void gateway_enable_dogfood_ota_bug_bad_crc(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_BAD_CRC; // the image really is corrupt
+    g_ota_crc_check_bug = 1;              // BUG: the CRC check wrongly reports OK
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -470,6 +492,12 @@ static void run_dogfood_ota_script(uint32_t *ota_ms, uint32_t *ota_sent)
     int download_complete = (g_ota_fault_mode != OTA_FAULT_INTERRUPTED_WRITE);
     int crc_ok            = (g_ota_fault_mode != OTA_FAULT_BAD_CRC);
     int boot_healthy      = (g_ota_fault_mode != OTA_FAULT_BAD_HEALTH);
+
+    // SEEDED DEBUG-GYM BUG (ota_rollback): a broken CRC check reports the corrupt
+    // image as valid. The model then commits and boots the bad slot instead of
+    // rolling back — the debug_gym `ota_rollback` seeded bug. Off by default;
+    // only gateway_ota_crcbug sets g_ota_crc_check_bug.
+    if (g_ota_crc_check_bug) crc_ok = 1;
 
     *ota_ms += 10;
 

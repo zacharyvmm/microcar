@@ -23,6 +23,9 @@ use std::time::Duration;
 
 use microcar_dogfood::charging::{self, DEFAULT_CHARGING_DIR};
 use microcar_dogfood::debug_gym::DEFAULT_SCENARIOS;
+use microcar_dogfood::debug_gym_corpus::{
+    self, DEFAULT_CORPUS_DIR as DEFAULT_DEBUG_GYM_CORPUS_DIR,
+};
 use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::diagnostics::{self, DEFAULT_DIAGNOSTICS_DIR};
 use microcar_dogfood::invariants::CheckStatus;
@@ -58,6 +61,7 @@ fn main() -> ExitCode {
         "charging" => cmd_charging(rest),
         "ota" => cmd_ota(rest),
         "debug-gym" | "debug_gym" => cmd_debug_gym(rest),
+        "debug-gym-corpus" | "debug_gym_corpus" => cmd_debug_gym_corpus(rest),
         "-h" | "--help" | "help" => {
             usage();
             ExitCode::SUCCESS
@@ -1093,6 +1097,112 @@ fn cmd_debug_gym(args: &[String]) -> ExitCode {
     }
 }
 
+/// `harness debug-gym-corpus [--dir DIR] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the debug_gym seeded-bug corpus: each seed pairs a deliberately-buggy
+/// firmware scenario with the fixed-firmware scenario and asserts the bug
+/// reproduces (golden failing trace), the fix resolves it (fixed trace), and
+/// the two traces diverge at the point the seed's debugging primitive localizes.
+fn cmd_debug_gym_corpus(args: &[String]) -> ExitCode {
+    let mut dir = PathBuf::from(DEFAULT_DEBUG_GYM_CORPUS_DIR);
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => dir = PathBuf::from(v),
+                    None => return argerr("debug-gym-corpus", "--dir needs a path"),
+                }
+            }
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("debug-gym-corpus", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("debug-gym-corpus", "--json needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("debug-gym-corpus", &format!("unknown flag: {other}"));
+            }
+            other => dir = PathBuf::from(other),
+        }
+        i += 1;
+    }
+
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
+    println!("microcar binary: {}", bin.display());
+    println!("debug_gym seeded-bug corpus: {}\n", dir.display());
+
+    let report = match debug_gym_corpus::run_corpus(&bin, &dir, timeout) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "harness debug-gym-corpus: reading corpus {}: {e}",
+                dir.display()
+            );
+            return ExitCode::from(2);
+        }
+    };
+
+    for s in &report.seeds {
+        println!("[{}] {}", okmark(s.passed), s.name);
+        println!("        bug:      {}", s.description);
+        println!("        symptom:  {}", s.symptom);
+        println!("        primitive:{}", format_indent(&s.primitive));
+        if let Some(err) = &s.run_error {
+            println!("        - run error: {err}");
+        }
+        for c in &s.checks {
+            println!("        [{}] {} -> {}", okmark(c.passed), c.name, c.detail);
+        }
+    }
+
+    let (pass, fail) = report.totals();
+    println!("──────────────────────────────────────────");
+    println!(
+        "debug_gym_corpus: {pass} passed, {fail} failed (of {} seeds)",
+        report.seeds.len()
+    );
+
+    if let Some(path) = &json {
+        write_json(path, &report.to_json().to_pretty());
+    }
+
+    if report.passed() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// Re-wrap a long primitive description so it reads cleanly under the seed line.
+fn format_indent(s: &str) -> String {
+    format!(" {}", s.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
 fn usage() {
     eprintln!(
         "microcar dogfood harness\n\
@@ -1107,6 +1217,7 @@ fn usage() {
          \x20 harness charging [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness ota [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness debug-gym [--scenario-dir DIR] [--timeout-secs N] [--json OUT]\n\
+         \x20 harness debug-gym-corpus [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \n\
          FLAGS:\n\
          \x20 --timeout-secs N   Wall-clock timeout per run (default {DEFAULT_TIMEOUT_SECS})\n\

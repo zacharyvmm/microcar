@@ -367,6 +367,22 @@ Success criteria:
 
 ## 4. Debug Gym Seeded-Bug Corpus
 
+### Status (M19): first corpus case delivered
+
+Strategy C's OTA seed is now shipped (it became reachable once the OTA firmware
+existed after M15–M18). `dogfood/src/debug_gym_corpus.rs` + `harness
+debug-gym-corpus` is **1/1** green with the **OTA rollback bug**: a new opt-in
+buggy firmware variant `gateway_ota_crcbug` has a broken CRC check that accepts a
+corrupt image (so the update commits and boots the bad slot), paired against the
+correct `gateway_ota_badcrc` (which rolls back to slot A). Each seed carries the
+plan's required metadata (description, symptom, minimal failing scenario, golden
+failing trace, primitive, fixed trace) and the harness asserts **bug-reproduced**
++ **bug-fixed** + **traces-diverge** by running both scenarios through the
+product binary. Genuinely exercised (real buggy firmware, real traces), gated
+opt-in, golden traces byte-identical. The remaining seeds reuse this harness —
+Strategy A (diagnostics seeds) is the natural next step; telematics/OTA-network
+seeds stay firmware-gated (Strategy C).
+
 ### Blocker
 
 The debugging primitives are implemented, but the seeded-bug corpus needs
@@ -744,6 +760,9 @@ Success criteria:
 5. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN
    assertions are required immediately.
 6. Debug gym corpus expansion using diagnostics/charging first, OTA/telematics later.
+   ~~First corpus case (OTA rollback bug)~~ — **done (M19)**: `harness
+   debug-gym-corpus` 1/1 (buggy `gateway_ota_crcbug` vs fixed `gateway_ota_badcrc`).
+   Next: diagnostics-seeded cases (UNBLOCKING §4 Strategy A).
 7. Telematics firmware and host-socket lane.
 8. Per-session state ownership, staged behind concrete two-session tests.
 9. Nightly/scale once the semantic lanes are individually green.

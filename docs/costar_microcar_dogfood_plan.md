@@ -1027,6 +1027,58 @@ fabricated rather than genuinely exercised); and **OTA-while-driving** /
 case). The OTA-rollback `debug_gym` seed is now trivially seedable from any of
 the four fault variants once the seeded-bug corpus format is agreed.
 
+## Milestone 19 status (this branch)
+
+The nineteenth milestone delivers the **first debug_gym seeded-bug corpus case**
+— the plan's `debug_gym` "OTA rollback bug" seed (UNBLOCKING.md §4 Strategy C,
+now satisfiable because the OTA firmware exists after M15–M18). It flips
+BLOCKERS §2.2 from fully BLOCKED to "first case delivered". It is
+**microcar-only**, gated behind opt-in buggy firmware, so every existing golden
+trace stays **byte-identical** (verified: the `debug_gym` hashes `c371b96e253e` /
+`68806f23c980` / `16684074b01c` / `fa7f03709681` are unchanged, and the OTA lane
+still emits the exact same `ota_*` events — `ota` stays 5/5).
+
+The seed is **genuinely exercised, not fabricated**: it pairs a real buggy
+firmware variant with the real correct firmware and produces both traces through
+the product binary.
+
+- **Buggy firmware.** A new opt-in variant `gateway_ota_crcbug`
+  (`gateway_enable_dogfood_ota_bug_bad_crc()` → `g_ota_crc_check_bug`, default
+  `0`): the same corrupt-image campaign as `gateway_ota_badcrc`, but the
+  gateway's CRC check is **broken** — it reports the corrupt image as valid, so
+  the slot model commits and boots the bad slot instead of rolling back:
+  `IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc wrongly OK) → COMMIT_PENDING(3) →
+  REBOOTING(4) → HEALTHY(5)`, `ota_boot_result=1`. Wired via
+  `microcar_boot_gateway_ota_crcbug()` (coordinator) and the `src/lib.rs`
+  resolver (`gateway_ota_crcbug` matched **before** `gateway_ota`). The single
+  seeded-bug line (`if (g_ota_crc_check_bug) crc_ok = 1;`) is off by default, so
+  the default gateway firmware and every other lane are byte-identical. The fixed
+  reference is the M16 `gateway_ota_badcrc`, which reports `ota_crc_ok=0` and
+  rolls back to slot A (`… → ROLLED_BACK(6)`, `ota_active_slot=0`).
+- **Corpus harness.** `dogfood/src/debug_gym_corpus.rs` +
+  `harness debug-gym-corpus`. Each seed carries the plan's required metadata
+  (description, symptom, minimal failing scenario, golden failing trace, required
+  debugging primitive, fixed trace) and runs its **failing** (buggy) and
+  **fixed** scenarios through the product binary
+  (`dogfood/debug_gym/ota_rollback_bug/{failing,fixed}.toml`), asserting three
+  things: **bug-reproduced** (the buggy firmware boots the corrupt image with no
+  rollback), **bug-fixed** (the correct firmware rolls back to slot A and never
+  boots it), and **traces-diverge** (the runs split at the VERIFYING step —
+  `ota_crc_ok` 1 vs 0, ending `HEALTHY(5)` vs `ROLLED_BACK(6)`), which is exactly
+  what the documented primitive (`continue_until(ota_state)` + inspect
+  `ota_crc_ok`) localizes.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**88 unit tests** (83 → 88, +5 corpus) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **1/1** green; every other lane is unregressed
+(`debug-gym` 4/4 with unchanged hashes, `ota` 5/5, `diagnostics` 2/2,
+`charging` 1/1, `topology` 7/7, `toml-zoo` 11/11); and the new Rust module is
+clippy/fmt-clean. Remaining debug_gym corpus seeds (gateway race, powertrain
+timeout/cancel, BMS stale sensor, dashboard missed warning, telematics
+partial-write, gateway bridge loop) reuse this harness — the diagnostics-seeded
+ones (UNBLOCKING §4 Strategy A) are the natural next additions; telematics is
+still firmware-gated (Strategy C).
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

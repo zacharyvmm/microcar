@@ -27,6 +27,7 @@ extern void gateway_enable_dogfood_ota_fault_bad_crc(void);
 extern void gateway_enable_dogfood_ota_fault_interrupted_write(void);
 extern void gateway_enable_dogfood_ota_fault_bad_health(void);
 extern void gateway_enable_dogfood_ota_fault_powercut_precommit(void);
+extern void gateway_enable_dogfood_ota_bug_bad_crc(void);
 extern void powertrain_enable_dogfood_charging(void);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
@@ -190,6 +191,20 @@ void microcar_boot_gateway_ota_powercut(void)
 {
     sim_trace_u32("microcar_boot_gateway_ota_powercut", 1);
     gateway_enable_dogfood_ota_fault_powercut_precommit();
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the *buggy* OTA CRC-check firmware — the debug_gym
+/// `ota_rollback` seeded bug. The image is corrupt, but a broken CRC check
+/// accepts it, so the update commits and boots the bad slot (no rollback):
+/// IDLE → DOWNLOADING → VERIFYING[crc wrongly OK] → COMMIT_PENDING → REBOOTING
+/// → HEALTHY. The fixed reference is microcar_boot_gateway_ota_badcrc, which
+/// reports crc_ok=0 and rolls back to slot A.
+void microcar_boot_gateway_ota_crcbug(void)
+{
+    sim_trace_u32("microcar_boot_gateway_ota_crcbug", 1);
+    gateway_enable_dogfood_ota_bug_bad_crc();
     microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }
