@@ -1,10 +1,10 @@
 # costar + microcar Dogfood — Status & Blockers Report
 
-_Branch: `dogfood-milestone-1` on both repos. Updated after the M14 cockpit
-gRPC-surface lane and the M15 OTA happy-path lane._
+_Branch: `dogfood-milestone-1` on both repos. Updated after the M15 OTA
+happy-path lane and the M16 OTA slot-metadata model + rollback lane._
 
 - costar: `github.com/zacharyvmm/costar` @ `0c63a26`
-- microcar: `github.com/zacharyvmm/microcar` @ `b9d989b`
+- microcar: `github.com/zacharyvmm/microcar` @ `206fac3`
 - Host: Linux, Rust 1.96.1, workspace at `/home/zmm/projects`.
 
 This document explains **what is done**, **what remains**, and — in detail — **why each
@@ -12,7 +12,7 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 
 ---
 
-## 1. What is complete (13 milestones, verified locally)
+## 1. What is complete (16 milestones, verified locally)
 
 | Milestone | Track | Result |
 |-----------|-------|--------|
@@ -31,18 +31,20 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 | M13 | Charging dogfood lane | `harness charging` 1/1: plug→CHARGING, drive blocked while plugged, powertrain torque clamped to 0 (trace-backed, golden traces byte-identical) |
 | M14 | Cockpit gRPC-surface lane (costar) | `crates/sim-grpc/tests/cockpit_test.rs`: session/board(display+touch+timer+adc)/run(stream_display)/touch/inspect + framebuffer-hash & tick/end determinism; test-only, golden traces unaffected |
 | M15 | OTA happy-path dogfood lane | `harness ota` 1/1: `ota_state` IDLE→…→HEALTHY, crc-ok, boot healthy (trace-backed, opt-in, golden traces byte-identical) |
+| M16 | OTA slot-metadata model + rollback | pure C A/B-slot model (`common/microcar_ota_slot.c`) + Rust mirror (7 tests); `gateway_ota_badcrc` fault variant → corrupt image rolls back to slot A; `harness ota` **2/2** (opt-in, golden traces byte-identical) |
 
 **Fully-delivered plan tracks:** engine stabilization; networking/device-edge hardening;
 `simfarm`; `toml_zoo`; `topology` (7/7); Trace v2 data model; debugging primitives
 (`step`, `continue_until`, keyframe replay, message breakpoint), the `debug_gym`
 determinism invariants, the first diagnostics lane, the first charging safety lane,
-the first cockpit gRPC-surface lane, and the OTA happy-path lane.
+the first cockpit gRPC-surface lane, the OTA happy-path lane, and the OTA
+slot-metadata model + first fault-matrix (rollback) case.
 
 Test counts: costar `sim-world` 110 unit tests, `sim-core` 25, `sim-grpc` 15 integration
-tests (14 + 1 new cockpit); microcar `dogfood` 75 unit tests. All lanes green:
-`harness topology` 7/7, `toml-zoo` 11/11, `simfarm` PASS, `debug-gym` 4/4 (unchanged
-hashes), `diagnostics` 2/2, `charging` 1/1, `ota` 1/1. All 29 non-soak vehicle scenarios
-pass with golden traces intact.
+tests (14 + 1 new cockpit); microcar `dogfood` 80 unit tests, `state_tests` 99 unit tests.
+All lanes green: `harness topology` 7/7, `toml-zoo` 11/11, `simfarm` PASS, `debug-gym` 4/4
+(unchanged hashes), `diagnostics` 2/2, `charging` 1/1, `ota` 2/2. All 29 non-soak vehicle
+scenarios pass with golden traces intact.
 
 ---
 
@@ -76,11 +78,17 @@ passes 2/2.
    firmware variants (`gateway_charging`, `powertrain_charging`) in the same pattern as
    diagnostics. Still missing: the richer charging FSM (handshake / temperature-rise /
    reduced-current / charge-complete) and the charging plant physics. **OTA: happy-path
-   lane delivered (M15).** A trace-backed `gateway_ota` dogfood variant now drives the
-   minimal OTA state sequence (IDLE→DOWNLOADING→VERIFYING→COMMIT_PENDING→REBOOTING→HEALTHY
-   with crc-ok / slot-B / boot-healthy markers) and `harness ota` is 1/1 green (opt-in,
-   golden traces byte-identical). Still missing: the 8-case power-cut/corruption/reset
-   **fault matrix** + rollback, a slot-metadata model, and OTA over real firmware CAN.
+   lane (M15) + slot-metadata model & first rollback fault (M16) delivered.** A trace-backed
+   `gateway_ota` dogfood variant drives the minimal happy-path state sequence
+   (IDLE→DOWNLOADING→VERIFYING→COMMIT_PENDING→REBOOTING→HEALTHY with crc-ok / slot-B /
+   boot-healthy markers), and M16 added a pure A/B **slot-metadata model**
+   (`common/microcar_ota_slot.c` + a 7-test Rust mirror) that the firmware now drives, plus
+   a `gateway_ota_badcrc` fault variant whose corrupt image fails CRC and **rolls back** to
+   the known-good slot A. `harness ota` is 2/2 green (opt-in, golden traces byte-identical).
+   Still missing: the rest of the 8-case power-cut/corruption/reset **fault matrix** (the
+   model already handles interrupted-write / failed-boot rollback in unit tests — they just
+   need firmware fault variants + scenarios wired like `gateway_ota_badcrc`), and OTA over
+   real firmware CAN.
 2. The plan's deeper diagnostics item, live BMS data, is not implemented yet.
 3. A simulator integration gap remains: firmware-originated CAN and firmware RX are not a
    reliable assertion path in these diagnostics scenarios, so the diagnostics lane uses
@@ -195,21 +203,28 @@ the std-only dogfood crate once there is firmware that talks to the host.
 
 ## 3. Summary of what input is needed
 
-The autonomous track has cleared the bounded environment issue and delivered the first
-charging safety lane (M13). Remaining work now diverges into two decision-heavy directions,
-plus the newly unblocked cockpit lane:
+The autonomous track has cleared the bounded environment issue and delivered the charging
+safety lane (M13), the cockpit gRPC-surface proof (M14), the OTA happy path (M15), and the
+OTA slot-metadata model + first rollback fault (M16). Remaining work now diverges into two
+decision-heavy directions:
 
 1. **Remaining firmware EV lanes** — the charging *safety* lane (drive blocked while
-   plugged) is done (M13); what remains needs approval + a confirmed modeling approach: the
-   richer charging FSM (handshake / temperature-rise / reduced-current / charge-complete) and
-   battery plant physics, **OTA** end-to-end (download → slot B → CRC → commit → reboot →
-   health check → rollback + 8-case fault matrix), and diagnostics live-BMS. These also
-   unblock most of the debug_gym seeded-bug corpus and the two deferred `toml_zoo` cases.
+   plugged) is done (M13), and OTA now has a happy path (M15) plus a slot-metadata model
+   with commit/rollback unit tests and a corrupt-image → rollback fault case (M16). What
+   remains needs approval + a confirmed modeling approach: the richer charging FSM (handshake
+   / temperature-rise / reduced-current / charge-complete) and battery plant physics, the
+   rest of the **OTA** 8-case fault matrix (interrupted write, power-cut-before-commit,
+   failed boot → rollback, gateway/BMS reset during update — the model already covers these
+   in unit tests; they need firmware fault variants + scenarios wired like
+   `gateway_ota_badcrc`), and diagnostics live-BMS. These also unblock most of the debug_gym
+   seeded-bug corpus (an OTA-rollback seed is now within reach) and the two deferred
+   `toml_zoo` cases.
 2. **Cockpit / gRPC lane** — no longer blocked by `protoc`; proceed with the local
    `PROTOC` path above.
 3. **Per-session state refactor** — the other big costar track; high-risk, needs sign-off
    and a staged, heavily-verified approach.
 
-Recommended order if all are eventually wanted: **cockpit / gRPC** (now unblocked and
-cheap to start) → **OTA firmware** + the deeper charging FSM → **per-session state** last
-(riskiest, but needed for product-grade in-process session/device isolation).
+Recommended order if all are eventually wanted: continue the **OTA fault matrix** (cheap,
+reuses the M16 model) and the **deeper charging FSM** → **cockpit / gRPC** display firmware
+→ **per-session state** last (riskiest, but needed for product-grade in-process
+session/device isolation).

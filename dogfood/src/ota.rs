@@ -105,7 +105,10 @@ struct UserTrace {
 enum Expectation {
     StateSequence(Vec<u32>),
     CrcOk,
+    CrcBad,
     Healthy,
+    RolledBack,
+    ActiveSlot(u32),
 }
 
 fn parse_user_trace_line(line: &str) -> Option<UserTrace> {
@@ -147,6 +150,15 @@ fn any_value(trace: &[UserTrace], machine: u64, label: &str, want: u32) -> bool 
         .any(|e| e.machine == machine && e.label == label && e.value == want)
 }
 
+/// The last value traced for `label` by `machine` (final state wins).
+fn last_value(trace: &[UserTrace], machine: u64, label: &str) -> Option<u32> {
+    trace
+        .iter()
+        .filter(|e| e.machine == machine && e.label == label)
+        .map(|e| e.value)
+        .next_back()
+}
+
 /// Whether `want` appears as an ordered (not necessarily contiguous)
 /// subsequence of `have`.
 fn is_subsequence(have: &[u32], want: &[u32]) -> bool {
@@ -172,8 +184,16 @@ fn parse_expectations(scenario: &Path) -> io::Result<Vec<Expectation>> {
             out.push(Expectation::StateSequence(seq));
         } else if rest == "crc-ok" {
             out.push(Expectation::CrcOk);
+        } else if rest == "crc-bad" {
+            out.push(Expectation::CrcBad);
         } else if rest == "healthy" {
             out.push(Expectation::Healthy);
+        } else if rest == "rolled-back" {
+            out.push(Expectation::RolledBack);
+        } else if let Some(v) = rest.strip_prefix("active-slot ") {
+            if let Ok(n) = v.trim().parse() {
+                out.push(Expectation::ActiveSlot(n));
+            }
         }
     }
     // Default: a happy-path OTA scenario must at least reach HEALTHY.
@@ -214,6 +234,24 @@ fn evaluate(exp: &Expectation, trace: &[UserTrace]) -> OtaCheck {
                 detail,
             }
         }
+        Expectation::CrcBad => {
+            // A corrupt image: the CRC was reported bad and never reported OK.
+            let saw_bad = any_value(trace, NODE_GATEWAY, "ota_crc_ok", 0);
+            let saw_ok = any_value(trace, NODE_GATEWAY, "ota_crc_ok", 1);
+            let passed = saw_bad && !saw_ok;
+            let detail = if passed {
+                "corrupt image failed verification (ota_crc_ok=0, never ota_crc_ok=1)".to_string()
+            } else if saw_ok {
+                "expected a failed CRC but saw an ota_crc_ok=1 (image verified)".to_string()
+            } else {
+                "expected an ota_crc_ok=0 trace event; saw none".to_string()
+            };
+            OtaCheck {
+                name: "crc-bad".into(),
+                passed,
+                detail,
+            }
+        }
         Expectation::Healthy => {
             let passed = any_value(trace, NODE_GATEWAY, "ota_boot_result", 1);
             let detail = if passed {
@@ -223,6 +261,35 @@ fn evaluate(exp: &Expectation, trace: &[UserTrace]) -> OtaCheck {
             };
             OtaCheck {
                 name: "healthy".into(),
+                passed,
+                detail,
+            }
+        }
+        Expectation::RolledBack => {
+            let passed = any_value(trace, NODE_GATEWAY, "ota_rollback", 1);
+            let detail = if passed {
+                "update aborted and reverted to the previous good slot (ota_rollback=1)".to_string()
+            } else {
+                "expected an ota_rollback=1 trace event; saw none".to_string()
+            };
+            OtaCheck {
+                name: "rolled-back".into(),
+                passed,
+                detail,
+            }
+        }
+        Expectation::ActiveSlot(want) => {
+            let have = last_value(trace, NODE_GATEWAY, "ota_active_slot");
+            let passed = have == Some(*want);
+            let detail = match have {
+                Some(v) if passed => {
+                    format!("bootloader active slot is {v} (as expected)")
+                }
+                Some(v) => format!("expected active slot {want}; traced {v}"),
+                None => format!("expected an ota_active_slot={want} trace event; saw none"),
+            };
+            OtaCheck {
+                name: "active-slot".into(),
                 passed,
                 detail,
             }
@@ -330,6 +397,21 @@ mod tests {
         ]
     }
 
+    /// A corrupt-image campaign that rolls back to slot A (mirrors the
+    /// `gateway_ota_badcrc` firmware variant's trace).
+    fn rollback_trace() -> Vec<UserTrace> {
+        vec![
+            t(NODE_GATEWAY, "ota_state", 0),
+            t(NODE_GATEWAY, "ota_state", 1),
+            t(NODE_GATEWAY, "ota_state", 2),
+            t(NODE_GATEWAY, "ota_crc_ok", 0),
+            t(NODE_GATEWAY, "ota_state", 6),
+            t(NODE_GATEWAY, "ota_rollback", 1),
+            t(NODE_GATEWAY, "ota_active_slot", 0),
+            t(NODE_GATEWAY, "ota_boot_result", 0),
+        ]
+    }
+
     #[test]
     fn parses_user_trace_line() {
         let line = r#"[machine.1]            0 user-u32 "ota_state" = 3"#;
@@ -405,6 +487,66 @@ mod tests {
                 Expectation::StateSequence(vec![0, 1, 2, 3, 4, 5]),
                 Expectation::CrcOk,
                 Expectation::Healthy,
+            ]
+        );
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn crc_bad_check_requires_failed_and_no_ok() {
+        // Corrupt image: crc reported bad, never reported ok.
+        assert!(evaluate(&Expectation::CrcBad, &rollback_trace()).passed);
+        // A verified image must fail the crc-bad expectation.
+        assert!(!evaluate(&Expectation::CrcBad, &happy_trace()).passed);
+        // No crc trace at all is also a failure.
+        let none = vec![t(NODE_GATEWAY, "ota_state", 2)];
+        assert!(!evaluate(&Expectation::CrcBad, &none).passed);
+    }
+
+    #[test]
+    fn rolled_back_check_requires_flag() {
+        assert!(evaluate(&Expectation::RolledBack, &rollback_trace()).passed);
+        // The happy path never rolls back.
+        assert!(!evaluate(&Expectation::RolledBack, &happy_trace()).passed);
+    }
+
+    #[test]
+    fn active_slot_check_matches_final_slot() {
+        // Rollback keeps the bootloader on slot A (0).
+        assert!(evaluate(&Expectation::ActiveSlot(0), &rollback_trace()).passed);
+        // Wrong expected slot fails.
+        assert!(!evaluate(&Expectation::ActiveSlot(1), &rollback_trace()).passed);
+        // Missing the trace event fails.
+        assert!(!evaluate(&Expectation::ActiveSlot(0), &happy_trace()).passed);
+    }
+
+    #[test]
+    fn rollback_state_sequence_reaches_rolled_back() {
+        let exp = Expectation::StateSequence(vec![0, 1, 2, 6]);
+        assert!(evaluate(&exp, &rollback_trace()).passed);
+    }
+
+    #[test]
+    fn parses_rollback_expectations_from_directives() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ota_rollback_expect_test.toml");
+        fs::write(
+            &path,
+            "# ota-expect: state-sequence 0,1,2,6\n\
+             # ota-expect: crc-bad\n\
+             # ota-expect: rolled-back\n\
+             # ota-expect: active-slot 0\n\
+             name = \"x\"\n",
+        )
+        .unwrap();
+        let exps = parse_expectations(&path).unwrap();
+        assert_eq!(
+            exps,
+            vec![
+                Expectation::StateSequence(vec![0, 1, 2, 6]),
+                Expectation::CrcBad,
+                Expectation::RolledBack,
+                Expectation::ActiveSlot(0),
             ]
         );
         let _ = fs::remove_file(&path);

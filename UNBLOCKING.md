@@ -1,6 +1,6 @@
 # Microcar Dogfood Unblocking Strategy
 
-Last updated: 2026-07-08 (after the M14 cockpit gRPC-surface lane + M15 OTA happy-path lane)
+Last updated: 2026-07-08 (after the M15 OTA happy-path lane + the M16 OTA slot-metadata model + rollback lane)
 
 This report is a playbook for the remaining blockers in the costar/microcar
 dogfood plan. It assumes the current state after the diagnostics unblock and the
@@ -36,7 +36,7 @@ that make "unblocked" measurable.
 ## Current Remaining Blockers
 
 1. Charging firmware lane — **safety lane done (M13)**; deeper FSM + plant physics remain.
-2. OTA firmware lane — **happy path done (M15)**; fault matrix + rollback remain.
+2. OTA firmware lane — **happy path done (M15)**, **slot-metadata model + first rollback fault done (M16)**; rest of the fault matrix remains.
 3. Diagnostics depth and product-grade diagnostics-over-bus.
 4. Debug gym seeded-bug corpus.
 5. Cockpit/gRPC dogfood lane — **gRPC-surface proof done (M14)**; `harness cockpit` wrapper + display firmware remain.
@@ -169,11 +169,23 @@ assert the expected monotonic state sequence, CRC-ok, and healthy boot.
 `harness ota` is 1/1 green; the dogfood crate is at 75 unit tests; and the
 `debug_gym` trace hashes are unchanged (default firmware byte-identical, opt-in).
 
-**Still open** (Strategy C is the natural next step): the eight-case
-power-cut/corruption/reset **fault matrix** + rollback, a pure slot-metadata
-model with commit/rollback unit tests (Strategy B), the OTA-rollback `debug_gym`
-seed, and flipping the deferred `toml_zoo` `ota-while-drive` case (needs OTA in
-the scenario *schema*).
+**Update (M16): Strategy B done + first Strategy C fault case shipped.** A pure A/B
+slot-metadata model now exists — `common/src/microcar_ota_slot.c` +
+`common/include/microcar_ota_slot.h`, mirrored in `state_tests/src/ota_slot.rs` with
+**7 unit tests** covering commit, corrupt-CRC rollback, failed-health rollback, and
+interrupted-write rollback (Strategy B success criteria met). The gateway OTA script now
+drives this model (happy path byte-identical to M15), and a `gateway_ota_badcrc` fault
+variant runs the first Strategy C case: a corrupt image fails CRC and rolls back to slot A
+(`dogfood/ota/rollback_bad_crc.toml`, `harness ota` now **2/2**). The harness gained
+`crc-bad`, `rolled-back`, and `active-slot N` expectations.
+
+**Still open** (continue Strategy C, fault-matrix driven): the remaining 7 fault-matrix
+cases — power-cut before/during write (interrupted write), power-cut after write before
+commit, gateway/BMS reset during update, failed health check → rollback, OTA-while-driving,
+OTA-while-charging. The model already handles interrupted-write and failed-boot rollback in
+unit tests, so each remaining case is a firmware fault variant + scenario wired exactly like
+`gateway_ota_badcrc`. Also open: the OTA-rollback `debug_gym` seed (now within reach), and
+flipping the deferred `toml_zoo` `ota-while-drive` case (needs OTA in the scenario *schema*).
 
 ### Blocker
 
@@ -705,7 +717,10 @@ Success criteria:
 
 1. ~~Charging safety lane~~ — **done (M13)**: drive blocked while plugged.
 2. ~~Cockpit/gRPC gRPC-surface proof~~ — **done (M14)**; `harness cockpit` wrapper + display firmware remain.
-3. ~~OTA happy path~~ — **done (M15)**; OTA fault matrix + rollback remain.
+3. ~~OTA happy path~~ — **done (M15)**; ~~slot-metadata model + first rollback fault~~ —
+   **done (M16)**; rest of the OTA fault matrix (interrupted write, power-cut-before-commit,
+   failed boot, gateway/BMS reset, ota-while-drive/charge) remains — each a firmware fault
+   variant + scenario reusing the M16 slot model.
 4. Deeper charging FSM (handshake / temp-rise / reduced-current / complete) +
    charging plant physics; then flip the deferred `toml_zoo` `charging-while-drive`.
 5. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN

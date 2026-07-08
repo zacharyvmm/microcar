@@ -28,6 +28,7 @@
 #include "heartbeat_monitor.h"
 #include "fault_manager.h"
 #include "microcar_protocol.h"
+#include "microcar_ota_slot.h"
 #include "microcar_safety.h"
 #include "microcar_trace.h"
 #include "microcar_can.h"
@@ -52,6 +53,14 @@ static uint8_t             g_diag_dogfood_script = 0;
 static uint8_t             g_diag_dogfood_inject_fault = 0;
 static uint8_t             g_charging_dogfood_script = 0;
 static uint8_t             g_ota_dogfood_script = 0;
+
+// OTA dogfood fault-injection selector (see run_dogfood_ota_script). 0 = the
+// happy-path campaign; non-zero values inject one fault-matrix case. Each fault
+// gets its own gateway_enable_dogfood_ota_fault_* wrapper so a scenario selects
+// it purely by firmware path (no CAN input needed).
+#define OTA_FAULT_NONE    0u
+#define OTA_FAULT_BAD_CRC 1u
+static uint8_t             g_ota_fault_mode = OTA_FAULT_NONE;
 
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
@@ -123,6 +132,15 @@ void gateway_enable_dogfood_charging_script(void)
 void gateway_enable_dogfood_ota_script(void)
 {
     g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_NONE;
+}
+
+// OTA fault-matrix variant: a corrupt image fails CRC verification, so the slot
+// model must refuse to arm slot B and roll back to the known-good slot A.
+void gateway_enable_dogfood_ota_fault_bad_crc(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_BAD_CRC;
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -371,49 +389,88 @@ static void run_dogfood_charging_script(uint32_t *script_ms, uint32_t *sent_mask
 ///
 /// Like the charging/diagnostics scripts this exercises the OTA state machine
 /// via compact trace events without depending on the (still unreliable)
-/// firmware CAN RX path. The minimal happy-path OTA flow is:
+/// firmware CAN RX path. It drives the pure slot-metadata model
+/// (common/src/microcar_ota_slot.c) so the lane asserts the model's real
+/// commit/rollback behavior end-to-end.
+///
+/// Happy path (g_ota_fault_mode == OTA_FAULT_NONE):
 ///   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3, slot B)
 ///   → REBOOTING(4) → HEALTHY(5, boot ok).
-/// Each state is traced as `ota_state` at a successive scheduled time, with
-/// `ota_crc_ok`, `ota_slot` and `ota_boot_result` marker events at the
-/// verifying, commit and healthy steps respectively.
+/// Bad-CRC fault (OTA_FAULT_BAD_CRC): the corrupt image fails verification, so
+/// the model refuses to arm slot B and rolls back to the known-good slot A:
+///   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc BAD) → ROLLED_BACK(6, slot A).
+/// States are traced as `ota_state` at successive scheduled times, with
+/// `ota_crc_ok`, `ota_slot`, `ota_boot_result`, `ota_rollback` and
+/// `ota_active_slot` marker events at the relevant steps.
 static void run_dogfood_ota_script(uint32_t *ota_ms, uint32_t *ota_sent)
 {
     if (!g_ota_dogfood_script) return;
 
+    // Persistent slot-metadata model for this update campaign. One gateway runs
+    // per process, so a function-static instance is safe here.
+    static mc_ota_slot_state_t ota;
+    static uint8_t             ota_inited = 0;
+    if (!ota_inited) {
+        mc_ota_init(&ota);
+        ota_inited = 1;
+    }
+
+    // A corrupt image (bad-CRC fault) fails verification below.
+    int crc_ok = (g_ota_fault_mode != OTA_FAULT_BAD_CRC);
+
     *ota_ms += 10;
 
-    // IDLE — update campaign accepted.
+    // 100ms — IDLE, update campaign accepted.
     if (*ota_ms >= 100 && !(*ota_sent & 0x01)) {
-        sim_trace_u32("ota_state", 0);
+        sim_trace_u32("ota_state", ota.state); // MC_OTA_IDLE
         *ota_sent |= 0x01;
     }
-    // DOWNLOADING — image streaming to the inactive slot.
+    // 200ms — DOWNLOADING, image streamed into the inactive slot.
     if (*ota_ms >= 200 && !(*ota_sent & 0x02)) {
-        sim_trace_u32("ota_state", 1);
+        mc_ota_begin_download(&ota);
+        mc_ota_finish_download(&ota, 1);
+        sim_trace_u32("ota_state", ota.state); // MC_OTA_DOWNLOADING
         *ota_sent |= 0x02;
     }
-    // VERIFYING — image CRC/signature checked and OK.
+    // 300ms — VERIFYING, image CRC/signature checked.
     if (*ota_ms >= 300 && !(*ota_sent & 0x04)) {
-        sim_trace_u32("ota_state", 2);
-        sim_trace_u32("ota_crc_ok", 1);
+        sim_trace_u32("ota_state", MC_OTA_VERIFYING);
+        mc_ota_verify(&ota, crc_ok);
+        sim_trace_u32("ota_crc_ok", ota.crc_ok);
         *ota_sent |= 0x04;
     }
-    // COMMIT_PENDING — slot B armed as the boot target.
+    // 400ms — either the update arms the boot slot (happy path) or the model
+    // has already rolled back (bad-CRC fault): the corrupt image is never
+    // committed, and the bootloader keeps running the known-good slot A.
     if (*ota_ms >= 400 && !(*ota_sent & 0x08)) {
-        sim_trace_u32("ota_state", 3);
-        sim_trace_u32("ota_slot", 1);
+        if (ota.state == MC_OTA_ROLLED_BACK) {
+            sim_trace_u32("ota_state", ota.state); // MC_OTA_ROLLED_BACK
+            sim_trace_u32("ota_rollback", ota.rolled_back);
+            sim_trace_u32("ota_active_slot", ota.active_slot);
+            sim_trace_u32("ota_boot_result", 0);
+        } else {
+            mc_ota_commit(&ota);
+            sim_trace_u32("ota_state", ota.state); // MC_OTA_COMMIT_PENDING
+            sim_trace_u32("ota_slot", ota.target_slot);
+        }
         *ota_sent |= 0x08;
     }
-    // REBOOTING — booting into the new slot.
+    // 500ms — REBOOTING into the new slot (skipped once rolled back).
     if (*ota_ms >= 500 && !(*ota_sent & 0x10)) {
-        sim_trace_u32("ota_state", 4);
+        if (ota.state != MC_OTA_ROLLED_BACK) {
+            mc_ota_reboot(&ota);
+            sim_trace_u32("ota_state", ota.state); // MC_OTA_REBOOTING
+        }
         *ota_sent |= 0x10;
     }
-    // HEALTHY — self-test passed, update committed permanently.
+    // 600ms — HEALTHY, self-test passed and update committed permanently
+    // (skipped once rolled back).
     if (*ota_ms >= 600 && !(*ota_sent & 0x20)) {
-        sim_trace_u32("ota_state", 5);
-        sim_trace_u32("ota_boot_result", 1);
+        if (ota.state != MC_OTA_ROLLED_BACK) {
+            mc_ota_health_check(&ota, 1);
+            sim_trace_u32("ota_state", ota.state); // MC_OTA_HEALTHY
+            sim_trace_u32("ota_boot_result", ota.boot_healthy);
+        }
         *ota_sent |= 0x20;
     }
 }

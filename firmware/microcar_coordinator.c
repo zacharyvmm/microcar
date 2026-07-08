@@ -23,6 +23,7 @@ extern void gateway_enable_dogfood_diag_script(uint8_t inject_fault);
 extern void powertrain_enable_dogfood_service_mode(void);
 extern void gateway_enable_dogfood_charging_script(void);
 extern void gateway_enable_dogfood_ota_script(void);
+extern void gateway_enable_dogfood_ota_fault_bad_crc(void);
 extern void powertrain_enable_dogfood_charging(void);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
@@ -142,6 +143,17 @@ void microcar_boot_gateway_ota(void)
 {
     sim_trace_u32("microcar_boot_gateway_ota", 1);
     gateway_enable_dogfood_ota_script();
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the OTA bad-CRC fault variant enabled — the corrupt image
+/// fails verification, so the slot model rolls back to the known-good slot A
+/// (IDLE → DOWNLOADING → VERIFYING[crc bad] → ROLLED_BACK).
+void microcar_boot_gateway_ota_badcrc(void)
+{
+    sim_trace_u32("microcar_boot_gateway_ota_badcrc", 1);
+    gateway_enable_dogfood_ota_fault_bad_crc();
     microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

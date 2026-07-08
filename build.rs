@@ -66,6 +66,7 @@ fn main() {
 
     // ── Common library ───────────────────────────────────────────────
     build.file("common/src/microcar_protocol.c");
+    build.file("common/src/microcar_ota_slot.c");
 
     // ── BMS ECU ──────────────────────────────────────────────────────
     build
