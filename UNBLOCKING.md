@@ -1,16 +1,19 @@
 # Microcar Dogfood Unblocking Strategy
 
-Last updated: 2026-07-08
+Last updated: 2026-07-08 (after the M13 charging safety lane)
 
 This report is a playbook for the remaining blockers in the costar/microcar
-dogfood plan. It assumes the current state after the diagnostics unblock:
+dogfood plan. It assumes the current state after the diagnostics unblock and the
+M13 charging safety lane:
 
 - `harness diagnostics` is green for the first diagnostics dogfood lane.
+- `harness charging` is green for the first charging safety lane (drive blocked
+  while plugged) — see section 1, Strategy A: its success criteria are now met.
 - `sim-grpc` is locally buildable by exporting
   `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc`.
 - Some firmware CAN RX/TX behavior is still not reliable enough for
-  product-grade diagnostics-over-bus assertions, so the diagnostics lane uses
-  explicit dogfood firmware variants and firmware trace events.
+  product-grade diagnostics-over-bus assertions, so the diagnostics and charging
+  lanes use explicit dogfood firmware variants and firmware trace events.
 
 The goal is not to prescribe one implementation. It is to give the next agent
 several practical debugging strategies for each blocker, plus success criteria
@@ -32,7 +35,7 @@ that make "unblocked" measurable.
 
 ## Current Remaining Blockers
 
-1. Charging firmware lane.
+1. Charging firmware lane — **safety lane done (M13)**; deeper FSM + plant physics remain.
 2. OTA firmware lane.
 3. Diagnostics depth and product-grade diagnostics-over-bus.
 4. Debug gym seeded-bug corpus.
@@ -42,6 +45,28 @@ that make "unblocked" measurable.
 8. Remaining breakpoint predicates and nightly/scale runs.
 
 ## 1. Charging Firmware Lane
+
+### Status (M13): safety lane delivered
+
+Strategy A below was taken and its success criteria are met: `harness charging`
+has a passing `plug_blocks_drive` scenario, `cargo test --manifest-path
+dogfood/Cargo.toml` stays green (68 tests), and existing non-charging scenarios
+are byte-identical (verified via the `debug_gym` trace hashes). Delivered
+trace-backed via dogfood firmware variants (`gateway_charging`,
+`powertrain_charging`) — no reliance on firmware CAN RX. It asserts
+`charging-mode` (gateway entered CHARGING on plug-in), `drive-blocked` (a drive
+request while plugged stayed CHARGING), and `motor-torque max=0` (powertrain
+clamped torque to 0 with the motor disabled).
+
+Key finding: `mc_gateway_determine_mode` already keeps `VEHICLE_CHARGING` sticky
+and `safety_mode_blocks_torque` already blocks torque outside DRIVE/LIMP — the
+gap was only a *trigger* to enter CHARGING and a lane to exercise it.
+
+**Still open for a future milestone** (Strategy C is the natural next step): the
+richer charging FSM (handshake, temperature-rise → reduced-current, charge
+complete, fault stops charging) and charging plant physics, plus flipping the
+deferred `toml_zoo` `charging-while-drive` case to active (needs charging in the
+scenario *schema*, e.g. a plug input / mode field).
 
 ### Blocker
 
@@ -641,16 +666,17 @@ Success criteria:
 
 ## Recommended Execution Order
 
-1. Cockpit/gRPC, because `protoc` is unblocked and the lane is bounded.
-2. Charging, because it extends the safety model and unblocks a deferred
-   `toml_zoo` case.
+1. ~~Charging safety lane~~ — **done (M13)**: drive blocked while plugged.
+2. Cockpit/gRPC, because `protoc` is unblocked and the lane is bounded.
 3. OTA happy path, then OTA fault matrix.
-4. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN
+4. Deeper charging FSM (handshake / temp-rise / reduced-current / complete) +
+   charging plant physics; then flip the deferred `toml_zoo` `charging-while-drive`.
+5. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN
    assertions are required immediately.
-5. Debug gym corpus expansion using diagnostics first, OTA/telematics later.
-6. Telematics firmware and host-socket lane.
-7. Per-session state ownership, staged behind concrete two-session tests.
-8. Nightly/scale once the semantic lanes are individually green.
+6. Debug gym corpus expansion using diagnostics/charging first, OTA/telematics later.
+7. Telematics firmware and host-socket lane.
+8. Per-session state ownership, staged behind concrete two-session tests.
+9. Nightly/scale once the semantic lanes are individually green.
 
 ## Fast Status Commands
 
@@ -660,6 +686,7 @@ From `/home/zmm/projects/microcar`:
 cargo build --bin microcar
 cargo test --manifest-path dogfood/Cargo.toml
 MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- diagnostics
+MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- charging
 ```
 
 From `/home/zmm/projects/costar`:

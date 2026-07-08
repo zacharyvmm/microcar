@@ -1,9 +1,9 @@
 # costar + microcar Dogfood — Status & Blockers Report
 
-_Branch: `dogfood-milestone-1` on both repos. Updated after the diagnostics unblock._
+_Branch: `dogfood-milestone-1` on both repos. Updated after the M13 charging lane._
 
 - costar: `github.com/zacharyvmm/costar` @ `1ee4ad0`
-- microcar: `github.com/zacharyvmm/microcar` @ `16174a9`
+- microcar: `github.com/zacharyvmm/microcar` @ `6f2c0e8`
 - Host: Linux, Rust 1.96.1, workspace at `/home/zmm/projects`.
 
 This document explains **what is done**, **what remains**, and — in detail — **why each
@@ -32,7 +32,7 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 **Fully-delivered plan tracks:** engine stabilization; networking/device-edge hardening;
 `simfarm`; `toml_zoo`; `topology` (7/7); Trace v2 data model; debugging primitives
 (`step`, `continue_until`, keyframe replay, message breakpoint), the `debug_gym`
-determinism invariants, and the first diagnostics lane.
+determinism invariants, the first diagnostics lane, and the first charging safety lane.
 
 Test counts: costar `sim-world` 110 unit tests, `sim-core` 25; microcar `dogfood` 68 unit
 tests. All lanes green: `harness topology` 7/7, `toml-zoo` 11/11, `simfarm` PASS,
@@ -187,17 +187,21 @@ the std-only dogfood crate once there is firmware that talks to the host.
 
 ## 3. Summary of what input is needed
 
-The autonomous track has cleared the bounded environment issue. Remaining work now
-diverges into two decision-heavy directions, plus the newly unblocked cockpit lane:
+The autonomous track has cleared the bounded environment issue and delivered the first
+charging safety lane (M13). Remaining work now diverges into two decision-heavy directions,
+plus the newly unblocked cockpit lane:
 
-1. **Remaining firmware EV lanes** (charging → ota, plus diagnostics live BMS if required)
-   — needs approval to write firmware + confirm the modeling approach. Also unblocks most
-   of the debug_gym seeded-bug corpus and the two deferred `toml_zoo` cases.
+1. **Remaining firmware EV lanes** — the charging *safety* lane (drive blocked while
+   plugged) is done (M13); what remains needs approval + a confirmed modeling approach: the
+   richer charging FSM (handshake / temperature-rise / reduced-current / charge-complete) and
+   battery plant physics, **OTA** end-to-end (download → slot B → CRC → commit → reboot →
+   health check → rollback + 8-case fault matrix), and diagnostics live-BMS. These also
+   unblock most of the debug_gym seeded-bug corpus and the two deferred `toml_zoo` cases.
 2. **Cockpit / gRPC lane** — no longer blocked by `protoc`; proceed with the local
    `PROTOC` path above.
 3. **Per-session state refactor** — the other big costar track; high-risk, needs sign-off
    and a staged, heavily-verified approach.
 
 Recommended order if all are eventually wanted: **cockpit / gRPC** (now unblocked and
-cheap to start) → **charging/OTA firmware** → **per-session state** last (riskiest, but
-needed for product-grade in-process session/device isolation).
+cheap to start) → **OTA firmware** + the deeper charging FSM → **per-session state** last
+(riskiest, but needed for product-grade in-process session/device isolation).
