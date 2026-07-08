@@ -51,10 +51,33 @@ fn fail_scenario(kind: &str, message: impl std::fmt::Display) -> ExitCode {
 }
 
 fn main() -> ExitCode {
-    let scenario_path = match std::env::args().nth(1) {
+    // ── Parse args: <scenario.toml> [--trace-v2 <path>] ─────────
+    let mut scenario_path: Option<String> = None;
+    let mut trace_v2_path: Option<String> = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--trace-v2" => match args.next() {
+                Some(p) => trace_v2_path = Some(p),
+                None => {
+                    eprintln!("microcar: error [usage]: --trace-v2 needs a path");
+                    return ExitCode::from(EXIT_SCENARIO_ERROR);
+                }
+            },
+            other if other.starts_with("--") => {
+                eprintln!("microcar: error [usage]: unknown flag '{other}'");
+                return ExitCode::from(EXIT_SCENARIO_ERROR);
+            }
+            other if scenario_path.is_none() => scenario_path = Some(other.to_string()),
+            _ => {}
+        }
+    }
+    let scenario_path = match scenario_path {
         Some(p) => p,
         None => {
-            eprintln!("microcar: error [usage]: usage: microcar <scenario.toml>");
+            eprintln!(
+                "microcar: error [usage]: usage: microcar <scenario.toml> [--trace-v2 <path>]"
+            );
             return ExitCode::from(EXIT_SCENARIO_ERROR);
         }
     };
@@ -77,6 +100,12 @@ fn main() -> ExitCode {
         Ok(w) => w,
         Err(e) => return fail_scenario(scenario_error_kind(&e), e),
     };
+
+    // Enable the opt-in Trace v2 sink if requested (additive; does not change
+    // the default human trace output).
+    if trace_v2_path.is_some() {
+        world.enable_trace_v2();
+    }
 
     // ── Attach plant model ──────────────────────────────────────
     if scenario.plant.is_some() {
@@ -135,6 +164,15 @@ fn main() -> ExitCode {
     if let Err(e) = run_result {
         eprintln!("microcar: error [runtime]: simulation error: {e}");
         return ExitCode::from(EXIT_RUNTIME_FAIL);
+    }
+
+    // ── Write Trace v2 JSONL if requested (best-effort; never changes the
+    //    exit code or the default trace output) ───────────────────
+    if let Some(path) = &trace_v2_path {
+        let jsonl = world.trace_v2_jsonl();
+        if let Err(e) = std::fs::write(path, jsonl) {
+            eprintln!("microcar: warning: failed to write trace v2 to {path}: {e}");
+        }
     }
 
     // ── Check trace ─────────────────────────────────────────────

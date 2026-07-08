@@ -529,6 +529,35 @@ which exist yet): the `drive_body_bus_bridge`, `gateway_loop_prevention`, and
 "trace includes source and destination component identity" assertions. The
 dogfood crate now has 52 unit tests (+7 topology) and stays clippy-clean.
 
+## Milestone 4 status (this branch)
+
+The fourth milestone — the **Trace v2 foundation**, gated opt-in so existing
+golden traces stay byte-identical — is implemented on this branch:
+
+- costar: `sim_core::TraceV2` (`trace_id`, `correlation_id`, `virtual_time`,
+  `event_type`, `direction`, `bus_or_link_id`, `message_id`, `source`,
+  `destination`, `len`), `serde::Serialize` with `to_json_line()` (JSONL) and
+  `to_human_line()` — the latter regenerates the legacy `can-rx`/`can-tx` text,
+  satisfying the plan's "old human/JSONL trace output can be generated from
+  trace v2". `World` gains an opt-in v2 sink (`enable_trace_v2` /
+  `drain_trace_v2` / `trace_v2_jsonl`). When enabled, `deliver_buses` emits, per
+  CAN send, one `tx` edge plus one `rx` edge per receiver, all sharing a
+  correlation id derived from the per-send bus sequence (`CanBus::drain_arrived`
+  now surfaces `seq`). Default off ⇒ the human/golden trace is byte-identical
+  (verified: a scenario's stdout is identical with and without the flag).
+  Covered by `test_trace_v2_correlation_and_identity` and
+  `test_trace_v2_disabled_by_default`; sim-world now has 104 tests.
+- microcar: `microcar <scenario> --trace-v2 <path>` enables the sink and writes
+  the v2 records as JSONL after the run. It never changes the default stdout
+  output or the exit codes (0/1/2); the JSONL write is best-effort.
+
+This delivers the plan's "every transmit-to-receive path carries a correlation
+id" and "trace includes source and destination component identity". Remaining
+Trace v2 fields (`parent_id`, component/port ids, `task_id`, `rtos`,
+`payload_summary`) and gateway parent/child *forwarding* causality are additive
+follow-ups; the topology lane's correlation/identity assertions can now be
+upgraded to consume the v2 JSONL.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
