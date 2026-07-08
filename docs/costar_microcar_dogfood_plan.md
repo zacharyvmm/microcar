@@ -563,6 +563,37 @@ v2 fields (`parent_id`, component/port ids, `task_id`, `rtos`,
 `drive_body_bus_bridge` / `gateway_loop_prevention` scenarios need) are additive
 follow-ups.
 
+## Milestone 5 status (this branch)
+
+The fifth milestone — **gateway bus forwarding** with parent/child causality,
+completing the topology lane's bridge scenario — is implemented on this branch:
+
+- costar: opt-in multi-interface **bridging**. A machine declared a bridge
+  (`[[bridge]] machine = "…"`) forwards a frame it receives on one bus onto its
+  other buses, exactly once (hop-based loop prevention). Gated behind the
+  declaration, so scenarios without a `[[bridge]]` are byte-identical (zero
+  regression). `CanBus` carries `hop` + `parent_correlation` and gains
+  `forward()`; `World::deliver_buses` collects forward actions for bridge
+  receivers of original (hop-0) frames and re-transmits them after the drain
+  pass. `sim_core::TraceV2` gains `parent_id`: a forwarded frame's records carry
+  the correlation id of the frame that caused the forward. Correlation ids are
+  1-based (0 = "no parent"). Covered by
+  `test_gateway_forwarding_parent_causality`; sim-world has 105 tests.
+- microcar: `dogfood/topology/drive_body_bus_bridge.toml` (the gateway bridges
+  `vcan_drive` ↔ `vcan_body`); the topology harness is now forwarding-aware — it
+  parses `parent_id` from the v2 JSONL and, per probe, accepts exactly one root
+  correlation plus forwarded edges whose `parent_id` links back to it, with the
+  full receiver set delivered once each.
+
+This realizes the plan's topology assertions "gateway bridge emits exactly one
+forwarded frame", "forwarded frame preserves correlation id", and "trace
+includes source and destination component identity". The topology lane now
+covers 4 scenarios (`dual_bus_gateway`, `diag_request_through_gateway`,
+`fleet_16_nodes`, `drive_body_bus_bridge`), all green; the dogfood crate has 57
+unit tests. Still deferred: `gateway_loop_prevention` (needs multi-bridge
+de-duplication so multiple bridge paths inject a controller only once) and
+`fleet_64_nodes`.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

@@ -87,6 +87,7 @@ pub struct TopologyScenarioResult {
 #[derive(Debug, Clone)]
 pub struct V2Edge {
     pub correlation_id: u64,
+    pub parent_id: u64,
     pub direction: String,
     pub message_id: u32,
     pub source: u64,
@@ -322,6 +323,7 @@ fn json_str<'a>(line: &'a str, key: &str) -> Option<&'a str> {
 pub fn parse_v2_line(line: &str) -> Option<V2Edge> {
     Some(V2Edge {
         correlation_id: json_u64(line, "correlation_id")?,
+        parent_id: json_u64(line, "parent_id").unwrap_or(0),
         direction: json_str(line, "direction")?.to_string(),
         message_id: json_u64(line, "message_id")? as u32,
         source: json_u64(line, "source")?,
@@ -401,30 +403,56 @@ fn evaluate_correlation(probe: &Probe, edges: &[V2Edge]) -> CorrelationResult {
         };
     }
 
-    let corr: BTreeSet<u64> = rx.iter().map(|e| e.correlation_id).collect();
-    let sources: BTreeSet<u64> = rx.iter().map(|e| e.source).collect();
+    let all_corr: BTreeSet<u64> = rx.iter().map(|e| e.correlation_id).collect();
+    // Roots = original (non-forwarded) deliveries; there must be exactly one
+    // logical original send, from a single source.
+    let root_corr: BTreeSet<u64> = rx
+        .iter()
+        .filter(|e| e.parent_id == 0)
+        .map(|e| e.correlation_id)
+        .collect();
+    let root_sources: BTreeSet<u64> = rx
+        .iter()
+        .filter(|e| e.parent_id == 0)
+        .map(|e| e.source)
+        .collect();
     let dests: BTreeSet<u64> = rx.iter().map(|e| e.destination).collect();
-    let tx_corr_ok = tx.iter().any(|e| corr.contains(&e.correlation_id));
+    let forwarded = rx.iter().filter(|e| e.parent_id != 0).count();
 
-    let passed = !rx.is_empty()
-        && corr.len() == 1
-        && sources.len() == 1
-        && dests == probe.expect
-        && tx_corr_ok;
+    let one_root = root_corr.len() == 1 && root_sources.len() == 1;
+    // Every forwarded edge's parent must be a correlation actually present
+    // (causality preserved back to a real prior frame).
+    let causal_ok = rx.iter().all(|e| e.parent_id == 0 || all_corr.contains(&e.parent_id));
+    let dests_ok = dests == probe.expect;
+    let no_dupes = {
+        let mut seen = BTreeMap::<u64, usize>::new();
+        for e in &rx {
+            *seen.entry(e.destination).or_default() += 1;
+        }
+        seen.values().all(|c| *c == 1)
+    };
+    let tx_root_ok = tx.iter().any(|e| root_corr.contains(&e.correlation_id));
 
-    let detail = if passed {
+    let passed = !rx.is_empty() && one_root && causal_ok && dests_ok && no_dupes && tx_root_ok;
+
+    let root = root_corr.iter().next().copied().unwrap_or(0);
+    let detail = if passed && forwarded == 0 {
         format!(
-            "correlation {}, source {}, delivered to {:?}",
-            corr.iter().next().copied().unwrap_or(0),
-            sources.iter().next().copied().unwrap_or(0),
-            dests
+            "root correlation {root}, source {}, delivered to {dests:?}",
+            root_sources.iter().next().copied().unwrap_or(0)
+        )
+    } else if passed {
+        format!(
+            "root correlation {root} + {forwarded} forwarded edge(s) preserving parent, \
+             delivered to {dests:?}"
         )
     } else if rx.is_empty() {
         "no trace v2 delivery edges (is --trace-v2 supported?)".to_string()
     } else {
         format!(
-            "mismatch: correlations={corr:?} sources={sources:?} dests={dests:?} \
-             (expected dests {:?}) tx_match={tx_corr_ok}",
+            "mismatch: root_corr={root_corr:?} root_sources={root_sources:?} dests={dests:?} \
+             (expected {:?}) one_root={one_root} causal_ok={causal_ok} no_dupes={no_dupes} \
+             tx_root_ok={tx_root_ok}",
             probe.expect
         )
     };
@@ -614,9 +642,10 @@ mod tests {
         assert!(parse_v2_line("not json").is_none());
     }
 
-    fn edge(dir: &str, corr: u64, src: u64, dst: u64) -> V2Edge {
+    fn edge(dir: &str, corr: u64, parent: u64, src: u64, dst: u64) -> V2Edge {
         V2Edge {
             correlation_id: corr,
+            parent_id: parent,
             direction: dir.into(),
             message_id: 0x07a0,
             source: src,
@@ -632,11 +661,32 @@ mod tests {
             expect: BTreeSet::from([1u64, 3u64]),
         };
         let edges = vec![
-            edge("tx", 5, 2, 0),
-            edge("rx", 5, 2, 1),
-            edge("rx", 5, 2, 3),
+            edge("tx", 5, 0, 2, 0),
+            edge("rx", 5, 0, 2, 1),
+            edge("rx", 5, 0, 2, 3),
         ];
         assert!(evaluate_correlation(&probe, &edges).passed);
+    }
+
+    #[test]
+    fn correlation_passes_with_forwarding() {
+        // Original send (corr 5, parent 0) delivered to gateway(1) + bms(3);
+        // gateway forwards it (corr 6, parent 5) to dashboard(4).
+        let probe = Probe {
+            id: 0x07a0,
+            id_hex: "0x07a0".into(),
+            expect: BTreeSet::from([1u64, 3u64, 4u64]),
+        };
+        let edges = vec![
+            edge("tx", 5, 0, 2, 0),
+            edge("rx", 5, 0, 2, 1),
+            edge("rx", 5, 0, 2, 3),
+            edge("tx", 6, 5, 1, 0),
+            edge("rx", 6, 5, 1, 4),
+        ];
+        let r = evaluate_correlation(&probe, &edges);
+        assert!(r.passed, "detail: {}", r.detail);
+        assert!(r.detail.contains("forwarded"));
     }
 
     #[test]
@@ -646,11 +696,11 @@ mod tests {
             id_hex: "0x07a0".into(),
             expect: BTreeSet::from([1u64, 3u64]),
         };
-        // Two different correlation ids for the same probe frame -> not one send.
+        // Two different ROOT correlation ids (both parent 0) -> not one send.
         let edges = vec![
-            edge("tx", 5, 2, 0),
-            edge("rx", 5, 2, 1),
-            edge("rx", 6, 2, 3),
+            edge("tx", 5, 0, 2, 0),
+            edge("rx", 5, 0, 2, 1),
+            edge("rx", 6, 0, 2, 3),
         ];
         assert!(!evaluate_correlation(&probe, &edges).passed);
     }
