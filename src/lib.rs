@@ -31,9 +31,11 @@
 //! dashboard ECU firmware and advances the scheduler via
 //! `sim_zephyr_scheduler_tick()`.
 
+pub mod validate;
+
+use sim_core::Tick;
 use sim_world::firmware::Firmware;
 use sim_world::Machine;
-use sim_core::Tick;
 
 // C ABI functions from the compiled firmware / sim-ffi.
 extern "C" {
