@@ -196,7 +196,10 @@ impl Invariant for TraceNonEmpty {
         if run.trace.is_empty() {
             InvariantResult::fail(self.name(), "trace has no event lines")
         } else {
-            InvariantResult::pass(self.name(), format!("{} trace event lines", run.trace.len()))
+            InvariantResult::pass(
+                self.name(),
+                format!("{} trace event lines", run.trace.len()),
+            )
         }
     }
 }
@@ -372,33 +375,52 @@ mod tests {
     #[test]
     fn monotonic_skips_when_no_timed_lines() {
         let run = run_with(&["some non-trace text"], RunStatus::Pass);
-        assert_eq!(VirtualTimeMonotonic.check(&run).status, CheckStatus::Skipped);
+        assert_eq!(
+            VirtualTimeMonotonic.check(&run).status,
+            CheckStatus::Skipped
+        );
     }
 
     #[test]
     fn terminated_cleanly_maps_status() {
         assert_eq!(
-            ProcessTerminatedCleanly.check(&run_with(&["x"], RunStatus::Pass)).status,
+            ProcessTerminatedCleanly
+                .check(&run_with(&["x"], RunStatus::Pass))
+                .status,
             CheckStatus::Pass
         );
         assert_eq!(
-            ProcessTerminatedCleanly.check(&run_with(&["x"], RunStatus::Timeout)).status,
+            ProcessTerminatedCleanly
+                .check(&run_with(&["x"], RunStatus::Timeout))
+                .status,
             CheckStatus::Fail
         );
         assert_eq!(
-            ProcessTerminatedCleanly.check(&run_with(&["x"], RunStatus::Panic)).status,
+            ProcessTerminatedCleanly
+                .check(&run_with(&["x"], RunStatus::Panic))
+                .status,
             CheckStatus::Fail
         );
         assert_eq!(
-            ProcessTerminatedCleanly.check(&run_with(&["x"], RunStatus::Fail)).status,
+            ProcessTerminatedCleanly
+                .check(&run_with(&["x"], RunStatus::Fail))
+                .status,
             CheckStatus::Fail
         );
     }
 
     #[test]
     fn nonempty_detects_empty() {
-        assert_eq!(TraceNonEmpty.check(&run_with(&[], RunStatus::Pass)).status, CheckStatus::Fail);
-        assert_eq!(TraceNonEmpty.check(&run_with(&["x"], RunStatus::Pass)).status, CheckStatus::Pass);
+        assert_eq!(
+            TraceNonEmpty.check(&run_with(&[], RunStatus::Pass)).status,
+            CheckStatus::Fail
+        );
+        assert_eq!(
+            TraceNonEmpty
+                .check(&run_with(&["x"], RunStatus::Pass))
+                .status,
+            CheckStatus::Pass
+        );
     }
 
     #[test]

@@ -138,7 +138,10 @@ impl ChurnReport {
             ("scenario".into(), Json::str(&self.scenario)),
             ("iterations".into(), Json::UInt(self.iterations as u128)),
             ("first_hash".into(), Json::str(&self.first_hash)),
-            ("distinct_hashes".into(), Json::UInt(self.distinct_hashes as u128)),
+            (
+                "distinct_hashes".into(),
+                Json::UInt(self.distinct_hashes as u128),
+            ),
             ("clean".into(), Json::UInt(self.clean as u128)),
             ("stable".into(), Json::Bool(self.stable)),
             ("passed".into(), Json::Bool(self.passed())),
@@ -176,9 +179,15 @@ impl PanicIsolationReport {
             ("lane".into(), Json::str("panic_isolation")),
             ("healthy_scenario".into(), Json::str(&self.healthy_scenario)),
             ("bad_scenario".into(), Json::str(&self.bad_scenario)),
-            ("healthy_status".into(), Json::str(self.healthy_status.as_str())),
+            (
+                "healthy_status".into(),
+                Json::str(self.healthy_status.as_str()),
+            ),
             ("healthy_hash".into(), Json::str(&self.healthy_hash)),
-            ("healthy_solo_hash".into(), Json::str(&self.healthy_solo_hash)),
+            (
+                "healthy_solo_hash".into(),
+                Json::str(&self.healthy_solo_hash),
+            ),
             ("bad_status".into(), Json::str(self.bad_status.as_str())),
             ("bad_exit_code".into(), exit_code_json(self.bad_exit_code)),
             ("isolated".into(), Json::Bool(self.isolated)),
@@ -206,7 +215,8 @@ pub fn run_simfarm(bin: &Path, scenario: &Path, n: usize, timeout: Duration) -> 
     let concurrent: Vec<RunHash> = runs.iter().map(RunHash::from_run).collect();
 
     let all_match = concurrent.iter().all(|r| r.hash == solo_hash);
-    let all_clean = solo.status == RunStatus::Pass && concurrent.iter().all(|r| r.status == RunStatus::Pass);
+    let all_clean =
+        solo.status == RunStatus::Pass && concurrent.iter().all(|r| r.status == RunStatus::Pass);
 
     SimfarmReport {
         scenario: scenario_name,
@@ -262,7 +272,12 @@ pub fn run_churn(bin: &Path, scenario: &Path, iterations: usize, timeout: Durati
 ///
 /// `isolated` is true iff `healthy_status == Pass && healthy_hash ==
 /// healthy_solo_hash && bad_status != Panic`.
-pub fn run_panic_isolation(bin: &Path, healthy: &Path, bad: &Path, timeout: Duration) -> PanicIsolationReport {
+pub fn run_panic_isolation(
+    bin: &Path,
+    healthy: &Path,
+    bad: &Path,
+    timeout: Duration,
+) -> PanicIsolationReport {
     // Solo baseline for the healthy scenario, established before the bad run
     // ever exists.
     let healthy_solo = run_scenario(bin, healthy, timeout);
@@ -311,7 +326,9 @@ fn run_concurrent(bin: &Path, scenario: &Path, n: usize, timeout: Duration) -> V
     for _ in 0..n {
         let bin = bin.to_path_buf();
         let scenario = scenario.to_path_buf();
-        handles.push(thread::spawn(move || run_scenario(&bin, &scenario, timeout)));
+        handles.push(thread::spawn(move || {
+            run_scenario(&bin, &scenario, timeout)
+        }));
     }
     handles
         .into_iter()
@@ -348,7 +365,11 @@ mod tests {
     // ---- pure-logic test builders (no subprocess spawning) ----------------
 
     fn rh(hash: &str, status: RunStatus) -> RunHash {
-        RunHash { hash: hash.to_string(), status, wall_ms: 5 }
+        RunHash {
+            hash: hash.to_string(),
+            status,
+            wall_ms: 5,
+        }
     }
 
     /// Mirror `run_simfarm`'s invariant computation over hand-built runs.
@@ -411,7 +432,11 @@ mod tests {
         let r = simfarm_report(
             "abc",
             true,
-            vec![rh("abc", RunStatus::Pass), rh("abc", RunStatus::Pass), rh("abc", RunStatus::Pass)],
+            vec![
+                rh("abc", RunStatus::Pass),
+                rh("abc", RunStatus::Pass),
+                rh("abc", RunStatus::Pass),
+            ],
         );
         assert!(r.all_match);
         assert!(r.all_clean);
@@ -527,7 +552,10 @@ mod tests {
 
         // A signalled bad run (no exit code) renders as "none".
         let signalled = panic_report(RunStatus::Pass, "h", "h", RunStatus::Fail, None);
-        assert!(signalled.to_json().to_pretty().contains("\"bad_exit_code\": \"none\""));
+        assert!(signalled
+            .to_json()
+            .to_pretty()
+            .contains("\"bad_exit_code\": \"none\""));
 
         assert_eq!(s.matches('{').count(), s.matches('}').count());
     }

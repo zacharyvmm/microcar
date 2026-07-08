@@ -146,7 +146,9 @@ impl TopologyReport {
                             ("id".into(), Json::str(&p.id_hex)),
                             (
                                 "expected".into(),
-                                Json::Arr(p.expected.iter().map(|r| Json::UInt(*r as u128)).collect()),
+                                Json::Arr(
+                                    p.expected.iter().map(|r| Json::UInt(*r as u128)).collect(),
+                                ),
                             ),
                             ("actual".into(), Json::Arr(actual)),
                             ("passed".into(), Json::Bool(p.passed)),
@@ -283,8 +285,11 @@ fn evaluate_probe(probe: &Probe, actual: BTreeMap<u64, usize>) -> ProbeResult {
             probe.expect, actual_set, unexpected, missing
         )
     } else {
-        let dupes: Vec<(u64, usize)> =
-            actual.iter().filter(|(_, c)| **c != 1).map(|(r, c)| (*r, *c)).collect();
+        let dupes: Vec<(u64, usize)> = actual
+            .iter()
+            .filter(|(_, c)| **c != 1)
+            .map(|(r, c)| (*r, *c))
+            .collect();
         format!("duplicate injection: {dupes:?}")
     };
 
@@ -338,7 +343,10 @@ fn run_scenario_v2(bin: &Path, scenario: &Path, timeout: Duration) -> Vec<V2Edge
     let tmp = std::env::temp_dir().join(format!(
         "microcar_tv2_{}_{}.jsonl",
         std::process::id(),
-        scenario.file_stem().and_then(|s| s.to_str()).unwrap_or("scn")
+        scenario
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("scn")
     ));
     let mut child = match std::process::Command::new(bin)
         .arg(scenario)
@@ -422,7 +430,9 @@ fn evaluate_correlation(probe: &Probe, edges: &[V2Edge]) -> CorrelationResult {
     let one_root = root_corr.len() == 1 && root_sources.len() == 1;
     // Every forwarded edge's parent must be a correlation actually present
     // (causality preserved back to a real prior frame).
-    let causal_ok = rx.iter().all(|e| e.parent_id == 0 || all_corr.contains(&e.parent_id));
+    let causal_ok = rx
+        .iter()
+        .all(|e| e.parent_id == 0 || all_corr.contains(&e.parent_id));
     let dests_ok = dests == probe.expect;
     let no_dupes = {
         let mut seen = BTreeMap::<u64, usize>::new();
@@ -558,7 +568,10 @@ mod tests {
     fn parse_can_rx_extracts_receiver_and_id() {
         let line = "[machine.3]          500 can-rx receiver=3 id=0x07a0 len=1";
         assert_eq!(parse_can_rx(line), Some((3, 0x07a0)));
-        assert_eq!(parse_can_rx("[machine.1] 10 can-tx sender=1 id=0x0001 len=5"), None);
+        assert_eq!(
+            parse_can_rx("[machine.1] 10 can-tx sender=1 id=0x0001 len=5"),
+            None
+        );
         assert_eq!(parse_can_rx("PASS"), None);
     }
 

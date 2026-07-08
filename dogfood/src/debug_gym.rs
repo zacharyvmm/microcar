@@ -87,7 +87,10 @@ impl DebugGymReport {
                             None => Json::str("none"),
                         },
                     ),
-                    ("max_trace_time".into(), Json::UInt(s.max_trace_time as u128)),
+                    (
+                        "max_trace_time".into(),
+                        Json::UInt(s.max_trace_time as u128),
+                    ),
                     ("no_overshoot".into(), Json::Bool(s.no_overshoot)),
                     ("clock_monotonic".into(), Json::Bool(s.clock_monotonic)),
                     ("passed".into(), Json::Bool(s.passed)),
@@ -146,10 +149,7 @@ pub fn max_trace_time(trace: &[String]) -> u64 {
 
 /// Run the debug_gym checks for `scenarios` through `bin`.
 pub fn run_debug_gym(bin: &Path, scenarios: &[PathBuf], timeout: Duration) -> DebugGymReport {
-    let results = scenarios
-        .iter()
-        .map(|s| run_one(bin, s, timeout))
-        .collect();
+    let results = scenarios.iter().map(|s| run_one(bin, s, timeout)).collect();
     DebugGymReport { scenarios: results }
 }
 
@@ -178,7 +178,9 @@ fn run_one(bin: &Path, scenario: &Path, timeout: Duration) -> DebugGymScenarioRe
             "stepped==continuous (hash {}), max_time {}{}, clock monotonic",
             &continuous_hash[..continuous_hash.len().min(12)],
             max_t,
-            deadline.map(|d| format!(" <= deadline {d}")).unwrap_or_default(),
+            deadline
+                .map(|d| format!(" <= deadline {d}"))
+                .unwrap_or_default(),
         )
     } else if !clean {
         format!(
@@ -217,8 +219,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("dg_dur_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("s.toml");
-        std::fs::write(&f, "name = \"x\"\nduration_ms = 2000\n[[machine]]\nid=1\nname=\"a\"\n")
-            .unwrap();
+        std::fs::write(
+            &f,
+            "name = \"x\"\nduration_ms = 2000\n[[machine]]\nid=1\nname=\"a\"\n",
+        )
+        .unwrap();
         assert_eq!(parse_duration_ms(&f), Some(2000));
         let g = dir.join("n.toml");
         std::fs::write(&g, "name = \"x\"\n").unwrap();

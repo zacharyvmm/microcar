@@ -78,7 +78,10 @@ impl ScenarioSummary {
     pub fn passed(&self) -> bool {
         self.status == RunStatus::Pass
             && self.deterministic
-            && !self.invariants.iter().any(|i| i.status == CheckStatus::Fail)
+            && !self
+                .invariants
+                .iter()
+                .any(|i| i.status == CheckStatus::Fail)
     }
 
     fn to_json(&self) -> Json {
@@ -164,12 +167,20 @@ impl Summary {
             ("harness_version".into(), Json::str(&self.harness_version)),
             (
                 "scenarios".into(),
-                Json::Arr(self.scenarios.iter().map(ScenarioSummary::to_json).collect()),
+                Json::Arr(
+                    self.scenarios
+                        .iter()
+                        .map(ScenarioSummary::to_json)
+                        .collect(),
+                ),
             ),
             (
                 "totals".into(),
                 Json::Obj(vec![
-                    ("scenarios".into(), Json::UInt(self.totals.scenarios as u128)),
+                    (
+                        "scenarios".into(),
+                        Json::UInt(self.totals.scenarios as u128),
+                    ),
                     ("passed".into(), Json::UInt(self.totals.passed as u128)),
                     ("failed".into(), Json::UInt(self.totals.failed as u128)),
                     (
@@ -202,7 +213,12 @@ pub fn write_summary(reports: &[DeterminismReport], path: &Path) -> io::Result<(
 
 /// Build a [`Summary`] from determinism reports (checks invariants per scenario).
 pub fn build_summary(reports: &[DeterminismReport]) -> Summary {
-    Summary::new(reports.iter().map(ScenarioSummary::from_determinism).collect())
+    Summary::new(
+        reports
+            .iter()
+            .map(ScenarioSummary::from_determinism)
+            .collect(),
+    )
 }
 
 #[cfg(test)]

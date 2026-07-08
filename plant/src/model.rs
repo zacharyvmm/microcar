@@ -110,8 +110,7 @@ impl MicrocarPlant {
             self.vehicle
                 .set_driver_input(input.throttle_percent, input.brake_pressed);
             // Map throttle to motor torque for now (1:1 in demo).
-            self.vehicle
-                .set_motor_torque(input.throttle_percent as i8);
+            self.vehicle.set_motor_torque(input.throttle_percent as i8);
             self.input_cursor += 1;
         }
 
@@ -171,12 +170,7 @@ impl EnvironmentModel for MicrocarPlant {
         self.pending_inputs.sort_by_key(|i| i.at);
     }
 
-    fn apply_fault(
-        &mut self,
-        target: &str,
-        fault_type: &str,
-        value: Option<u32>,
-    ) -> bool {
+    fn apply_fault(&mut self, target: &str, fault_type: &str, value: Option<u32>) -> bool {
         if target == "battery" && fault_type == "force_temperature" {
             if let Some(temp_c) = value {
                 self.battery.force_temperature(temp_c as f32);
@@ -221,7 +215,10 @@ mod tests {
         assert_eq!(frames.len(), 4); // 2 nodes × 2 frames
 
         // First frame should be wheel speed at 0.
-        let wheel_frames: Vec<_> = frames.iter().filter(|(_, _, id, _)| *id == CAN_ID_WHEEL_SPEED).collect();
+        let wheel_frames: Vec<_> = frames
+            .iter()
+            .filter(|(_, _, id, _)| *id == CAN_ID_WHEEL_SPEED)
+            .collect();
         assert_eq!(wheel_frames.len(), 2); // one per node
         let (_rx, _sender, _id, data) = wheel_frames[0];
         assert_eq!(data.len(), 2);
@@ -229,7 +226,10 @@ mod tests {
         assert_eq!(u16::from_be_bytes([data[0], data[1]]), 0);
 
         // Plant sensor frames.
-        let bms_frames: Vec<_> = frames.iter().filter(|(_, _, id, _)| *id == CAN_ID_PLANT_SENSORS).collect();
+        let bms_frames: Vec<_> = frames
+            .iter()
+            .filter(|(_, _, id, _)| *id == CAN_ID_PLANT_SENSORS)
+            .collect();
         assert_eq!(bms_frames.len(), 2);
         let (_rx, _sender, _id, data) = bms_frames[0];
         assert_eq!(data.len(), 7);
@@ -295,7 +295,7 @@ mod tests {
         let mut plant = MicrocarPlant::new(10).with_machine_id(99);
 
         // Inputs at different times.
-        plant.queue_driver_input(0, 50, false);    // start at 50%
+        plant.queue_driver_input(0, 50, false); // start at 50%
         plant.queue_driver_input(500_000, 100, false); // increase to 100%
 
         // Step until second input applies.

@@ -140,7 +140,10 @@ impl TomlZooReport {
                 "sibling_isolation".into(),
                 Json::Obj(vec![
                     ("healthy_scenario".into(), Json::str(&s.healthy_scenario)),
-                    ("healthy_status".into(), Json::str(s.healthy_status.as_str())),
+                    (
+                        "healthy_status".into(),
+                        Json::str(s.healthy_status.as_str()),
+                    ),
                     ("bad_scenario".into(), Json::str(&s.bad_scenario)),
                     ("bad_status".into(), Json::str(s.bad_status.as_str())),
                     ("isolated".into(), Json::Bool(s.isolated)),
@@ -216,7 +219,10 @@ pub fn evaluate_case(case: &TomlZooCase, run: &ScenarioRun) -> CaseResult {
     let passed = no_panic && exit_ok && kind_ok;
 
     let detail = if passed {
-        format!("structured error [{}], exit {}", case.expected_kind, EXIT_SCENARIO_ERROR)
+        format!(
+            "structured error [{}], exit {}",
+            case.expected_kind, EXIT_SCENARIO_ERROR
+        )
     } else if !no_panic {
         format!(
             "PANICKED (status={}, exit={:?}); stderr: {}",
@@ -287,8 +293,12 @@ pub fn run_sibling_isolation(
     let h_handle = std::thread::spawn(move || run_scenario(&bin_a, &healthy_a, timeout));
     let b_handle = std::thread::spawn(move || run_scenario(&bin_b, &bad_b, timeout));
 
-    let h = h_handle.join().unwrap_or_else(|_| panic!("healthy thread panicked"));
-    let b = b_handle.join().unwrap_or_else(|_| panic!("bad thread panicked"));
+    let h = h_handle
+        .join()
+        .unwrap_or_else(|_| panic!("healthy thread panicked"));
+    let b = b_handle
+        .join()
+        .unwrap_or_else(|_| panic!("bad thread panicked"));
 
     let isolated = h.status == RunStatus::Pass
         && b.status != RunStatus::Panic
@@ -346,7 +356,11 @@ mod tests {
 
     #[test]
     fn case_passes_on_expected_kind_and_exit_2() {
-        let run = synthetic_run(RunStatus::Fail, Some(2), &["microcar: error [parse]: bad toml"]);
+        let run = synthetic_run(
+            RunStatus::Fail,
+            Some(2),
+            &["microcar: error [parse]: bad toml"],
+        );
         let r = evaluate_case(&case("parse"), &run);
         assert!(r.passed, "detail: {}", r.detail);
     }
@@ -385,7 +399,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("x.toml");
         std::fs::write(&f, "# expect-kind:  duplicate-bus-node\nname = \"x\"\n").unwrap();
-        assert_eq!(parse_expected_kind(&f).as_deref(), Some("duplicate-bus-node"));
+        assert_eq!(
+            parse_expected_kind(&f).as_deref(),
+            Some("duplicate-bus-node")
+        );
         let g = dir.join("y.toml");
         std::fs::write(&g, "name = \"y\"\n").unwrap();
         assert_eq!(parse_expected_kind(&g), None);

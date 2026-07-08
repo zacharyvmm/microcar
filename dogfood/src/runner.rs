@@ -245,7 +245,10 @@ mod tests {
     fn tail_keeps_last_n() {
         let v: Vec<String> = (0..50).map(|i| i.to_string()).collect();
         let t = tail(&v, 3);
-        assert_eq!(t, vec!["47".to_string(), "48".to_string(), "49".to_string()]);
+        assert_eq!(
+            t,
+            vec!["47".to_string(), "48".to_string(), "49".to_string()]
+        );
     }
 
     #[test]
@@ -271,6 +274,9 @@ mod tests {
         );
         assert_eq!(run.status, RunStatus::Fail);
         assert!(run.trace.is_empty());
-        assert!(run.stderr_tail.iter().any(|l| l.contains("failed to spawn")));
+        assert!(run
+            .stderr_tail
+            .iter()
+            .any(|l| l.contains("failed to spawn")));
     }
 }

@@ -115,7 +115,10 @@ mod tests {
             ("name".into(), Json::str("a\"b")),
             ("n".into(), Json::UInt(7)),
             ("ok".into(), Json::Bool(true)),
-            ("arr".into(), Json::Arr(vec![Json::str("x"), Json::str("y")])),
+            (
+                "arr".into(),
+                Json::Arr(vec![Json::str("x"), Json::str("y")]),
+            ),
         ]);
         let s = j.to_pretty();
         assert!(s.contains("\"name\": \"a\\\"b\""));
