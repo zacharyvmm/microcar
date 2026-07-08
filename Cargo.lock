@@ -233,6 +233,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "microcar-dogfood"
+version = "0.1.0"
+
+[[package]]
 name = "microcar-plant"
 version = "0.1.0"
 dependencies = [
@@ -455,6 +459,7 @@ name = "sim-world"
 version = "1.0.0"
 dependencies = [
  "serde",
+ "serde_json",
  "sim-core",
  "sim-devices",
  "sim-ffi",

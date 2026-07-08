@@ -1,0 +1,18 @@
+[package]
+name = "microcar-dogfood"
+version = "0.1.0"
+edition = "2021"
+description = "Dogfood harness foundation for microcar/costar: runs scenarios, hashes traces, checks invariants, enforces timeouts, and emits JSON summaries"
+
+[lib]
+name = "microcar_dogfood"
+path = "src/lib.rs"
+
+[[bin]]
+name = "harness"
+path = "src/bin/harness.rs"
+
+# Intentionally std-only. The harness drives the `microcar` binary as a
+# subprocess, so it needs no dependency on the sim-* crates and adds no
+# external crates. See src/lib.rs for the rationale.
+[dependencies]

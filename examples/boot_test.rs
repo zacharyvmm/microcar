@@ -1,7 +1,7 @@
 //! Minimal FreeRTOS boot test — single machine, no World.
 
-use sim_ffi::simulator::Simulator;
 use sim_core::SimConfig;
+use sim_ffi::simulator::Simulator;
 
 extern "C" {
     fn microcar_boot();
@@ -15,7 +15,9 @@ fn main() {
     let _guard = sim.activate();
     println!("Simulator activated");
 
-    unsafe { microcar_boot(); }
+    unsafe {
+        microcar_boot();
+    }
     println!("microcar_boot() called");
 
     // Scope the borrows
@@ -23,7 +25,10 @@ fn main() {
         let global = sim.sim_global.borrow();
         println!("Tasks in SimGlobal: {}", global.tasks.len());
         if let Some(ref trace) = global.trace {
-            println!("Firmware trace events (before tick): {}", trace.events().len());
+            println!(
+                "Firmware trace events (before tick): {}",
+                trace.events().len()
+            );
         }
     }
 
@@ -34,15 +39,27 @@ fn main() {
         total_ticks += 1;
         let global = sim.sim_global.borrow();
         let trace_len = global.trace.as_ref().map(|t| t.events().len()).unwrap_or(0);
-        println!("Tick {}: more={}, tasks={}, trace={}", i, more, global.tasks.len(), trace_len);
+        println!(
+            "Tick {}: more={}, tasks={}, trace={}",
+            i,
+            more,
+            global.tasks.len(),
+            trace_len
+        );
         drop(global);
-        if more == 0 { break; }
+        if more == 0 {
+            break;
+        }
     }
 
     // Final trace dump
     let global = sim.sim_global.borrow();
     if let Some(ref trace) = global.trace {
-        println!("\nFirmware trace ({} events, {} ticks):", trace.events().len(), total_ticks);
+        println!(
+            "\nFirmware trace ({} events, {} ticks):",
+            trace.events().len(),
+            total_ticks
+        );
         for e in trace.events().iter().take(30) {
             println!("  {}", e);
         }

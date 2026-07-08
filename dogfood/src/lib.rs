@@ -1,0 +1,42 @@
+//! # microcar-dogfood
+//!
+//! Foundation for the microcar/costar dogfood harness (see
+//! `docs/costar_microcar_dogfood_plan.md`, "Dogfood Harness Foundation").
+//!
+//! It runs costar scenarios through the `microcar` binary, normalizes and hashes
+//! their traces, checks invariants, enforces wall-clock timeouts, verifies
+//! solo-vs-repeat determinism, and emits JSON summaries for CI.
+//!
+//! ## Why subprocess-driven?
+//!
+//! The simulator's `World` is `!Send`, so it can't be handed to a timeout thread
+//! for in-process cancellation. The harness therefore spawns the `microcar`
+//! binary as a child process ([`runner`]). That buys three things the plan
+//! requires: real wall-clock timeout enforcement (kill the child), panic
+//! isolation (a child panic can't unwind us), and zero coupling to the `sim-*`
+//! crates — this crate is **std-only, no external dependencies**.
+//!
+//! ## Module map
+//!
+//! * [`runner`] — spawn microcar, capture trace, enforce timeout.
+//! * [`trace_hash`] — conservative normalization + stable FNV-1a hashing.
+//! * [`invariants`] — [`invariants::Invariant`] trait, implemented checks, and
+//!   TODO stubs for the invariants that need richer trace data.
+//! * [`determinism`] — run N times, assert all trace hashes match.
+//! * [`summary`] / [`json`] — hand-rolled JSON summary emitter.
+
+pub mod determinism;
+pub mod invariants;
+pub mod json;
+pub mod runner;
+pub mod summary;
+pub mod trace_hash;
+
+pub use determinism::{check_solo_vs_repeat, DeterminismReport};
+pub use invariants::{
+    any_failed, check_all, check_default, default_invariants, CheckStatus, Invariant,
+    InvariantResult,
+};
+pub use runner::{run_scenario, RunStatus, ScenarioRun};
+pub use summary::{build_summary, write_summary, Summary, HARNESS_VERSION};
+pub use trace_hash::{normalize_trace, normalized_hash, trace_hash};

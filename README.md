@@ -1,27 +1,47 @@
 # microcar
 
-A deterministic distributed embedded simulation of a tiny electric go-kart,
-serving as a dogfood demo for [costar](https://github.com/zacharyvmm/costar).
+A **compact passenger-EV embedded-system benchmark** for
+[costar](https://github.com/zacharyvmm/costar). microcar simulates a
+simplified electric-vehicle ECU network — safety behavior, diagnostics,
+cockpit devices, telematics, charging, OTA, and fault scenarios — under
+deterministic virtual time. It is the canonical dogfood project for costar:
+each vehicle subsystem exists to force a specific costar capability, not to
+model high-fidelity car physics.
 
-This demo simulates several ECUs connected by a deterministic CAN-like bus:
+> microcar is **not** a go-kart, toy car, RC car, or physics simulator. It is
+> a deterministic embedded-systems benchmark whose job is to exercise the
+> simulator surfaces a product needs: gRPC sessions, concurrent runs, device
+> inspection, display/touch streaming, trace correlation, topology graphing,
+> breakpoints, replay, and hostile input.
 
-- **Gateway ECU** — central supervisor, heartbeat monitor, fault manager
-- **Powertrain ECU** — throttle/brake processing, motor command, torque limiting
-- **Battery Management ECU** — battery state, temperature/current limits, fault reporting
-- **Dashboard ECU** — display state, speed, warnings, heartbeat (FreeRTOS or Zephyr)
+The core ECUs model a compact EV's control network, connected by deterministic
+CAN-like buses:
+
+- **Gateway ECU** — vehicle mode authority, heartbeat monitor, fault aggregator, bus bridge
+- **Powertrain ECU** — accelerator/brake processing, torque command, torque limits
+- **BMS ECU** — state of charge, voltage, current, temperature, torque limits, pack faults
+- **Dashboard ECU** — speed, warnings, drive mode, user-facing state (FreeRTOS or Zephyr)
+
+Vehicle modes: `OFF`, `ACCESSORY`, `READY`, `DRIVE`, `LIMITED_POWER`, `FAULT`
+(with `CHARGING`, `SERVICE`, `OTA_UPDATE`, and `TRANSPORT_MODE` added by later
+dogfood lanes).
 
 It dogfoods costar features including:
 
-- multi-machine simulation
+- multi-machine simulation and multi-bus topology
 - FreeRTOS tasks, queues, timers, and event groups
 - Zephyr RTOS threading (k_thread_create, k_sleep)
 - mixed-RTOS scenarios (FreeRTOS + Zephyr on the same bus)
 - deterministic virtual time
 - virtual sensors and actuators
 - CAN-like message passing
-- fault injection
-- golden traces
-- safety assertions
+- fault injection and malformed-scenario robustness
+- golden traces and trace-hash determinism
+- safety assertions and invariant checking
+
+See `docs/costar_microcar_dogfood_plan.md` for the canonical roadmap that links
+each dogfood lane (simfarm, toml_zoo, topology, cockpit, debug_gym, diagnostics,
+telematics, charging, OTA) to the costar capability it forces.
 
 ## Quick Start
 
