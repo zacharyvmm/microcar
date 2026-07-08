@@ -25,6 +25,7 @@
 //! * [`determinism`] — run N times, assert all trace hashes match.
 //! * [`summary`] / [`json`] — hand-rolled JSON summary emitter.
 
+pub mod charging;
 pub mod debug_gym;
 pub mod determinism;
 pub mod diagnostics;
@@ -37,6 +38,10 @@ pub mod toml_zoo;
 pub mod topology;
 pub mod trace_hash;
 
+pub use charging::{
+    run_charging, run_charging_scenario, ChargingCheck, ChargingReport, ChargingScenarioResult,
+    DEFAULT_CHARGING_DIR,
+};
 pub use debug_gym::{run_debug_gym, DebugGymReport, DebugGymScenarioResult, DEFAULT_SCENARIOS};
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
 pub use diagnostics::{

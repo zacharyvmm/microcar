@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use microcar_dogfood::charging::{self, DEFAULT_CHARGING_DIR};
 use microcar_dogfood::debug_gym::DEFAULT_SCENARIOS;
 use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::diagnostics::{self, DEFAULT_DIAGNOSTICS_DIR};
@@ -53,6 +54,7 @@ fn main() -> ExitCode {
         "toml-zoo" | "toml_zoo" => cmd_toml_zoo(rest),
         "topology" => cmd_topology(rest),
         "diagnostics" => cmd_diagnostics(rest),
+        "charging" => cmd_charging(rest),
         "debug-gym" | "debug_gym" => cmd_debug_gym(rest),
         "-h" | "--help" | "help" => {
             usage();
@@ -145,6 +147,100 @@ fn cmd_diagnostics(args: &[String]) -> ExitCode {
     println!("──────────────────────────────────────────");
     println!(
         "diagnostics: {pass} passed, {fail} failed (of {} scenarios)",
+        report.scenarios.len()
+    );
+
+    if let Some(path) = &json {
+        write_json(path, &report.to_json().to_pretty());
+    }
+
+    if report.passed() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `harness charging [--dir DIR] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the charging lane: each scenario carries `# charging-expect:`
+/// directives and is checked from compact firmware trace events (charging
+/// mode, drive-blocked-while-plugged, and the powertrain torque clamp).
+fn cmd_charging(args: &[String]) -> ExitCode {
+    let mut dir = PathBuf::from(DEFAULT_CHARGING_DIR);
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => dir = PathBuf::from(v),
+                    None => return argerr("charging", "--dir needs a path"),
+                }
+            }
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("charging", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("charging", "--json needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("charging", &format!("unknown flag: {other}"));
+            }
+            other => dir = PathBuf::from(other),
+        }
+        i += 1;
+    }
+
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
+    println!("microcar binary: {}", bin.display());
+    println!("charging corpus: {}\n", dir.display());
+
+    let report = match charging::run_charging(&bin, &dir, timeout) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("harness charging: reading corpus {}: {e}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+
+    for s in &report.scenarios {
+        println!("[{}] {}", okmark(s.passed), s.name);
+        if let Some(err) = &s.run_error {
+            println!("        - run error: {err}");
+        }
+        for c in &s.checks {
+            println!("        [{}] {} -> {}", okmark(c.passed), c.name, c.detail);
+        }
+    }
+
+    let (pass, fail) = report.totals();
+    println!("──────────────────────────────────────────");
+    println!(
+        "charging: {pass} passed, {fail} failed (of {} scenarios)",
         report.scenarios.len()
     );
 
@@ -912,6 +1008,7 @@ fn usage() {
          \x20 harness toml-zoo [--dir DIR] [--healthy SCENARIO] [--no-sibling] [--timeout-secs N] [--json OUT]\n\
          \x20 harness topology [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness diagnostics [--dir DIR] [--timeout-secs N] [--json OUT]\n\
+         \x20 harness charging [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness debug-gym [--scenario-dir DIR] [--timeout-secs N] [--json OUT]\n\
          \n\
          FLAGS:\n\

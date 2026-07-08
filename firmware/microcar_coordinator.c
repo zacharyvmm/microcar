@@ -21,6 +21,8 @@ extern void dashboard_main(void *pvParameters);
 extern void diagnostics_tool_main(void *pvParameters);
 extern void gateway_enable_dogfood_diag_script(uint8_t inject_fault);
 extern void powertrain_enable_dogfood_service_mode(void);
+extern void gateway_enable_dogfood_charging_script(void);
+extern void powertrain_enable_dogfood_charging(void);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
 extern void bt_demo_main(void *pvParameters);
@@ -109,6 +111,26 @@ void microcar_boot_powertrain_diag_service(void)
 {
     sim_trace_u32("microcar_boot_powertrain_diag_service", 1);
     powertrain_enable_dogfood_service_mode();
+    microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the charging dogfood script enabled
+/// (plug-in → CHARGING, drive blocked while plugged).
+void microcar_boot_gateway_charging(void)
+{
+    sim_trace_u32("microcar_boot_gateway_charging", 1);
+    gateway_enable_dogfood_charging_script();
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot powertrain forced into CHARGING-mode torque computation
+/// (torque must clamp to 0 while charging).
+void microcar_boot_powertrain_charging(void)
+{
+    sim_trace_u32("microcar_boot_powertrain_charging", 1);
+    powertrain_enable_dogfood_charging();
     microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

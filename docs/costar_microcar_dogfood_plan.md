@@ -732,6 +732,67 @@ device state, DTC creation, assertion failure) are thin wrappers on the same
 `continue_until` mechanism but mostly become meaningful once firmware emits
 those events.
 
+## Milestone 12 status (this branch)
+
+The twelfth milestone added the first **diagnostics** dogfood lane
+(recorded in detail in `docs/BLOCKERS.md`): protocol support for `SERVICE`,
+`OTA_UPDATE`, `TRANSPORT_MODE`, diagnostic request/response IDs
+(`0x600`/`0x601`), gateway DTC/session handling, a diagnostics-tool ECU,
+service-mode torque blocking, and a `harness diagnostics` lane. Like the later
+EV lanes it is **trace-backed** — it asserts compact firmware `user-u32` trace
+events emitted by explicit dogfood firmware variants (`gateway_diag`,
+`gateway_diag_fault`, `powertrain_diag_service`) rather than depending on the
+still-unreliable firmware-originated CAN RX/TX path. `harness diagnostics` is
+2/2 green (`read_clear_dtcs_after_bms_fault`, `service_mode_disables_drive`),
+covering SERVICE-mode entry, read-mode, read/clear DTCs, actuator self-test, and
+the SERVICE torque clamp.
+
+## Milestone 13 status (this branch)
+
+The thirteenth milestone adds the first **charging** dogfood lane — the plan's
+`charging` EV lane, "drive blocked while plugged". It is **microcar-only** (no
+costar change), gated behind opt-in dogfood firmware variants so every existing
+golden trace stays byte-identical (verified: the `debug_gym` trace hashes for
+`bms_overtemp_limp_mode` and `brake_overrides_throttle` are unchanged, and all
+29 non-soak vehicle scenarios still pass).
+
+Key realization: the vehicle-mode state machine and the safety clamp **already**
+model charging. `mc_gateway_determine_mode` keeps `VEHICLE_CHARGING` sticky
+(only a critical fault overrides it), and `mc_safety_clamp_torque` /
+`safety_mode_blocks_torque` already zero positive torque and disable the motor
+outside `DRIVE`/`LIMP`. What was missing was (a) any way to *enter* CHARGING
+(no plug trigger) and (b) a lane to exercise the safety property end-to-end.
+
+Following the M12 diagnostics dogfood-script pattern (trace-backed, no reliance
+on firmware CAN RX):
+
+- firmware: `gateway_enable_dogfood_charging_script()` + `run_dogfood_charging_script()`
+  in the gateway ECU — at 100 ms a charger is "plugged in" (gateway enters
+  CHARGING, traces `gateway_charging_state`); at 300 ms a drive request arrives
+  while plugged and `gateway_state_enter_drive` is a no-op outside READY, so the
+  vehicle stays in CHARGING (traces `charging_drive_blocked=1`).
+  `powertrain_enable_dogfood_charging()` forces a CHARGING-mode torque
+  computation with an 80% throttle demand and traces `charging_motor_command`
+  (torque + motor_enable), so the clamp is exercised. Two new boot functions
+  (`microcar_boot_gateway_charging`, `microcar_boot_powertrain_charging`) wire
+  the flags; `src/lib.rs` resolves `firmware/gateway_charging_ecu` /
+  `firmware/powertrain_charging_ecu`. All charging behavior is behind flags that
+  default to `0`, so the default gateway/powertrain firmware is unchanged.
+- microcar dogfood: `dogfood/charging/plug_blocks_drive.toml` (with
+  `# charging-expect:` directives), `dogfood/src/charging.rs`, and
+  `harness charging`. The lane asserts `charging-mode` (gateway entered
+  CHARGING), `drive-blocked` (a drive request while plugged left the vehicle in
+  CHARGING), and `motor-torque max=0` (every CHARGING motor command clamped
+  torque ≤ 0 with the motor disabled). `harness charging` is 1/1 green.
+
+The dogfood crate now has 68 unit tests (+6 charging); state_tests 92; all other
+lanes unregressed (`topology` 7/7, `toml_zoo` 11/11, `simfarm` PASS,
+`debug-gym` 4/4, `diagnostics` 2/2); clippy/fmt-clean. The deferred
+`toml_zoo` `charging-while-drive` case still needs charging represented in the
+scenario *schema* (a plug input / mode field), which this firmware-side lane
+does not yet add; OTA and the charging plant physics (temperature-rise /
+reduced-current / charge-complete) remain follow-ups.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

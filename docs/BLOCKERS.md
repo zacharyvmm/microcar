@@ -11,7 +11,7 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 
 ---
 
-## 1. What is complete (12 milestones, verified locally)
+## 1. What is complete (13 milestones, verified locally)
 
 | Milestone | Track | Result |
 |-----------|-------|--------|
@@ -27,16 +27,17 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 | M10 | Keyframe save/restore + deterministic replay | `World::replay_from_keyframe` (replay checkpoint, not stack snapshot) |
 | M11 | Message breakpoint + `continue_until` fix | `World::run_to_frame`; fixed a predicate-miss on the `Done` step |
 | M12 | Diagnostics dogfood lane | `harness diagnostics` 2/2: SERVICE mode, read mode, read/clear DTCs, actuator self-test, SERVICE torque clamp |
+| M13 | Charging dogfood lane | `harness charging` 1/1: plug→CHARGING, drive blocked while plugged, powertrain torque clamped to 0 (trace-backed, golden traces byte-identical) |
 
 **Fully-delivered plan tracks:** engine stabilization; networking/device-edge hardening;
 `simfarm`; `toml_zoo`; `topology` (7/7); Trace v2 data model; debugging primitives
 (`step`, `continue_until`, keyframe replay, message breakpoint), the `debug_gym`
 determinism invariants, and the first diagnostics lane.
 
-Test counts: costar `sim-world` 110 unit tests, `sim-core` 25; microcar `dogfood` 62 unit
+Test counts: costar `sim-world` 110 unit tests, `sim-core` 25; microcar `dogfood` 68 unit
 tests. All lanes green: `harness topology` 7/7, `toml-zoo` 11/11, `simfarm` PASS,
-`debug-gym` 4/4, `diagnostics` 2/2. All 29 non-soak vehicle scenarios pass with golden
-traces intact.
+`debug-gym` 4/4, `diagnostics` 2/2, `charging` 1/1. All 29 non-soak vehicle scenarios pass
+with golden traces intact.
 
 ---
 
@@ -65,8 +66,12 @@ blocking, and a `harness diagnostics` lane with two scenarios. Verified locally:
 passes 2/2.
 
 **Remaining blockers:**
-1. Charging and OTA behavior still do not exist in firmware. They need new ECU logic and
-   scenario contracts.
+1. **Charging: first safety lane delivered (M13).** The "drive blocked while plugged" safety
+   contract now has a green `harness charging` lane, using trace-backed charging dogfood
+   firmware variants (`gateway_charging`, `powertrain_charging`) in the same pattern as
+   diagnostics. Still missing: the richer charging FSM (handshake / temperature-rise /
+   reduced-current / charge-complete) and the charging plant physics. **OTA** behavior still
+   does not exist in firmware at all and needs new ECU logic + scenario contracts.
 2. The plan's deeper diagnostics item, live BMS data, is not implemented yet.
 3. A simulator integration gap remains: firmware-originated CAN and firmware RX are not a
    reliable assertion path in these diagnostics scenarios, so the diagnostics lane uses

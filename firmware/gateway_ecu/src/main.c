@@ -50,6 +50,7 @@ static fault_manager_t     g_fm;
 static uint8_t             g_diag_session_active = 0;
 static uint8_t             g_diag_dogfood_script = 0;
 static uint8_t             g_diag_dogfood_inject_fault = 0;
+static uint8_t             g_charging_dogfood_script = 0;
 
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
@@ -111,6 +112,11 @@ void gateway_enable_dogfood_diag_script(uint8_t inject_fault)
 {
     g_diag_dogfood_script = 1;
     g_diag_dogfood_inject_fault = inject_fault ? 1 : 0;
+}
+
+void gateway_enable_dogfood_charging_script(void)
+{
+    g_charging_dogfood_script = 1;
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -316,6 +322,41 @@ static void run_dogfood_diag_script(uint32_t *script_ms, uint32_t *sent_mask)
     if (*script_ms >= 750 && !(*sent_mask & 0x40)) {
         synth_diag_request(MC_DIAG_READ_DTCS, 5);
         *sent_mask |= 0x40;
+    }
+}
+
+/// Drive the charging dogfood lane inside gateway firmware.
+///
+/// This exercises the charging safety contract without relying on the
+/// (still unreliable) firmware CAN RX path, mirroring the diagnostics script:
+///   * at 100ms a charger is "plugged in" → the gateway enters CHARGING and
+///     broadcasts the mode (mc_gateway_determine_mode keeps CHARGING sticky);
+///   * at 300ms a drive request arrives while plugged → gateway_state_enter_drive
+///     is a no-op outside READY, so the vehicle must remain in CHARGING
+///     (drive blocked while plugged).
+static void run_dogfood_charging_script(uint32_t *script_ms, uint32_t *sent_mask)
+{
+    if (!g_charging_dogfood_script) return;
+
+    *script_ms += 10;
+
+    // Plug inserted → enter CHARGING.
+    if (*script_ms >= 100 && !(*sent_mask & 0x01)) {
+        g_gs.mode = VEHICLE_CHARGING;
+        sim_trace_u32("charging_plug", 1);
+        sim_trace_u32("gateway_charging_state", (uint32_t)g_gs.mode);
+        sim_trace_u32("vehicle_mode", (uint32_t)g_gs.mode);
+        xEventGroupSetBits(g_mode_events, 0x01);
+        *sent_mask |= 0x01;
+    }
+
+    // Drive request while plugged → must stay in CHARGING.
+    if (*script_ms >= 300 && !(*sent_mask & 0x02)) {
+        gateway_state_enter_drive(&g_gs); // no-op unless mode == READY
+        uint8_t blocked = (g_gs.mode == VEHICLE_CHARGING) ? 1 : 0;
+        sim_trace_u32("charging_drive_blocked", blocked);
+        sim_trace_u32("gateway_charging_state", (uint32_t)g_gs.mode);
+        *sent_mask |= 0x02;
     }
 }
 
@@ -533,6 +574,8 @@ void gateway_main(void *pvParameters)
     mc_can_frame_t tx;
     uint32_t diag_script_ms = 0;
     uint32_t diag_script_sent = 0;
+    uint32_t charging_script_ms = 0;
+    uint32_t charging_script_sent = 0;
 
     // Send initial heartbeat at boot.
     send_heartbeat(0, &tx);
@@ -549,6 +592,7 @@ void gateway_main(void *pvParameters)
         }
 
         run_dogfood_diag_script(&diag_script_ms, &diag_script_sent);
+        run_dogfood_charging_script(&charging_script_ms, &charging_script_sent);
 
         // ── Check for urgent fault notifications ────────────────
         uint32_t notify_val = 0;

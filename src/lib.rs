@@ -45,6 +45,8 @@ extern "C" {
     fn microcar_boot_gateway_diag_fault();
     fn microcar_boot_powertrain();
     fn microcar_boot_powertrain_diag_service();
+    fn microcar_boot_gateway_charging();
+    fn microcar_boot_powertrain_charging();
     fn microcar_boot_bms();
     fn microcar_boot_dashboard();
     fn microcar_boot_diagnostics_tool();
@@ -117,6 +119,12 @@ impl MicrocarFirmware {
             if path.contains("powertrain_diag_service") {
                 return "powertrain_diag_service";
             }
+            if path.contains("gateway_charging") {
+                return "gateway_charging";
+            }
+            if path.contains("powertrain_charging") {
+                return "powertrain_charging";
+            }
             if path.contains("diagnostics") {
                 return "diagnostics";
             }
@@ -159,6 +167,10 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_gateway_diag();
             } else if ecu.starts_with("powertrain_diag_service") {
                 microcar_boot_powertrain_diag_service();
+            } else if ecu.starts_with("gateway_charging") {
+                microcar_boot_gateway_charging();
+            } else if ecu.starts_with("powertrain_charging") {
+                microcar_boot_powertrain_charging();
             } else if ecu.starts_with("diagnostics") {
                 microcar_boot_diagnostics_tool();
             } else if ecu.starts_with("gateway") {
