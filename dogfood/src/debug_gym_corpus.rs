@@ -39,6 +39,8 @@ pub const DEFAULT_CORPUS_DIR: &str = "dogfood/debug_gym";
 
 /// The gateway is machine id 1 in every corpus scenario.
 const NODE_GATEWAY: u64 = 1;
+/// The powertrain is machine id 2 in every corpus scenario.
+const NODE_POWERTRAIN: u64 = 2;
 
 /// A user-u32 firmware trace event: `[machine.N] <t> user-u32 "label" = value`.
 #[derive(Debug, Clone)]
@@ -100,12 +102,34 @@ fn state_values(trace: &[UserTrace], machine: u64) -> Vec<u32> {
         .collect()
 }
 
+/// A SERVICE-mode powertrain motor command, decoded from the packed
+/// `diag_motor_command` trace value (`(torque << 8) | motor_enable`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MotorCommand {
+    torque: i8,
+    motor_enable: bool,
+}
+
+fn service_motor_commands(trace: &[UserTrace]) -> Vec<MotorCommand> {
+    trace
+        .iter()
+        .filter(|e| e.machine == NODE_POWERTRAIN && e.label == "diag_motor_command")
+        .map(|e| MotorCommand {
+            torque: ((e.value >> 8) & 0xff) as u8 as i8,
+            motor_enable: (e.value & 0x1) == 1,
+        })
+        .collect()
+}
+
 /// Which built-in bug a seed represents (selects the assertion logic).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeedKind {
     /// OTA rollback bug: a broken CRC check accepts a corrupt image, so the
     /// update boots the bad slot instead of rolling back.
     OtaRollback,
+    /// SERVICE-mode torque clamp bug: the powertrain skips the SERVICE safety
+    /// clamp, so a service session still commands drive torque.
+    ServiceTorqueClamp,
 }
 
 /// A seeded-bug corpus entry: metadata + the buggy/fixed scenario pair.
@@ -127,21 +151,40 @@ pub struct Seed {
 
 /// The built-in seeded-bug corpus.
 pub fn builtin_seeds() -> Vec<Seed> {
-    vec![Seed {
-        name: "ota_rollback",
-        kind: SeedKind::OtaRollback,
-        description: "A broken OTA CRC check accepts a corrupt image as valid, \
+    vec![
+        Seed {
+            name: "ota_rollback",
+            kind: SeedKind::OtaRollback,
+            description: "A broken OTA CRC check accepts a corrupt image as valid, \
                       so the slot model commits and boots the bad slot instead \
                       of rolling back to the known-good slot.",
-        symptom: "A corrupt OTA image reaches HEALTHY (ota_boot_result=1) with \
+            symptom: "A corrupt OTA image reaches HEALTHY (ota_boot_result=1) with \
                   no ota_rollback — the vehicle boots unverified firmware.",
-        primitive: "state trace / continue_until(ota_state): step to VERIFYING \
+            primitive: "state trace / continue_until(ota_state): step to VERIFYING \
                     and inspect ota_crc_ok — the buggy firmware reports \
                     ota_crc_ok=1 on a corrupt image where the fix reports 0, so \
                     the runs diverge into HEALTHY vs ROLLED_BACK.",
-        failing_scenario: "ota_rollback_bug/failing.toml",
-        fixed_scenario: "ota_rollback_bug/fixed.toml",
-    }]
+            failing_scenario: "ota_rollback_bug/failing.toml",
+            fixed_scenario: "ota_rollback_bug/fixed.toml",
+        },
+        Seed {
+            name: "service_torque",
+            kind: SeedKind::ServiceTorqueClamp,
+            description: "The powertrain skips the SERVICE-mode safety clamp, so a \
+                      diagnostic service session still commands drive torque \
+                      with the motor enabled.",
+            symptom: "During a SERVICE session an 80% throttle demand produces a \
+                  diag_motor_command with torque>0 and motor_enable=1 — the \
+                  drivetrain is live while the vehicle is being serviced.",
+            primitive: "message breakpoint / continue_until on the \
+                    diag_motor_command trace: stop at the SERVICE-mode motor \
+                    command and inspect the torque + motor_enable — the buggy \
+                    firmware commands torque>0/enabled where the fix commands \
+                    0/disabled.",
+            failing_scenario: "service_torque_bug/failing.toml",
+            fixed_scenario: "service_torque_bug/fixed.toml",
+        },
+    ]
 }
 
 /// One assertion within a seed.
@@ -231,7 +274,77 @@ struct SeedTraces {
 fn evaluate(kind: SeedKind, traces: &SeedTraces) -> Vec<CorpusCheck> {
     match kind {
         SeedKind::OtaRollback => evaluate_ota_rollback(traces),
+        SeedKind::ServiceTorqueClamp => evaluate_service_torque_clamp(traces),
     }
+}
+
+fn evaluate_service_torque_clamp(traces: &SeedTraces) -> Vec<CorpusCheck> {
+    let f = service_motor_commands(&traces.failing);
+    let x = service_motor_commands(&traces.fixed);
+
+    // bug-reproduced: the buggy firmware commands drive torque during a SERVICE
+    // session (some motor command with torque>0 and the motor enabled).
+    let bug_reproduced = !f.is_empty() && f.iter().any(|c| c.torque > 0 && c.motor_enable);
+    let f_max = f.iter().map(|c| c.torque).max().unwrap_or(0);
+    let reproduced_detail = if bug_reproduced {
+        format!(
+            "buggy firmware commanded drive torque in SERVICE (max torque {f_max}, motor enabled) \
+             — the SERVICE clamp was skipped"
+        )
+    } else if f.is_empty() {
+        "expected SERVICE-mode diag_motor_command events from the buggy firmware; saw none"
+            .to_string()
+    } else {
+        format!(
+            "expected the buggy firmware to command torque>0 in SERVICE; max torque was {f_max}"
+        )
+    };
+
+    // bug-fixed: the correct firmware clamps every SERVICE motor command to
+    // torque 0 with the motor disabled.
+    let bug_fixed = !x.is_empty() && x.iter().all(|c| c.torque == 0 && !c.motor_enable);
+    let x_max = x.iter().map(|c| c.torque).max().unwrap_or(0);
+    let fixed_detail = if bug_fixed {
+        "fixed firmware clamped every SERVICE motor command to torque 0 with the motor disabled"
+            .to_string()
+    } else if x.is_empty() {
+        "expected SERVICE-mode diag_motor_command events from the fixed firmware; saw none"
+            .to_string()
+    } else {
+        format!("expected the fixed firmware to clamp SERVICE torque to 0; max torque was {x_max}")
+    };
+
+    // traces-diverge: the buggy run commands positive torque where the fixed run
+    // commands zero — the localizing signal on the diag_motor_command trace.
+    let diverge = f_max > 0 && x_max == 0;
+    let diverge_detail = if diverge {
+        format!(
+            "SERVICE motor commands diverge: buggy max torque {f_max} (motor enabled) vs fixed 0 \
+             (motor disabled)"
+        )
+    } else {
+        format!(
+            "expected divergence (buggy torque>0 vs fixed 0); got buggy {f_max} vs fixed {x_max}"
+        )
+    };
+
+    vec![
+        CorpusCheck {
+            name: "bug-reproduced".into(),
+            passed: bug_reproduced,
+            detail: reproduced_detail,
+        },
+        CorpusCheck {
+            name: "bug-fixed".into(),
+            passed: bug_fixed,
+            detail: fixed_detail,
+        },
+        CorpusCheck {
+            name: "traces-diverge".into(),
+            passed: diverge,
+            detail: diverge_detail,
+        },
+    ]
 }
 
 fn evaluate_ota_rollback(traces: &SeedTraces) -> Vec<CorpusCheck> {
@@ -422,6 +535,93 @@ mod tests {
         for c in &checks {
             assert!(c.passed, "{}: {}", c.name, c.detail);
         }
+    }
+
+    /// A SERVICE-mode motor-command trace event on the powertrain, packed as the
+    /// firmware emits it: `(torque << 8) | motor_enable`.
+    fn mc(torque: i8, motor_enable: bool) -> UserTrace {
+        UserTrace {
+            machine: NODE_POWERTRAIN,
+            label: "diag_motor_command".into(),
+            value: ((torque as u8 as u32) << 8) | (motor_enable as u32),
+        }
+    }
+
+    // The real buggy trace: SERVICE session still commands 80% torque, motor on.
+    fn service_bug_trace() -> Vec<UserTrace> {
+        vec![mc(80, true), mc(80, true), mc(80, true)]
+    }
+
+    // The real fixed trace: SERVICE clamps torque to 0 with the motor disabled.
+    fn service_fixed_trace() -> Vec<UserTrace> {
+        vec![mc(0, false), mc(0, false), mc(0, false)]
+    }
+
+    #[test]
+    fn decodes_packed_motor_command() {
+        // 20481 = (80 << 8) | 1 — the real firmware value for torque 80, motor on.
+        let cmds = service_motor_commands(&[UserTrace {
+            machine: NODE_POWERTRAIN,
+            label: "diag_motor_command".into(),
+            value: 20481,
+        }]);
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].torque, 80);
+        assert!(cmds[0].motor_enable);
+    }
+
+    #[test]
+    fn service_torque_seed_passes_on_real_trace_pair() {
+        let traces = SeedTraces {
+            failing: service_bug_trace(),
+            fixed: service_fixed_trace(),
+        };
+        let checks = evaluate(SeedKind::ServiceTorqueClamp, &traces);
+        assert_eq!(checks.len(), 3);
+        for c in &checks {
+            assert!(c.passed, "{}: {}", c.name, c.detail);
+        }
+    }
+
+    #[test]
+    fn service_torque_fails_when_buggy_firmware_actually_clamps() {
+        // If the "buggy" firmware clamped, the bug did not reproduce.
+        let traces = SeedTraces {
+            failing: service_fixed_trace(),
+            fixed: service_fixed_trace(),
+        };
+        let checks = evaluate(SeedKind::ServiceTorqueClamp, &traces);
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "bug-reproduced")
+                .unwrap()
+                .passed
+        );
+    }
+
+    #[test]
+    fn service_torque_fails_when_fixed_firmware_still_drives() {
+        // If the "fixed" firmware still commands torque, it is not fixed.
+        let traces = SeedTraces {
+            failing: service_bug_trace(),
+            fixed: service_bug_trace(),
+        };
+        let checks = evaluate(SeedKind::ServiceTorqueClamp, &traces);
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "bug-fixed")
+                .unwrap()
+                .passed
+        );
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "traces-diverge")
+                .unwrap()
+                .passed
+        );
     }
 
     #[test]

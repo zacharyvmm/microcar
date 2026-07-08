@@ -112,24 +112,25 @@ the modeling approach (charging FSM depth, OTA slot model, and whether diagnosti
 must be over simulated CAN or may use trace-backed firmware hooks until the CAN RX/TX issue
 is fixed).
 
-### 2.2 `debug_gym` seeded-bug corpus  ⟶ FIRST CASE DELIVERED (M19); rest firmware-gated
+### 2.2 `debug_gym` seeded-bug corpus  ⟶ 2 OF 7 CASES DELIVERED (M19–M20); rest firmware-gated
 
 **What the plan wants:** 7 seeded bugs (gateway race, powertrain timeout/cancel, BMS stale
 sensor, dashboard missed warning, telematics partial-write, OTA rollback, gateway bridge
 loop), each with: description, expected symptom, minimal failing scenario, **golden
 failing trace**, required debugging primitive, and **fixed trace**.
 
-**Delivered (M19):** the first corpus case — **OTA rollback bug** — is done via
-`dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` (**1/1** green). A new
-opt-in buggy firmware variant `gateway_ota_crcbug` has a **broken CRC check** that accepts a
-corrupt OTA image, so the update commits and boots the bad slot; the fixed reference is the
-M16 `gateway_ota_badcrc`, which reports crc-bad and rolls back to slot A. The harness runs
-both the **failing** (buggy) and **fixed** scenarios through the product binary and asserts
-the bug reproduces (golden failing trace), the fix resolves it (fixed trace), and the two
-traces diverge at the VERIFYING step (`ota_crc_ok` 1 vs 0, ending `HEALTHY(5)` vs
-`ROLLED_BACK(6)`) — exactly what the documented primitive (`continue_until(ota_state)` +
-inspect `ota_crc_ok`) localizes. It is genuinely exercised (real buggy firmware, real
-traces), gated opt-in, and golden traces stay byte-identical.
+**Delivered (M19–M20):** the first two corpus cases are done via
+`dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` (**2/2** green):
+(1) **OTA rollback bug** — a broken CRC check (`gateway_ota_crcbug`) accepts a corrupt image
+and boots the bad slot, vs the M16 `gateway_ota_badcrc` that rolls back; (2) **SERVICE-mode
+torque-clamp bug** — a powertrain that skips the SERVICE safety clamp
+(`powertrain_diag_service_bug`) commands drive torque during a service session, vs the M12
+`powertrain_diag_service` that clamps to 0 / disables the motor. Each seed carries the plan's
+required metadata and the harness runs both the **failing** (buggy) and **fixed** scenarios
+through the product binary, asserting the bug reproduces (golden failing trace), the fix
+resolves it (fixed trace), and the two traces diverge at the documented point — exactly what
+the seed's debugging primitive localizes. Genuinely exercised (real buggy firmware, real
+traces), gated opt-in, golden traces byte-identical.
 
 **Why the rest is still blocked:** the debug_gym *primitives* are done (M7/M8/M10/M11: step,
 continue_until, keyframe replay, message breakpoint, and the determinism invariants), and

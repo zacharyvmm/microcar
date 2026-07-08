@@ -21,6 +21,7 @@ extern void dashboard_main(void *pvParameters);
 extern void diagnostics_tool_main(void *pvParameters);
 extern void gateway_enable_dogfood_diag_script(uint8_t inject_fault);
 extern void powertrain_enable_dogfood_service_mode(void);
+extern void powertrain_enable_dogfood_service_clamp_bug(void);
 extern void gateway_enable_dogfood_charging_script(void);
 extern void gateway_enable_dogfood_ota_script(void);
 extern void gateway_enable_dogfood_ota_fault_bad_crc(void);
@@ -117,6 +118,18 @@ void microcar_boot_powertrain_diag_service(void)
 {
     sim_trace_u32("microcar_boot_powertrain_diag_service", 1);
     powertrain_enable_dogfood_service_mode();
+    microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot the *buggy* powertrain SERVICE firmware — the debug_gym `service_torque`
+/// seeded bug. It runs a SERVICE-mode torque computation but skips the safety
+/// clamp, so a service session still commands drive torque with the motor
+/// enabled. The fixed reference is microcar_boot_powertrain_diag_service.
+void microcar_boot_powertrain_diag_service_bug(void)
+{
+    sim_trace_u32("microcar_boot_powertrain_diag_service_bug", 1);
+    powertrain_enable_dogfood_service_clamp_bug();
     microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

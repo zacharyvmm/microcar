@@ -1079,6 +1079,52 @@ partial-write, gateway bridge loop) reuse this harness — the diagnostics-seede
 ones (UNBLOCKING §4 Strategy A) are the natural next additions; telematics is
 still firmware-gated (Strategy C).
 
+## Milestone 20 status (this branch)
+
+The twentieth milestone adds the **second debug_gym seeded-bug corpus case** —
+the diagnostics-seeded **SERVICE-mode torque-clamp bug** (UNBLOCKING.md §4
+Strategy A, "start with diagnostics bugs"), reusing the M19 `debug-gym-corpus`
+harness. **microcar-only**, gated behind opt-in buggy firmware, so every existing
+golden trace stays **byte-identical** (verified: `debug_gym` hashes
+`c371b96e253e` / `68806f23c980` / `16684074b01c` / `fa7f03709681` unchanged, and
+`diagnostics` stays 2/2 — the default powertrain SERVICE firmware is untouched).
+
+Genuinely exercised, not fabricated — a real buggy firmware variant paired with
+the real correct firmware:
+
+- **Buggy firmware.** A new opt-in powertrain variant
+  `powertrain_diag_service_bug` (`powertrain_enable_dogfood_service_clamp_bug()`
+  → `g_diag_service_clamp_bug`, default `0`): it runs a SERVICE-mode torque
+  computation but **skips the safety clamp**, so an 80% throttle demand during a
+  service session still commands drive torque with the motor enabled
+  (`diag_motor_command` = torque 80 / motor_enable 1). The single seeded-bug
+  branch is gated and off by default; the trace guard keeps `vehicle_mode ==
+  SERVICE`, so the fix's own trace path is reused. The fixed reference is the M12
+  `powertrain_diag_service`, whose `mc_safety_clamp_torque` forces torque to 0
+  and `safety_mode_blocks_torque` disables the motor (`diag_motor_command` = 0).
+  Wired via `microcar_boot_powertrain_diag_service_bug()` (coordinator) and the
+  `src/lib.rs` resolver (`powertrain_diag_service_bug` matched **before**
+  `powertrain_diag_service`).
+- **Corpus.** `dogfood/debug_gym/service_torque_bug/{failing,fixed}.toml` (based
+  on the diagnostics `service_mode_disables_drive` scenario, swapping only the
+  powertrain firmware) + a new `SeedKind::ServiceTorqueClamp` in
+  `debug_gym_corpus.rs` that decodes the packed `diag_motor_command` trace
+  (`(torque<<8)|motor_enable`) and asserts **bug-reproduced** (SERVICE motor
+  command with torque>0 / motor enabled), **bug-fixed** (every SERVICE command
+  clamped to torque 0 / motor disabled), and **traces-diverge** (buggy max torque
+  80 vs fixed 0) — localizable by breakpointing on the `diag_motor_command`
+  trace.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**92 unit tests** (88 → 92, +4) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **2/2** green (`ota_rollback`, `service_torque`);
+every other lane is unregressed (`debug-gym` 4/4 with unchanged hashes,
+`diagnostics` 2/2, `ota` 5/5, `charging` 1/1, `topology` 7/7, `toml-zoo` 11/11);
+the new Rust is clippy/fmt-clean. The debug_gym corpus now covers 2 of the
+plan's 7 seeds (OTA rollback, SERVICE torque clamp); the remaining
+diagnostics-seeded cases (clears-all-DTCs, START_SESSION-succeeds-in-DRIVE) reuse
+this same harness, and telematics/OTA-network seeds stay firmware-gated.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

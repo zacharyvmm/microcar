@@ -41,6 +41,13 @@ static watchdog_task_t     g_wd;
 static uint8_t             g_diag_force_service_mode = 0;
 static uint8_t             g_charging_force_mode = 0;
 
+// SEEDED DEBUG-GYM BUG (service_torque corpus case). When set, the powertrain
+// skips the SERVICE-mode safety clamp and commands the raw requested torque with
+// the motor enabled — modeling firmware that forgot to apply the clamp on a
+// service-test path. Off by default; only powertrain_diag_service_bug sets it,
+// so the default firmware and every other lane stay byte-identical.
+static uint8_t             g_diag_service_clamp_bug = 0;
+
 // ── Counting semaphore (CAN TX mailbox) ───────────────────────────────────
 
 /// Counting semaphore representing available CAN TX mailbox slots.
@@ -111,6 +118,16 @@ void powertrain_enable_dogfood_service_mode(void)
 void powertrain_enable_dogfood_charging(void)
 {
     g_charging_force_mode = 1;
+}
+
+// SEEDED DEBUG-GYM BUG (service_torque): enable the buggy powertrain firmware
+// that runs a SERVICE-mode torque computation but skips the safety clamp. The
+// fixed reference is powertrain_enable_dogfood_service_mode
+// (powertrain_diag_service), which clamps torque to 0 and disables the motor.
+void powertrain_enable_dogfood_service_clamp_bug(void)
+{
+    g_diag_force_service_mode = 1; // run a SERVICE-mode torque computation
+    g_diag_service_clamp_bug  = 1; // BUG: skip the SERVICE clamp
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -343,6 +360,15 @@ void powertrain_main(void *pvParameters)
 
         // ── Compute torque ────────────────────────────────────
         int8_t torque = torque_controller_compute(&g_tc);
+
+        // SEEDED DEBUG-GYM BUG (service_torque): the SERVICE-mode safety clamp
+        // is skipped, so a service session still commands drive torque with the
+        // motor enabled. The fixed firmware (powertrain_diag_service) clamps
+        // torque to 0 and disables the motor. Off by default.
+        if (g_diag_service_clamp_bug && g_tc.vehicle_mode == VEHICLE_SERVICE) {
+            torque = (int8_t)g_tc.throttle_percent;
+            g_tc.motor_enable = 1;
+        }
 
         // ── Send motor command (with semaphore guard) ────────
         send_motor_command(torque, &tx);
