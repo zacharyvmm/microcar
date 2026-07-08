@@ -26,6 +26,7 @@ use microcar_dogfood::debug_gym::DEFAULT_SCENARIOS;
 use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::diagnostics::{self, DEFAULT_DIAGNOSTICS_DIR};
 use microcar_dogfood::invariants::CheckStatus;
+use microcar_dogfood::ota::{self, DEFAULT_OTA_DIR};
 use microcar_dogfood::summary::{build_summary, ScenarioSummary};
 use microcar_dogfood::toml_zoo::{self, DEFAULT_CORPUS_DIR};
 use microcar_dogfood::topology::{self, DEFAULT_TOPOLOGY_DIR};
@@ -55,6 +56,7 @@ fn main() -> ExitCode {
         "topology" => cmd_topology(rest),
         "diagnostics" => cmd_diagnostics(rest),
         "charging" => cmd_charging(rest),
+        "ota" => cmd_ota(rest),
         "debug-gym" | "debug_gym" => cmd_debug_gym(rest),
         "-h" | "--help" | "help" => {
             usage();
@@ -241,6 +243,100 @@ fn cmd_charging(args: &[String]) -> ExitCode {
     println!("──────────────────────────────────────────");
     println!(
         "charging: {pass} passed, {fail} failed (of {} scenarios)",
+        report.scenarios.len()
+    );
+
+    if let Some(path) = &json {
+        write_json(path, &report.to_json().to_pretty());
+    }
+
+    if report.passed() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `harness ota [--dir DIR] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the OTA lane: each scenario carries `# ota-expect:` directives and is
+/// checked from compact firmware trace events (the OTA state sequence, image
+/// CRC verification, and a healthy boot of the committed slot).
+fn cmd_ota(args: &[String]) -> ExitCode {
+    let mut dir = PathBuf::from(DEFAULT_OTA_DIR);
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => dir = PathBuf::from(v),
+                    None => return argerr("ota", "--dir needs a path"),
+                }
+            }
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("ota", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("ota", "--json needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("ota", &format!("unknown flag: {other}"));
+            }
+            other => dir = PathBuf::from(other),
+        }
+        i += 1;
+    }
+
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
+    println!("microcar binary: {}", bin.display());
+    println!("ota corpus: {}\n", dir.display());
+
+    let report = match ota::run_ota(&bin, &dir, timeout) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("harness ota: reading corpus {}: {e}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+
+    for s in &report.scenarios {
+        println!("[{}] {}", okmark(s.passed), s.name);
+        if let Some(err) = &s.run_error {
+            println!("        - run error: {err}");
+        }
+        for c in &s.checks {
+            println!("        [{}] {} -> {}", okmark(c.passed), c.name, c.detail);
+        }
+    }
+
+    let (pass, fail) = report.totals();
+    println!("──────────────────────────────────────────");
+    println!(
+        "ota: {pass} passed, {fail} failed (of {} scenarios)",
         report.scenarios.len()
     );
 
@@ -1009,6 +1105,7 @@ fn usage() {
          \x20 harness topology [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness diagnostics [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness charging [--dir DIR] [--timeout-secs N] [--json OUT]\n\
+         \x20 harness ota [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness debug-gym [--scenario-dir DIR] [--timeout-secs N] [--json OUT]\n\
          \n\
          FLAGS:\n\

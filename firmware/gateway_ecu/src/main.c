@@ -51,6 +51,7 @@ static uint8_t             g_diag_session_active = 0;
 static uint8_t             g_diag_dogfood_script = 0;
 static uint8_t             g_diag_dogfood_inject_fault = 0;
 static uint8_t             g_charging_dogfood_script = 0;
+static uint8_t             g_ota_dogfood_script = 0;
 
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
@@ -117,6 +118,11 @@ void gateway_enable_dogfood_diag_script(uint8_t inject_fault)
 void gateway_enable_dogfood_charging_script(void)
 {
     g_charging_dogfood_script = 1;
+}
+
+void gateway_enable_dogfood_ota_script(void)
+{
+    g_ota_dogfood_script = 1;
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -360,6 +366,58 @@ static void run_dogfood_charging_script(uint32_t *script_ms, uint32_t *sent_mask
     }
 }
 
+/// Drive the OTA (over-the-air firmware update) dogfood lane inside gateway
+/// firmware.
+///
+/// Like the charging/diagnostics scripts this exercises the OTA state machine
+/// via compact trace events without depending on the (still unreliable)
+/// firmware CAN RX path. The minimal happy-path OTA flow is:
+///   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3, slot B)
+///   → REBOOTING(4) → HEALTHY(5, boot ok).
+/// Each state is traced as `ota_state` at a successive scheduled time, with
+/// `ota_crc_ok`, `ota_slot` and `ota_boot_result` marker events at the
+/// verifying, commit and healthy steps respectively.
+static void run_dogfood_ota_script(uint32_t *ota_ms, uint32_t *ota_sent)
+{
+    if (!g_ota_dogfood_script) return;
+
+    *ota_ms += 10;
+
+    // IDLE — update campaign accepted.
+    if (*ota_ms >= 100 && !(*ota_sent & 0x01)) {
+        sim_trace_u32("ota_state", 0);
+        *ota_sent |= 0x01;
+    }
+    // DOWNLOADING — image streaming to the inactive slot.
+    if (*ota_ms >= 200 && !(*ota_sent & 0x02)) {
+        sim_trace_u32("ota_state", 1);
+        *ota_sent |= 0x02;
+    }
+    // VERIFYING — image CRC/signature checked and OK.
+    if (*ota_ms >= 300 && !(*ota_sent & 0x04)) {
+        sim_trace_u32("ota_state", 2);
+        sim_trace_u32("ota_crc_ok", 1);
+        *ota_sent |= 0x04;
+    }
+    // COMMIT_PENDING — slot B armed as the boot target.
+    if (*ota_ms >= 400 && !(*ota_sent & 0x08)) {
+        sim_trace_u32("ota_state", 3);
+        sim_trace_u32("ota_slot", 1);
+        *ota_sent |= 0x08;
+    }
+    // REBOOTING — booting into the new slot.
+    if (*ota_ms >= 500 && !(*ota_sent & 0x10)) {
+        sim_trace_u32("ota_state", 4);
+        *ota_sent |= 0x10;
+    }
+    // HEALTHY — self-test passed, update committed permanently.
+    if (*ota_ms >= 600 && !(*ota_sent & 0x20)) {
+        sim_trace_u32("ota_state", 5);
+        sim_trace_u32("ota_boot_result", 1);
+        *ota_sent |= 0x20;
+    }
+}
+
 /// Dispatch a received CAN frame to the appropriate handler.
 /// Called from heartbeat_rx task (only processes heartbeat and BMS fault).
 static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
@@ -576,6 +634,8 @@ void gateway_main(void *pvParameters)
     uint32_t diag_script_sent = 0;
     uint32_t charging_script_ms = 0;
     uint32_t charging_script_sent = 0;
+    uint32_t ota_script_ms = 0;
+    uint32_t ota_script_sent = 0;
 
     // Send initial heartbeat at boot.
     send_heartbeat(0, &tx);
@@ -593,6 +653,7 @@ void gateway_main(void *pvParameters)
 
         run_dogfood_diag_script(&diag_script_ms, &diag_script_sent);
         run_dogfood_charging_script(&charging_script_ms, &charging_script_sent);
+        run_dogfood_ota_script(&ota_script_ms, &ota_script_sent);
 
         // ── Check for urgent fault notifications ────────────────
         uint32_t notify_val = 0;

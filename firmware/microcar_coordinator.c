@@ -22,6 +22,7 @@ extern void diagnostics_tool_main(void *pvParameters);
 extern void gateway_enable_dogfood_diag_script(uint8_t inject_fault);
 extern void powertrain_enable_dogfood_service_mode(void);
 extern void gateway_enable_dogfood_charging_script(void);
+extern void gateway_enable_dogfood_ota_script(void);
 extern void powertrain_enable_dogfood_charging(void);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
@@ -132,6 +133,16 @@ void microcar_boot_powertrain_charging(void)
     sim_trace_u32("microcar_boot_powertrain_charging", 1);
     powertrain_enable_dogfood_charging();
     microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the OTA (over-the-air update) dogfood script enabled
+/// (drives the happy-path OTA state sequence IDLE → … → HEALTHY).
+void microcar_boot_gateway_ota(void)
+{
+    sim_trace_u32("microcar_boot_gateway_ota", 1);
+    gateway_enable_dogfood_ota_script();
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }
 

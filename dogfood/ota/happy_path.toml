@@ -1,0 +1,70 @@
+# happy_path — a complete OTA (over-the-air update) campaign succeeds.
+#
+# This is the first `ota` dogfood lane scenario. Like the diagnostics and
+# charging lanes it checks compact firmware trace events (it does not depend on
+# the still-unreliable firmware-originated CAN RX path), so it uses an explicit
+# OTA dogfood firmware variant:
+#
+#   * gateway_ota — runs the happy-path OTA script inside gateway firmware,
+#     stepping the update state machine at successive scheduled times:
+#       IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3,
+#       slot B) → REBOOTING(4) → HEALTHY(5, boot ok).
+#
+# The lane asserts the monotonic state sequence, that the image CRC verified,
+# and that the new slot booted healthy (the update committed permanently).
+#
+# ota-expect: state-sequence 0,1,2,3,4,5
+# ota-expect: crc-ok
+# ota-expect: healthy
+
+name = "ota_happy_path"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ota"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10

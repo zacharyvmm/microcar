@@ -31,6 +31,7 @@ pub mod determinism;
 pub mod diagnostics;
 pub mod invariants;
 pub mod json;
+pub mod ota;
 pub mod runner;
 pub mod simfarm;
 pub mod summary;
@@ -52,6 +53,7 @@ pub use invariants::{
     any_failed, check_all, check_default, default_invariants, CheckStatus, Invariant,
     InvariantResult,
 };
+pub use ota::{run_ota, run_ota_scenario, OtaCheck, OtaReport, OtaScenarioResult, DEFAULT_OTA_DIR};
 pub use runner::{run_scenario, RunStatus, ScenarioRun};
 pub use simfarm::{
     run_churn, run_panic_isolation, run_simfarm, ChurnReport, PanicIsolationReport, RunHash,
