@@ -711,6 +711,27 @@ delivery) remains a later milestone — costar's `build_world` produces bare
 machines, so this replay path is exact today for scenarios whose observable
 trace is driven by bus/link delivery (e.g. `bus_inject`).
 
+## Milestone 11 status (this branch)
+
+The eleventh milestone adds a **message breakpoint** on top of `continue_until`
+(the plan's "breakpoint predicates for message …"):
+
+- `World::run_to_frame(frame_id, deadline)` runs until a CAN frame with
+  `frame_id` is delivered (a `can-rx` for it appears in any machine's trace),
+  returning whether the breakpoint was hit. Covered by
+  `test_run_to_frame_breakpoint`.
+- Fixed a correctness bug in `continue_until` that this test surfaced: when the
+  matching event was delivered in the same step that drained the last pending
+  event (so the World went idle and `step()` returned `StepOutcome::Done`), the
+  loop broke *without* evaluating the predicate, missing a breakpoint on the
+  final event. The predicate is now checked on the `Done` step too.
+
+sim-world has 110 tests; clippy/fmt-clean; `run`/`run_until` unchanged (no
+scenario regression). Remaining breakpoint predicates (machine, vehicle state,
+device state, DTC creation, assertion failure) are thin wrappers on the same
+`continue_until` mechanism but mostly become meaningful once firmware emits
+those events.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
