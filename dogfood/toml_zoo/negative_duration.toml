@@ -1,0 +1,9 @@
+# expect-kind: parse
+# duration_ms is a u64; a negative value fails TOML deserialization.
+name = "negative_duration"
+duration_ms = -5
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"

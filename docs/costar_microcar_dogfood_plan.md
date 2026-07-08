@@ -457,6 +457,48 @@ The later lanes (simfarm, toml_zoo, topology, cockpit, debug_gym, diagnostics,
 telematics, charging, OTA) and the larger costar tracks (per-session state,
 Trace v2, control-plane unification) remain for subsequent milestones.
 
+## Milestone 2 status (this branch)
+
+The second milestone — the two cheapest high-yield dogfood lanes (`simfarm`,
+`toml_zoo`) plus the hostile-input handling they require — is implemented on
+this branch:
+
+- costar: Linux build fix so the workspace compiles off macOS
+  (`sim-net` TAP fd non-blocking via `fcntl(F_SETFL)` with the Linux
+  `O_NONBLOCK`; the old `File::set_nonblocking` is not a stable `std::fs::File`
+  method and never compiled on Linux). Host-TAP path only — no effect on
+  deterministic simulation.
+- microcar binary: never panics on malformed input. `src/main.rs` handles every
+  load/validate/build/run failure and prints a structured
+  `microcar: error [<kind>]: ...` line on stderr with stable exit codes
+  (`0` = pass, `1` = runtime fail, `2` = scenario error). New `src/validate.rs`
+  adds the automotive-semantic checks — `unknown-firmware`, `missing-gateway`,
+  `duplicate-bus-node`, `drive-without-powertrain` — while costar's
+  `Scenario::from_file` already covers the structural checks (duplicate IDs,
+  bad bus/link/fault references, TOML parse/range).
+- `toml_zoo` lane: `dogfood/toml_zoo/` corpus of 11 malformed scenarios (each
+  tagged `# expect-kind:`), `dogfood/src/toml_zoo.rs`, and `harness toml-zoo`.
+  Asserts every case returns the expected structured error kind with exit 2 and
+  no panic, plus sibling isolation (a malformed scenario run concurrently with a
+  healthy one does not disturb it). The `charging-while-drive` / `ota-while-drive`
+  cases are deferred to the charging/OTA lanes — they need vehicle modes not yet
+  in the scenario schema.
+- `simfarm` lane: `dogfood/src/simfarm.rs` and `harness simfarm`. Concurrent
+  determinism (N sessions produce the same normalized trace hash as a solo run),
+  churn (repeated create/run/destroy stays stable — no cross-launch state leak),
+  and panic isolation (a malformed sibling fails cleanly while the healthy run is
+  unaffected). Because the microcar binary hosts one `World` per process,
+  concurrency here is across processes; true in-process multi-session isolation
+  (shared `SIM_NOW`/`CURRENT_TASK_ID`/device registries) is a later costar-server
+  milestone (the "Move State to Per-World Ownership" track).
+
+Both lanes emit JSON summaries for CI and exit non-zero on failure. The dogfood
+crate has 45 unit tests (determinism/invariants/trace-hash/summary + 8 simfarm +
+8 toml_zoo) and is clippy-clean. The remaining lanes (topology, cockpit,
+debug_gym, diagnostics, telematics, charging, OTA) and the larger costar tracks
+(per-session state, Trace v2, control-plane unification) remain for subsequent
+milestones.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

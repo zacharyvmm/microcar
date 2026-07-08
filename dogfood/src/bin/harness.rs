@@ -24,7 +24,10 @@ use std::time::Duration;
 use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::invariants::CheckStatus;
 use microcar_dogfood::summary::{build_summary, ScenarioSummary};
-use microcar_dogfood::{check_solo_vs_repeat, write_summary};
+use microcar_dogfood::toml_zoo::{self, DEFAULT_CORPUS_DIR};
+use microcar_dogfood::{
+    check_solo_vs_repeat, run_churn, run_panic_isolation, run_simfarm, write_summary,
+};
 
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 const DEFAULT_REPEATS: usize = 2;
@@ -43,6 +46,8 @@ fn main() -> ExitCode {
     match cmd {
         "run" => cmd_run(rest),
         "run-all" => cmd_run_all(rest),
+        "simfarm" => cmd_simfarm(rest),
+        "toml-zoo" | "toml_zoo" => cmd_toml_zoo(rest),
         "-h" | "--help" | "help" => {
             usage();
             ExitCode::SUCCESS
@@ -293,13 +298,300 @@ fn collect_scenarios(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(out)
 }
 
+/// `ok  ` / `FAIL` marker for the human summary.
+fn okmark(ok: bool) -> &'static str {
+    if ok {
+        "ok  "
+    } else {
+        "FAIL"
+    }
+}
+
+/// Print an argument error for a subcommand and return the usage exit code.
+fn argerr(sub: &str, msg: &str) -> ExitCode {
+    eprintln!("harness {sub}: {msg}");
+    ExitCode::from(2)
+}
+
+/// Write a JSON string to `path`, reporting success/failure like the other lanes.
+fn write_json(path: &Path, json_str: &str) {
+    match std::fs::write(path, json_str) {
+        Ok(()) => println!("wrote JSON summary: {}", path.display()),
+        Err(e) => eprintln!("harness: failed to write {}: {e}", path.display()),
+    }
+}
+
+/// `harness simfarm <scenario.toml> [-n N] [--churn M] [--bad PATH] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the simfarm lane: concurrent-determinism (N sessions == solo), churn
+/// (M create/run/destroy iterations stay stable), and panic-isolation (a
+/// malformed sibling fails cleanly while the healthy run is unaffected).
+fn cmd_simfarm(args: &[String]) -> ExitCode {
+    let mut n = 4usize;
+    let mut churn = 5usize;
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+    let mut bad: Option<PathBuf> = None;
+    let mut scenario: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-n" | "--sessions" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => n = v,
+                    None => return argerr("simfarm", "-n/--sessions needs a number"),
+                }
+            }
+            "--churn" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => churn = v,
+                    None => return argerr("simfarm", "--churn needs a number"),
+                }
+            }
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("simfarm", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("simfarm", "--json needs a path"),
+                }
+            }
+            "--bad" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => bad = Some(PathBuf::from(v)),
+                    None => return argerr("simfarm", "--bad needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("simfarm", &format!("unknown flag: {other}"));
+            }
+            other => scenario = Some(PathBuf::from(other)),
+        }
+        i += 1;
+    }
+
+    let scenario = match scenario {
+        Some(s) => s,
+        None => return argerr("simfarm", "expected <scenario.toml>"),
+    };
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+    let bad = bad.unwrap_or_else(|| PathBuf::from(format!("{DEFAULT_CORPUS_DIR}/missing_gateway.toml")));
+
+    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!("microcar binary: {}", bin.display());
+    println!("simfarm: {}\n", scenario.display());
+
+    let sim = run_simfarm(&bin, &scenario, n, timeout);
+    println!(
+        "[{}] concurrent x{:<3}  solo={}  all_match={}  all_clean={}",
+        okmark(sim.passed()),
+        sim.n,
+        short_hash(&sim.solo_hash),
+        sim.all_match,
+        sim.all_clean
+    );
+    for (idx, rh) in sim.concurrent.iter().enumerate() {
+        if rh.hash != sim.solo_hash || !rh.status.is_clean() {
+            println!(
+                "        - run #{idx}: status={} hash={}",
+                rh.status.as_str(),
+                short_hash(&rh.hash)
+            );
+        }
+    }
+
+    let mut all_ok = sim.passed();
+
+    let churn_report = if churn > 0 {
+        let c = run_churn(&bin, &scenario, churn, timeout);
+        println!(
+            "[{}] churn x{:<7}  distinct_hashes={}  clean={}/{}",
+            okmark(c.passed()),
+            c.iterations,
+            c.distinct_hashes,
+            c.clean,
+            c.iterations
+        );
+        all_ok &= c.passed();
+        Some(c)
+    } else {
+        None
+    };
+
+    let panic_report = if bad.is_file() {
+        let p = run_panic_isolation(&bin, &scenario, &bad, timeout);
+        println!(
+            "[{}] panic-isolation  bad={}  healthy={}  bad_status={}(exit={:?})  isolated={}",
+            okmark(p.passed()),
+            bad.display(),
+            p.healthy_status.as_str(),
+            p.bad_status.as_str(),
+            p.bad_exit_code,
+            p.isolated
+        );
+        all_ok &= p.passed();
+        Some(p)
+    } else {
+        println!(
+            "[skip] panic-isolation: no bad scenario at {} (pass --bad PATH)",
+            bad.display()
+        );
+        None
+    };
+
+    if let Some(path) = &json {
+        let mut fields = vec![("simfarm".to_string(), sim.to_json())];
+        if let Some(c) = &churn_report {
+            fields.push(("churn".to_string(), c.to_json()));
+        }
+        if let Some(p) = &panic_report {
+            fields.push(("panic_isolation".to_string(), p.to_json()));
+        }
+        let obj = microcar_dogfood::json::Json::Obj(fields);
+        write_json(path, &obj.to_pretty());
+    }
+
+    println!("──────────────────────────────────────────");
+    println!("simfarm lane: {}", if all_ok { "PASS" } else { "FAIL" });
+    if all_ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `harness toml-zoo [--dir DIR] [--healthy SCENARIO] [--no-sibling] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the toml_zoo lane: every malformed scenario in the corpus must produce
+/// a structured error with the expected kind, exit code 2, and no panic; plus a
+/// sibling-isolation check (a malformed scenario run concurrently with a healthy
+/// one does not disturb it).
+fn cmd_toml_zoo(args: &[String]) -> ExitCode {
+    let mut dir = PathBuf::from(DEFAULT_CORPUS_DIR);
+    let mut healthy: Option<PathBuf> = Some(PathBuf::from("scenarios/boot_and_heartbeat.toml"));
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => dir = PathBuf::from(v),
+                    None => return argerr("toml-zoo", "--dir needs a path"),
+                }
+            }
+            "--healthy" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => healthy = Some(PathBuf::from(v)),
+                    None => return argerr("toml-zoo", "--healthy needs a path"),
+                }
+            }
+            "--no-sibling" => healthy = None,
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("toml-zoo", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("toml-zoo", "--json needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("toml-zoo", &format!("unknown flag: {other}"));
+            }
+            other => dir = PathBuf::from(other),
+        }
+        i += 1;
+    }
+
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+    // Only run sibling isolation if the healthy scenario actually exists.
+    let healthy = healthy.filter(|h| h.is_file());
+
+    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!("microcar binary: {}", bin.display());
+    println!("toml_zoo corpus: {}\n", dir.display());
+
+    let report = match toml_zoo::run_toml_zoo(&bin, &dir, timeout, healthy.as_deref()) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("harness toml-zoo: reading corpus {}: {e}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+
+    for c in &report.cases {
+        println!("[{}] {:<30} {}", okmark(c.passed), c.name, c.detail);
+    }
+    if let Some(s) = &report.sibling {
+        println!(
+            "[{}] sibling-isolation  healthy={}  bad={}  isolated={}",
+            okmark(s.isolated),
+            s.healthy_status.as_str(),
+            s.bad_status.as_str(),
+            s.isolated
+        );
+    }
+
+    let (pass, fail) = report.totals();
+    println!("──────────────────────────────────────────");
+    println!(
+        "toml_zoo: {pass} passed, {fail} failed (of {} cases)",
+        report.cases.len()
+    );
+
+    if let Some(path) = &json {
+        write_json(path, &report.to_json().to_pretty());
+    }
+
+    if report.passed() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 fn usage() {
     eprintln!(
         "microcar dogfood harness\n\
          \n\
          USAGE:\n\
-         \x20 harness run     <scenario.toml> [--timeout-secs N] [--repeats N] [--json OUT]\n\
-         \x20 harness run-all [--scenario-dir DIR] [--timeout-secs N] [--repeats N] [--json OUT]\n\
+         \x20 harness run      <scenario.toml> [--timeout-secs N] [--repeats N] [--json OUT]\n\
+         \x20 harness run-all  [--scenario-dir DIR] [--timeout-secs N] [--repeats N] [--json OUT]\n\
+         \x20 harness simfarm  <scenario.toml> [-n N] [--churn M] [--bad PATH] [--timeout-secs N] [--json OUT]\n\
+         \x20 harness toml-zoo [--dir DIR] [--healthy SCENARIO] [--no-sibling] [--timeout-secs N] [--json OUT]\n\
          \n\
          FLAGS:\n\
          \x20 --timeout-secs N   Wall-clock timeout per run (default {DEFAULT_TIMEOUT_SECS})\n\

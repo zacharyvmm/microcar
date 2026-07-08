@@ -29,7 +29,9 @@ pub mod determinism;
 pub mod invariants;
 pub mod json;
 pub mod runner;
+pub mod simfarm;
 pub mod summary;
+pub mod toml_zoo;
 pub mod trace_hash;
 
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
@@ -38,5 +40,13 @@ pub use invariants::{
     InvariantResult,
 };
 pub use runner::{run_scenario, RunStatus, ScenarioRun};
+pub use simfarm::{
+    run_churn, run_panic_isolation, run_simfarm, ChurnReport, PanicIsolationReport, RunHash,
+    SimfarmReport,
+};
 pub use summary::{build_summary, write_summary, Summary, HARNESS_VERSION};
+pub use toml_zoo::{
+    discover_cases, run_sibling_isolation, run_toml_zoo, CaseResult, SiblingIsolation, TomlZooCase,
+    TomlZooReport, DEFAULT_CORPUS_DIR,
+};
 pub use trace_hash::{normalize_trace, normalized_hash, trace_hash};

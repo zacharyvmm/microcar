@@ -1,0 +1,20 @@
+# expect-kind: drive-without-powertrain
+# A driver_input requests throttle but there is no powertrain ECU to command torque.
+name = "drive_without_powertrain"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+
+[[machine]]
+id = 2
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+
+[[input]]
+at_ms = 500
+type = "driver_input"
+throttle_percent = 40
+brake_pressed = false

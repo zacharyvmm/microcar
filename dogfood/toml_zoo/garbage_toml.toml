@@ -1,0 +1,5 @@
+# expect-kind: parse
+# Intentionally malformed TOML syntax (unterminated string, broken table header).
+name = "garbage_toml
+[[machine]
+id = = 1
