@@ -32,6 +32,7 @@ pub mod runner;
 pub mod simfarm;
 pub mod summary;
 pub mod toml_zoo;
+pub mod topology;
 pub mod trace_hash;
 
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
@@ -48,5 +49,9 @@ pub use summary::{build_summary, write_summary, Summary, HARNESS_VERSION};
 pub use toml_zoo::{
     discover_cases, run_sibling_isolation, run_toml_zoo, CaseResult, SiblingIsolation, TomlZooCase,
     TomlZooReport, DEFAULT_CORPUS_DIR,
+};
+pub use topology::{
+    run_topology, run_topology_scenario, Probe, ProbeResult, TopologyReport,
+    TopologyScenarioResult, DEFAULT_TOPOLOGY_DIR,
 };
 pub use trace_hash::{normalize_trace, normalized_hash, trace_hash};

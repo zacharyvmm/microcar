@@ -499,6 +499,36 @@ debug_gym, diagnostics, telematics, charging, OTA) and the larger costar tracks
 (per-session state, Trace v2, control-plane unification) remain for subsequent
 milestones.
 
+## Milestone 3 status (this branch)
+
+The third milestone — the `topology` lane plus the costar CAN bus-isolation fix
+it rests on — is implemented on this branch:
+
+- costar: **CAN TX bus isolation** (`sim-world/src/world.rs`). A firmware CAN
+  send was previously placed onto *every* World bus regardless of which bus the
+  sending machine was attached to, so multi-bus topology had no isolation. Now a
+  send is only placed on the buses the machine is actually a node of (a
+  multi-interface machine such as a gateway still sends on each of its buses).
+  Covered by the `test_firmware_can_tx_respects_bus_membership` sim-world engine
+  test. No existing scenario regresses: single-bus scenarios are unaffected, and
+  the multi-bus fleet scenarios carry no golden trace.
+- microcar: **topology lane** — `dogfood/topology/` scenarios
+  (`dual_bus_gateway`, `diag_request_through_gateway`, `fleet_16_nodes`),
+  `dogfood/src/topology.rs`, and `harness topology`. Each scenario declares
+  `# topology-probe: probe=0xNNNN expect=<machine ids>` directives; the harness
+  injects unique-id CAN probes (0x07xx, unused by the ECU protocol) on each bus
+  and asserts, from the `can-rx` trace, that every probe reaches exactly the
+  declared receivers — once each — and no node on any other bus. That covers the
+  plan's "expected receivers get each frame", "unexpected receivers do not", and
+  "no duplicate injection into a controller" assertions.
+
+Deferred to the Trace-v2 / gateway-bridge milestone (they need correlation ids,
+per-event source/destination identity, and gateway frame *forwarding*, none of
+which exist yet): the `drive_body_bus_bridge`, `gateway_loop_prevention`, and
+`fleet_64_nodes` scenarios, and the "forwarded frame preserves correlation id" /
+"trace includes source and destination component identity" assertions. The
+dogfood crate now has 52 unit tests (+7 topology) and stays clippy-clean.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

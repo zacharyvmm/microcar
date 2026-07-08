@@ -25,6 +25,7 @@ use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::invariants::CheckStatus;
 use microcar_dogfood::summary::{build_summary, ScenarioSummary};
 use microcar_dogfood::toml_zoo::{self, DEFAULT_CORPUS_DIR};
+use microcar_dogfood::topology::{self, DEFAULT_TOPOLOGY_DIR};
 use microcar_dogfood::{
     check_solo_vs_repeat, run_churn, run_panic_isolation, run_simfarm, write_summary,
 };
@@ -48,6 +49,7 @@ fn main() -> ExitCode {
         "run-all" => cmd_run_all(rest),
         "simfarm" => cmd_simfarm(rest),
         "toml-zoo" | "toml_zoo" => cmd_toml_zoo(rest),
+        "topology" => cmd_topology(rest),
         "-h" | "--help" | "help" => {
             usage();
             ExitCode::SUCCESS
@@ -583,6 +585,97 @@ fn cmd_toml_zoo(args: &[String]) -> ExitCode {
     }
 }
 
+/// `harness topology [--dir DIR] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the topology lane: every scenario in the corpus declares `# topology-probe:`
+/// directives; each probe frame must reach exactly the declared receiver machines
+/// (once each) and no others — proving multi-bus routing + isolation.
+fn cmd_topology(args: &[String]) -> ExitCode {
+    let mut dir = PathBuf::from(DEFAULT_TOPOLOGY_DIR);
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => dir = PathBuf::from(v),
+                    None => return argerr("topology", "--dir needs a path"),
+                }
+            }
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("topology", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("topology", "--json needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("topology", &format!("unknown flag: {other}"));
+            }
+            other => dir = PathBuf::from(other),
+        }
+        i += 1;
+    }
+
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+
+    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!("microcar binary: {}", bin.display());
+    println!("topology corpus: {}\n", dir.display());
+
+    let report = match topology::run_topology(&bin, &dir, timeout) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("harness topology: reading corpus {}: {e}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+
+    for s in &report.scenarios {
+        println!("[{}] {}", okmark(s.passed), s.name);
+        if let Some(err) = &s.run_error {
+            println!("        - run error: {err}");
+        }
+        for p in &s.probes {
+            println!("        [{}] probe {} -> {}", okmark(p.passed), p.id_hex, p.detail);
+        }
+    }
+
+    let (pass, fail) = report.totals();
+    println!("──────────────────────────────────────────");
+    println!(
+        "topology: {pass} passed, {fail} failed (of {} scenarios)",
+        report.scenarios.len()
+    );
+
+    if let Some(path) = &json {
+        write_json(path, &report.to_json().to_pretty());
+    }
+
+    if report.passed() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 fn usage() {
     eprintln!(
         "microcar dogfood harness\n\
@@ -592,6 +685,7 @@ fn usage() {
          \x20 harness run-all  [--scenario-dir DIR] [--timeout-secs N] [--repeats N] [--json OUT]\n\
          \x20 harness simfarm  <scenario.toml> [-n N] [--churn M] [--bad PATH] [--timeout-secs N] [--json OUT]\n\
          \x20 harness toml-zoo [--dir DIR] [--healthy SCENARIO] [--no-sibling] [--timeout-secs N] [--json OUT]\n\
+         \x20 harness topology [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \n\
          FLAGS:\n\
          \x20 --timeout-secs N   Wall-clock timeout per run (default {DEFAULT_TIMEOUT_SECS})\n\
