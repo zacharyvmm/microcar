@@ -929,6 +929,58 @@ rollback, gateway/BMS reset during update) reusing this model, the OTA-rollback
 `debug_gym` seed, and flipping the deferred `toml_zoo` `ota-while-drive` case
 (needs OTA in the scenario *schema*).
 
+## Milestone 17 status (this branch)
+
+The seventeenth milestone extends the **OTA fault matrix** with two more cases,
+both reusing the M16 slot-metadata model (UNBLOCKING.md §2 Strategy C,
+"fault-matrix driven" — each case is a firmware fault variant + scenario wired
+exactly like `gateway_ota_badcrc`). It is **microcar-only** and gated behind
+opt-in dogfood firmware, so every existing golden trace stays **byte-identical**
+(verified: the `debug_gym` trace hashes `c371b96e253e` / `68806f23c980` /
+`16684074b01c` / `fa7f03709681` are unchanged, and the OTA happy path + bad-CRC
+rollback emit the exact same `ota_*` events as M15/M16).
+
+- **Firmware.** `run_dogfood_ota_script` is refactored around a shared
+  `emit_ota_rollback()` helper so every fault aborts with an identical marker set
+  (`ota_state=6`, `ota_rollback=1`, `ota_active_slot`, `ota_boot_result=0`),
+  rolling back at whichever step its fault strikes. Two new fault selectors +
+  boot variants:
+  - `OTA_FAULT_INTERRUPTED_WRITE` (`gateway_ota_intwrite`): a power cut during the
+    image write — `mc_ota_finish_download(complete=0)` discards the partial image
+    and rolls back *before verifying*: `IDLE(0) → DOWNLOADING(1) → ROLLED_BACK(6,
+    slot A)`.
+  - `OTA_FAULT_BAD_HEALTH` (`gateway_ota_badhealth`): a valid image downloads,
+    verifies (crc ok) and commits, but the post-reboot self-test fails —
+    `mc_ota_health_check(healthy=0)` reverts to slot A:
+    `IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3, slot B)
+    → REBOOTING(4) → ROLLED_BACK(6, slot A)`.
+  Wired via `microcar_boot_gateway_ota_intwrite()` /
+  `microcar_boot_gateway_ota_badhealth()` (coordinator) and the `src/lib.rs`
+  resolver (both new keys matched **before** `gateway_ota`). The happy path and
+  the M16 bad-CRC path are byte-for-byte unchanged (the download-complete and
+  boot-healthy selectors default true for those modes).
+- **Harness / scenarios.** No new expectation types were needed — the M16
+  `state-sequence` / `crc-ok` / `crc-bad` / `rolled-back` / `active-slot`
+  expectations already express both cases. New scenarios
+  `dogfood/ota/rollback_interrupted_write.toml` (asserts `0,1,6` + rolled-back +
+  active-slot 0) and `dogfood/ota/rollback_failed_health.toml` (asserts
+  `0,1,2,3,4,6` + crc-ok + rolled-back + active-slot 0). Added 2 dogfood unit
+  tests over synthetic traces (dogfood 80 → **82**).
+
+Verified locally: `cargo build --bin microcar` OK; `state_tests` **99** and the
+dogfood crate **82** unit tests pass; `harness ota` is **4/4** green
+(`happy_path`, `rollback_bad_crc`, `rollback_failed_health`,
+`rollback_interrupted_write`); every other lane is unregressed (`charging` 1/1,
+`diagnostics` 2/2, `debug-gym` 4/4 with unchanged hashes, `topology` 7/7,
+`toml-zoo` 11/11); and the touched Rust file is clippy-clean. The OTA fault
+matrix now covers 3 of the plan's 8 cases (corrupt image, interrupted write,
+failed-boot rollback). Remaining OTA follow-ups: power-cut-after-write-before-
+commit, gateway/BMS reset during update, and the two mode-gated cases
+(OTA-while-driving / OTA-while-charging — these need OTA in the scenario
+*schema*, shared with the deferred `toml_zoo` `ota-while-drive` case), plus the
+OTA-rollback `debug_gym` seed (now trivially seedable from `gateway_ota_badcrc` /
+`gateway_ota_badhealth`).
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

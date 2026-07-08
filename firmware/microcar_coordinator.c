@@ -24,6 +24,8 @@ extern void powertrain_enable_dogfood_service_mode(void);
 extern void gateway_enable_dogfood_charging_script(void);
 extern void gateway_enable_dogfood_ota_script(void);
 extern void gateway_enable_dogfood_ota_fault_bad_crc(void);
+extern void gateway_enable_dogfood_ota_fault_interrupted_write(void);
+extern void gateway_enable_dogfood_ota_fault_bad_health(void);
 extern void powertrain_enable_dogfood_charging(void);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
@@ -154,6 +156,28 @@ void microcar_boot_gateway_ota_badcrc(void)
 {
     sim_trace_u32("microcar_boot_gateway_ota_badcrc", 1);
     gateway_enable_dogfood_ota_fault_bad_crc();
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the OTA interrupted-write fault variant — a power cut
+/// during the image write discards the partial image, so the update aborts to
+/// slot A before it ever verifies (IDLE → DOWNLOADING → ROLLED_BACK).
+void microcar_boot_gateway_ota_intwrite(void)
+{
+    sim_trace_u32("microcar_boot_gateway_ota_intwrite", 1);
+    gateway_enable_dogfood_ota_fault_interrupted_write();
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the OTA bad-health fault variant — the new slot downloads,
+/// verifies and commits, but the post-reboot self-test fails, so the model
+/// rolls back to slot A (… → REBOOTING → ROLLED_BACK).
+void microcar_boot_gateway_ota_badhealth(void)
+{
+    sim_trace_u32("microcar_boot_gateway_ota_badhealth", 1);
+    gateway_enable_dogfood_ota_fault_bad_health();
     microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

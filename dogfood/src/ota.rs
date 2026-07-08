@@ -412,6 +412,37 @@ mod tests {
         ]
     }
 
+    /// An interrupted-write campaign that aborts before verifying (mirrors the
+    /// `gateway_ota_intwrite` firmware variant's trace).
+    fn interrupted_write_trace() -> Vec<UserTrace> {
+        vec![
+            t(NODE_GATEWAY, "ota_state", 0),
+            t(NODE_GATEWAY, "ota_state", 1),
+            t(NODE_GATEWAY, "ota_state", 6),
+            t(NODE_GATEWAY, "ota_rollback", 1),
+            t(NODE_GATEWAY, "ota_active_slot", 0),
+            t(NODE_GATEWAY, "ota_boot_result", 0),
+        ]
+    }
+
+    /// A failed-health campaign: a valid image commits then rolls back on a bad
+    /// boot (mirrors the `gateway_ota_badhealth` firmware variant's trace).
+    fn failed_health_trace() -> Vec<UserTrace> {
+        vec![
+            t(NODE_GATEWAY, "ota_state", 0),
+            t(NODE_GATEWAY, "ota_state", 1),
+            t(NODE_GATEWAY, "ota_state", 2),
+            t(NODE_GATEWAY, "ota_crc_ok", 1),
+            t(NODE_GATEWAY, "ota_state", 3),
+            t(NODE_GATEWAY, "ota_slot", 1),
+            t(NODE_GATEWAY, "ota_state", 4),
+            t(NODE_GATEWAY, "ota_state", 6),
+            t(NODE_GATEWAY, "ota_rollback", 1),
+            t(NODE_GATEWAY, "ota_active_slot", 0),
+            t(NODE_GATEWAY, "ota_boot_result", 0),
+        ]
+    }
+
     #[test]
     fn parses_user_trace_line() {
         let line = r#"[machine.1]            0 user-u32 "ota_state" = 3"#;
@@ -550,5 +581,41 @@ mod tests {
             ]
         );
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn interrupted_write_aborts_before_verify_and_keeps_slot_a() {
+        // The image never verifies (no crc event) but still rolls back to A.
+        assert!(
+            evaluate(
+                &Expectation::StateSequence(vec![0, 1, 6]),
+                &interrupted_write_trace()
+            )
+            .passed
+        );
+        assert!(evaluate(&Expectation::RolledBack, &interrupted_write_trace()).passed);
+        assert!(evaluate(&Expectation::ActiveSlot(0), &interrupted_write_trace()).passed);
+        // It must not have committed (never reached HEALTHY).
+        assert!(!evaluate(&Expectation::Healthy, &interrupted_write_trace()).passed);
+        // No crc event at all → both crc expectations fail.
+        assert!(!evaluate(&Expectation::CrcOk, &interrupted_write_trace()).passed);
+        assert!(!evaluate(&Expectation::CrcBad, &interrupted_write_trace()).passed);
+    }
+
+    #[test]
+    fn failed_health_commits_valid_image_then_rolls_back_to_slot_a() {
+        // A valid image (crc ok) proceeds through commit/reboot, then rolls back.
+        assert!(
+            evaluate(
+                &Expectation::StateSequence(vec![0, 1, 2, 3, 4, 6]),
+                &failed_health_trace()
+            )
+            .passed
+        );
+        assert!(evaluate(&Expectation::CrcOk, &failed_health_trace()).passed);
+        assert!(evaluate(&Expectation::RolledBack, &failed_health_trace()).passed);
+        assert!(evaluate(&Expectation::ActiveSlot(0), &failed_health_trace()).passed);
+        // The bad boot means it never committed healthy.
+        assert!(!evaluate(&Expectation::Healthy, &failed_health_trace()).passed);
     }
 }

@@ -1,6 +1,6 @@
 # Microcar Dogfood Unblocking Strategy
 
-Last updated: 2026-07-08 (after the M15 OTA happy-path lane + the M16 OTA slot-metadata model + rollback lane)
+Last updated: 2026-07-08 (after the M16 OTA slot-metadata model + rollback lane + the M17 OTA fault-matrix extension)
 
 This report is a playbook for the remaining blockers in the costar/microcar
 dogfood plan. It assumes the current state after the diagnostics unblock and the
@@ -36,7 +36,7 @@ that make "unblocked" measurable.
 ## Current Remaining Blockers
 
 1. Charging firmware lane — **safety lane done (M13)**; deeper FSM + plant physics remain.
-2. OTA firmware lane — **happy path done (M15)**, **slot-metadata model + first rollback fault done (M16)**; rest of the fault matrix remains.
+2. OTA firmware lane — **happy path done (M15)**, **slot-metadata model + 3 of 8 fault-matrix cases done (M16–M17)**; remaining fault cases (power-cut-after-write, gateway/BMS reset, ota-while-drive/charge) remain.
 3. Diagnostics depth and product-grade diagnostics-over-bus.
 4. Debug gym seeded-bug corpus.
 5. Cockpit/gRPC dogfood lane — **gRPC-surface proof done (M14)**; `harness cockpit` wrapper + display firmware remain.
@@ -179,13 +179,20 @@ variant runs the first Strategy C case: a corrupt image fails CRC and rolls back
 (`dogfood/ota/rollback_bad_crc.toml`, `harness ota` now **2/2**). The harness gained
 `crc-bad`, `rolled-back`, and `active-slot N` expectations.
 
-**Still open** (continue Strategy C, fault-matrix driven): the remaining 7 fault-matrix
-cases — power-cut before/during write (interrupted write), power-cut after write before
-commit, gateway/BMS reset during update, failed health check → rollback, OTA-while-driving,
-OTA-while-charging. The model already handles interrupted-write and failed-boot rollback in
-unit tests, so each remaining case is a firmware fault variant + scenario wired exactly like
-`gateway_ota_badcrc`. Also open: the OTA-rollback `debug_gym` seed (now within reach), and
-flipping the deferred `toml_zoo` `ota-while-drive` case (needs OTA in the scenario *schema*).
+**Update (M17): two more fault-matrix cases shipped.** Reusing the M16 model, two more
+fault variants landed — `gateway_ota_intwrite` (power cut during write → the partial image
+is discarded and the update rolls back *before verifying*: `0,1,6`) and
+`gateway_ota_badhealth` (a valid image downloads/verifies/commits but the post-reboot
+self-test fails → rollback to slot A: `0,1,2,3,4,6`). A shared `emit_ota_rollback()` helper
+gives every fault an identical rollback marker set. `harness ota` is now **4/4**
+(`happy_path`, `rollback_bad_crc`, `rollback_failed_health`, `rollback_interrupted_write`);
+3 of the plan's 8 fault cases are covered. No new harness expectation types were needed.
+
+**Still open** (continue Strategy C, fault-matrix driven): the remaining fault cases —
+power-cut after write before commit, gateway/BMS reset during update, and the two mode-gated
+cases (OTA-while-driving / OTA-while-charging, which need OTA in the scenario *schema*, shared
+with the deferred `toml_zoo` `ota-while-drive` case). Also open: the OTA-rollback `debug_gym`
+seed (now trivially seedable from any of the M16/M17 fault variants).
 
 ### Blocker
 
@@ -718,9 +725,9 @@ Success criteria:
 1. ~~Charging safety lane~~ — **done (M13)**: drive blocked while plugged.
 2. ~~Cockpit/gRPC gRPC-surface proof~~ — **done (M14)**; `harness cockpit` wrapper + display firmware remain.
 3. ~~OTA happy path~~ — **done (M15)**; ~~slot-metadata model + first rollback fault~~ —
-   **done (M16)**; rest of the OTA fault matrix (interrupted write, power-cut-before-commit,
-   failed boot, gateway/BMS reset, ota-while-drive/charge) remains — each a firmware fault
-   variant + scenario reusing the M16 slot model.
+   **done (M16)**; ~~interrupted-write + failed-boot rollback~~ — **done (M17)**; remaining
+   OTA fault cases (power-cut-after-write-before-commit, gateway/BMS reset, ota-while-
+   drive/charge) remain — each a firmware fault variant + scenario reusing the M16 slot model.
 4. Deeper charging FSM (handshake / temp-rise / reduced-current / complete) +
    charging plant physics; then flip the deferred `toml_zoo` `charging-while-drive`.
 5. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN

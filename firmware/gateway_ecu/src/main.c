@@ -60,6 +60,8 @@ static uint8_t             g_ota_dogfood_script = 0;
 // it purely by firmware path (no CAN input needed).
 #define OTA_FAULT_NONE    0u
 #define OTA_FAULT_BAD_CRC 1u
+#define OTA_FAULT_INTERRUPTED_WRITE 2u
+#define OTA_FAULT_BAD_HEALTH        3u
 static uint8_t             g_ota_fault_mode = OTA_FAULT_NONE;
 
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
@@ -141,6 +143,24 @@ void gateway_enable_dogfood_ota_fault_bad_crc(void)
 {
     g_ota_dogfood_script = 1;
     g_ota_fault_mode = OTA_FAULT_BAD_CRC;
+}
+
+// OTA fault-matrix variant: the image download is interrupted (power cut during
+// write), so the partial image is discarded and the update aborts to slot A
+// before it ever verifies.
+void gateway_enable_dogfood_ota_fault_interrupted_write(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_INTERRUPTED_WRITE;
+}
+
+// OTA fault-matrix variant: the new slot downloads, verifies and commits, but
+// the post-reboot self-test fails (bad boot), so the model rolls back to the
+// previous known-good slot A.
+void gateway_enable_dogfood_ota_fault_bad_health(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_BAD_HEALTH;
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -384,6 +404,17 @@ static void run_dogfood_charging_script(uint32_t *script_ms, uint32_t *sent_mask
     }
 }
 
+/// Emit the trace markers for an OTA rollback: the update aborted and the
+/// bootloader reverted to the previous known-good slot. Shared by every
+/// fault-matrix variant so each rolls back with an identical marker set.
+static void emit_ota_rollback(const mc_ota_slot_state_t *ota)
+{
+    sim_trace_u32("ota_state", ota->state); // MC_OTA_ROLLED_BACK
+    sim_trace_u32("ota_rollback", ota->rolled_back);
+    sim_trace_u32("ota_active_slot", ota->active_slot);
+    sim_trace_u32("ota_boot_result", 0);
+}
+
 /// Drive the OTA (over-the-air firmware update) dogfood lane inside gateway
 /// firmware.
 ///
@@ -393,12 +424,17 @@ static void run_dogfood_charging_script(uint32_t *script_ms, uint32_t *sent_mask
 /// (common/src/microcar_ota_slot.c) so the lane asserts the model's real
 /// commit/rollback behavior end-to-end.
 ///
-/// Happy path (g_ota_fault_mode == OTA_FAULT_NONE):
+/// Happy path (OTA_FAULT_NONE):
 ///   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3, slot B)
 ///   → REBOOTING(4) → HEALTHY(5, boot ok).
-/// Bad-CRC fault (OTA_FAULT_BAD_CRC): the corrupt image fails verification, so
-/// the model refuses to arm slot B and rolls back to the known-good slot A:
-///   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc BAD) → ROLLED_BACK(6, slot A).
+/// Fault-matrix variants all roll back to the known-good slot A (state 6),
+/// each aborting at the step its fault strikes:
+///   * OTA_FAULT_BAD_CRC          — corrupt image fails verify:
+///       IDLE → DOWNLOADING → VERIFYING(crc BAD) → ROLLED_BACK.
+///   * OTA_FAULT_INTERRUPTED_WRITE — power cut during write (partial image):
+///       IDLE → DOWNLOADING → ROLLED_BACK (never verifies).
+///   * OTA_FAULT_BAD_HEALTH        — armed image boots but fails self-test:
+///       IDLE → DOWNLOADING → VERIFYING → COMMIT_PENDING → REBOOTING → ROLLED_BACK.
 /// States are traced as `ota_state` at successive scheduled times, with
 /// `ota_crc_ok`, `ota_slot`, `ota_boot_result`, `ota_rollback` and
 /// `ota_active_slot` marker events at the relevant steps.
@@ -415,8 +451,10 @@ static void run_dogfood_ota_script(uint32_t *ota_ms, uint32_t *ota_sent)
         ota_inited = 1;
     }
 
-    // A corrupt image (bad-CRC fault) fails verification below.
-    int crc_ok = (g_ota_fault_mode != OTA_FAULT_BAD_CRC);
+    // Fault selectors: each fault flips exactly one input to the model.
+    int download_complete = (g_ota_fault_mode != OTA_FAULT_INTERRUPTED_WRITE);
+    int crc_ok            = (g_ota_fault_mode != OTA_FAULT_BAD_CRC);
+    int boot_healthy      = (g_ota_fault_mode != OTA_FAULT_BAD_HEALTH);
 
     *ota_ms += 10;
 
@@ -425,51 +463,54 @@ static void run_dogfood_ota_script(uint32_t *ota_ms, uint32_t *ota_sent)
         sim_trace_u32("ota_state", ota.state); // MC_OTA_IDLE
         *ota_sent |= 0x01;
     }
-    // 200ms — DOWNLOADING, image streamed into the inactive slot.
+    // 200ms — DOWNLOADING. An interrupted write discards the partial image and
+    // rolls back here, before the image ever verifies.
     if (*ota_ms >= 200 && !(*ota_sent & 0x02)) {
         mc_ota_begin_download(&ota);
-        mc_ota_finish_download(&ota, 1);
         sim_trace_u32("ota_state", ota.state); // MC_OTA_DOWNLOADING
+        if (!mc_ota_finish_download(&ota, download_complete)) {
+            emit_ota_rollback(&ota);
+        }
         *ota_sent |= 0x02;
     }
-    // 300ms — VERIFYING, image CRC/signature checked.
+    // 300ms — VERIFYING. A corrupt image fails CRC and rolls back here.
     if (*ota_ms >= 300 && !(*ota_sent & 0x04)) {
-        sim_trace_u32("ota_state", MC_OTA_VERIFYING);
-        mc_ota_verify(&ota, crc_ok);
-        sim_trace_u32("ota_crc_ok", ota.crc_ok);
+        if (ota.state == MC_OTA_DOWNLOADING) {
+            sim_trace_u32("ota_state", MC_OTA_VERIFYING);
+            int verified = mc_ota_verify(&ota, crc_ok);
+            sim_trace_u32("ota_crc_ok", ota.crc_ok);
+            if (!verified) {
+                emit_ota_rollback(&ota);
+            }
+        }
         *ota_sent |= 0x04;
     }
-    // 400ms — either the update arms the boot slot (happy path) or the model
-    // has already rolled back (bad-CRC fault): the corrupt image is never
-    // committed, and the bootloader keeps running the known-good slot A.
+    // 400ms — COMMIT_PENDING: arm slot B as the boot target (only if verified).
     if (*ota_ms >= 400 && !(*ota_sent & 0x08)) {
-        if (ota.state == MC_OTA_ROLLED_BACK) {
-            sim_trace_u32("ota_state", ota.state); // MC_OTA_ROLLED_BACK
-            sim_trace_u32("ota_rollback", ota.rolled_back);
-            sim_trace_u32("ota_active_slot", ota.active_slot);
-            sim_trace_u32("ota_boot_result", 0);
-        } else {
+        if (ota.state == MC_OTA_VERIFYING) {
             mc_ota_commit(&ota);
             sim_trace_u32("ota_state", ota.state); // MC_OTA_COMMIT_PENDING
             sim_trace_u32("ota_slot", ota.target_slot);
         }
         *ota_sent |= 0x08;
     }
-    // 500ms — REBOOTING into the new slot (skipped once rolled back).
+    // 500ms — REBOOTING into the new slot (only if armed).
     if (*ota_ms >= 500 && !(*ota_sent & 0x10)) {
-        if (ota.state != MC_OTA_ROLLED_BACK) {
+        if (ota.state == MC_OTA_COMMIT_PENDING) {
             mc_ota_reboot(&ota);
             sim_trace_u32("ota_state", ota.state); // MC_OTA_REBOOTING
         }
         *ota_sent |= 0x10;
     }
-    // 600ms — HEALTHY, self-test passed and update committed permanently
-    // (skipped once rolled back).
+    // 600ms — HEALTHY on a good self-test, else roll back to slot A (bad boot).
     if (*ota_ms >= 600 && !(*ota_sent & 0x20)) {
-        if (ota.state != MC_OTA_ROLLED_BACK) {
-            mc_ota_health_check(&ota, 1);
-            sim_trace_u32("ota_state", ota.state); // MC_OTA_HEALTHY
-            sim_trace_u32("ota_boot_result", ota.boot_healthy);
+        if (ota.state == MC_OTA_REBOOTING) {
+            if (mc_ota_health_check(&ota, boot_healthy)) {
+                sim_trace_u32("ota_state", ota.state); // MC_OTA_HEALTHY
+                sim_trace_u32("ota_boot_result", ota.boot_healthy);
+            } else {
+                emit_ota_rollback(&ota);
+            }
         }
         *ota_sent |= 0x20;
     }
