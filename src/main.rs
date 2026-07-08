@@ -50,10 +50,36 @@ fn fail_scenario(kind: &str, message: impl std::fmt::Display) -> ExitCode {
     ExitCode::from(EXIT_SCENARIO_ERROR)
 }
 
+/// Drive the World one event at a time via [`sim_world::World::step`], honoring
+/// the same deadline semantics as `run_until` (or running to idle when
+/// `deadline` is `None`). Trace-identical to the continuous path by
+/// construction — `run`/`run_until` delegate to the same `step()`.
+fn step_run(
+    world: &mut sim_world::World,
+    deadline: Option<sim_core::Tick>,
+) -> Result<(), sim_core::SimError> {
+    match deadline {
+        Some(d) => {
+            while world.now < d {
+                match world.next_global_event_time() {
+                    Some(t) if t <= d => match world.step()? {
+                        sim_world::StepOutcome::Advanced(_) => {}
+                        sim_world::StepOutcome::Done => break,
+                    },
+                    _ => break,
+                }
+            }
+        }
+        None => while let sim_world::StepOutcome::Advanced(_) = world.step()? {},
+    }
+    Ok(())
+}
+
 fn main() -> ExitCode {
-    // ── Parse args: <scenario.toml> [--trace-v2 <path>] ─────────
+    // ── Parse args: <scenario.toml> [--trace-v2 <path>] [--step] ─
     let mut scenario_path: Option<String> = None;
     let mut trace_v2_path: Option<String> = None;
+    let mut step_mode = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -64,6 +90,7 @@ fn main() -> ExitCode {
                     return ExitCode::from(EXIT_SCENARIO_ERROR);
                 }
             },
+            "--step" => step_mode = true,
             other if other.starts_with("--") => {
                 eprintln!("microcar: error [usage]: unknown flag '{other}'");
                 return ExitCode::from(EXIT_SCENARIO_ERROR);
@@ -76,7 +103,7 @@ fn main() -> ExitCode {
         Some(p) => p,
         None => {
             eprintln!(
-                "microcar: error [usage]: usage: microcar <scenario.toml> [--trace-v2 <path>]"
+                "microcar: error [usage]: usage: microcar <scenario.toml> [--trace-v2 <path>] [--step]"
             );
             return ExitCode::from(EXIT_SCENARIO_ERROR);
         }
@@ -155,9 +182,17 @@ fn main() -> ExitCode {
     scenario.schedule_faults_to(&mut world);
 
     // ── Run simulation ──────────────────────────────────────────
-    let run_result = if let Some(duration_ms) = scenario.duration_ms {
+    // `--step` drives the run one event at a time via World::step(), which is
+    // trace-identical to a continuous run/run_until by construction (it is what
+    // they delegate to). This exercises the stepping primitive through the
+    // product binary and is what the dogfood debug_gym lane compares against a
+    // continuous run.
+    let deadline = scenario.duration_ms.map(|ms| ms * 1000);
+    let run_result = if step_mode {
+        step_run(&mut world, deadline)
+    } else if let Some(d) = deadline {
         // Convert ms to µs ticks (1 µs per tick).
-        world.run_until(duration_ms * 1000)
+        world.run_until(d)
     } else {
         world.run()
     };

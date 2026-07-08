@@ -24,10 +24,12 @@ use std::time::Duration;
 use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::invariants::CheckStatus;
 use microcar_dogfood::summary::{build_summary, ScenarioSummary};
+use microcar_dogfood::debug_gym::DEFAULT_SCENARIOS;
 use microcar_dogfood::toml_zoo::{self, DEFAULT_CORPUS_DIR};
 use microcar_dogfood::topology::{self, DEFAULT_TOPOLOGY_DIR};
 use microcar_dogfood::{
-    check_solo_vs_repeat, run_churn, run_panic_isolation, run_simfarm, write_summary,
+    check_solo_vs_repeat, run_churn, run_debug_gym, run_panic_isolation, run_simfarm,
+    write_summary,
 };
 
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
@@ -50,6 +52,7 @@ fn main() -> ExitCode {
         "simfarm" => cmd_simfarm(rest),
         "toml-zoo" | "toml_zoo" => cmd_toml_zoo(rest),
         "topology" => cmd_topology(rest),
+        "debug-gym" | "debug_gym" => cmd_debug_gym(rest),
         "-h" | "--help" | "help" => {
             usage();
             ExitCode::SUCCESS
@@ -684,6 +687,100 @@ fn cmd_topology(args: &[String]) -> ExitCode {
     }
 }
 
+/// `harness debug-gym [--scenario-dir DIR] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the debug_gym determinism invariants per scenario: stepped (`--step`)
+/// trace equals the continuous trace, `run_until` never overshoots the
+/// `duration_ms` deadline, and the clock never moves backward. With no
+/// `--scenario-dir`, a short built-in set of vehicle scenarios is used.
+fn cmd_debug_gym(args: &[String]) -> ExitCode {
+    let mut scenario_dir: Option<PathBuf> = None;
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--scenario-dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => scenario_dir = Some(PathBuf::from(v)),
+                    None => return argerr("debug-gym", "--scenario-dir needs a path"),
+                }
+            }
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("debug-gym", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("debug-gym", "--json needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("debug-gym", &format!("unknown flag: {other}"));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+
+    let scenarios: Vec<PathBuf> = match &scenario_dir {
+        Some(dir) => match collect_scenarios(dir) {
+            Ok(s) if !s.is_empty() => s,
+            Ok(_) => {
+                eprintln!("harness debug-gym: no .toml scenarios in {}", dir.display());
+                return ExitCode::from(2);
+            }
+            Err(e) => {
+                eprintln!("harness debug-gym: {e}");
+                return ExitCode::from(2);
+            }
+        },
+        None => DEFAULT_SCENARIOS.iter().map(|s| PathBuf::from(*s)).collect(),
+    };
+
+    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!("microcar binary: {}", bin.display());
+    println!("debug_gym: {} scenario(s)\n", scenarios.len());
+
+    let report = run_debug_gym(&bin, &scenarios, timeout);
+    for s in &report.scenarios {
+        println!("[{}] {:<28} {}", okmark(s.passed), s.name, s.detail);
+    }
+
+    let (pass, fail) = report.totals();
+    println!("──────────────────────────────────────────");
+    println!(
+        "debug_gym: {pass} passed, {fail} failed (of {} scenarios)",
+        report.scenarios.len()
+    );
+
+    if let Some(path) = &json {
+        write_json(path, &report.to_json().to_pretty());
+    }
+
+    if report.passed() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 fn usage() {
     eprintln!(
         "microcar dogfood harness\n\
@@ -694,6 +791,7 @@ fn usage() {
          \x20 harness simfarm  <scenario.toml> [-n N] [--churn M] [--bad PATH] [--timeout-secs N] [--json OUT]\n\
          \x20 harness toml-zoo [--dir DIR] [--healthy SCENARIO] [--no-sibling] [--timeout-secs N] [--json OUT]\n\
          \x20 harness topology [--dir DIR] [--timeout-secs N] [--json OUT]\n\
+         \x20 harness debug-gym [--scenario-dir DIR] [--timeout-secs N] [--json OUT]\n\
          \n\
          FLAGS:\n\
          \x20 --timeout-secs N   Wall-clock timeout per run (default {DEFAULT_TIMEOUT_SECS})\n\

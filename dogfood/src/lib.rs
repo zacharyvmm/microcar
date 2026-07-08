@@ -25,6 +25,7 @@
 //! * [`determinism`] — run N times, assert all trace hashes match.
 //! * [`summary`] / [`json`] — hand-rolled JSON summary emitter.
 
+pub mod debug_gym;
 pub mod determinism;
 pub mod invariants;
 pub mod json;
@@ -35,6 +36,7 @@ pub mod toml_zoo;
 pub mod topology;
 pub mod trace_hash;
 
+pub use debug_gym::{run_debug_gym, DebugGymReport, DebugGymScenarioResult, DEFAULT_SCENARIOS};
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
 pub use invariants::{
     any_failed, check_all, check_default, default_invariants, CheckStatus, Invariant,

@@ -95,6 +95,17 @@ impl ScenarioRun {
 /// Never panics: a spawn failure is reported as [`RunStatus::Fail`] with the OS
 /// error in `stderr_tail`.
 pub fn run_scenario(microcar_bin: &Path, scenario: &Path, timeout: Duration) -> ScenarioRun {
+    run_scenario_args(microcar_bin, scenario, timeout, &[])
+}
+
+/// Like [`run_scenario`] but passes `extra_args` to the microcar binary after
+/// the scenario path (e.g. `["--step"]` or `["--trace-v2", path]`).
+pub fn run_scenario_args(
+    microcar_bin: &Path,
+    scenario: &Path,
+    timeout: Duration,
+    extra_args: &[&str],
+) -> ScenarioRun {
     let name = scenario
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -104,6 +115,7 @@ pub fn run_scenario(microcar_bin: &Path, scenario: &Path, timeout: Duration) -> 
 
     let mut child = match Command::new(microcar_bin)
         .arg(scenario)
+        .args(extra_args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

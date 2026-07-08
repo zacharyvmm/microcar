@@ -642,6 +642,29 @@ clippy/fmt-clean. The remaining debug_gym pieces (keyframe-restore replay
 wiring, the seeded-bug corpus with golden failing/fixed traces, and a microcar
 `--step` harness mode) build on these primitives.
 
+## Milestone 8 status (this branch)
+
+The eighth milestone wires the M7 debugging primitives into an observable
+**debug_gym** dogfood lane (no new firmware or external deps):
+
+- microcar: `microcar <scenario> --step` drives the run one event at a time via
+  `World::step()`; its output is byte-identical to a continuous run (verified).
+  `sim_world` re-exports `StepOutcome`.
+- microcar dogfood: `dogfood/src/debug_gym.rs` + `harness debug-gym`. Per
+  scenario it runs continuous and `--step` and asserts, end-to-end through the
+  product binary: **run-to-completion trace equals stepped trace** (trace-hash
+  compare), **`run_until` never overshoots** (max trace virtual time ≤ the
+  `duration_ms` deadline), and **clock never moves backward** (the segment-aware
+  monotonic check). `run_scenario_args` was added to the harness runner to pass
+  extra CLI flags such as `--step`.
+
+`harness debug-gym` runs a built-in set of short vehicle scenarios by default
+(override with `--scenario-dir`) and is 4/4 green. The dogfood crate has 59 unit
+tests, is clippy/fmt-clean, and the other lanes (topology 5/5, toml_zoo 11/11,
+simfarm) are unregressed. The remaining debug_gym pieces — the seeded-bug corpus
+(golden failing/fixed traces per bug) and keyframe-restore replay (on the
+existing `save_keyframe`/`load_keyframe` scaffolding) — build on this.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
