@@ -1125,6 +1125,66 @@ plan's 7 seeds (OTA rollback, SERVICE torque clamp); the remaining
 diagnostics-seeded cases (clears-all-DTCs, START_SESSION-succeeds-in-DRIVE) reuse
 this same harness, and telematics/OTA-network seeds stay firmware-gated.
 
+## Milestone 21 status (this branch)
+
+The twenty-first milestone adds the **third debug_gym seeded-bug corpus case** —
+the diagnostics-seeded **clear-all-DTCs bug** (UNBLOCKING.md §4 Strategy A,
+"start with diagnostics bugs" — the `clears-all-DTCs` candidate), reusing the
+M19 `debug-gym-corpus` harness. **microcar-only**, gated behind opt-in buggy
+firmware, so every existing golden trace stays **byte-identical** (verified:
+`debug_gym` hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` /
+`fa7f03709681` unchanged, and `diagnostics` stays 2/2 — the default diag/clear
+firmware path is untouched).
+
+Genuinely exercised, not fabricated — a real buggy firmware variant paired with
+the real correct firmware, both run through the product binary:
+
+- **Slot for the bug.** `common`-adjacent gateway fault manager gained a genuine
+  `fault_manager_clear_all()` API (distinct from the scoped
+  `fault_manager_clear_node()`), with a header note that a subsystem-scoped
+  "clear DTCs" must NOT call it. This is the exact function the buggy firmware
+  wrongly reaches.
+- **Shared setup.** A new `gateway_enable_dogfood_diag_clear_dtcs(buggy)` runs
+  the existing diag request script but injects **two** DTCs before CLEAR_DTCS: a
+  BMS overtemp fault (at 300 ms, via `synth_bms_fault`) *and* an unrelated
+  powertrain fault (at 310 ms, via a new mutex-guarded `synth_report_fault`
+  helper writing `MC_NODE_POWERTRAIN` / `MC_WARN_POWERTRAIN_OFFLINE`). So when
+  CLEAR_DTCS runs, the scoping actually matters — a BMS-scoped clear must leave
+  the powertrain DTC behind.
+- **Buggy firmware** (`gateway_diag_clearbug`,
+  `g_diag_clear_all_bug`, default `0`): the CLEAR_DTCS handler calls
+  `fault_manager_clear_all(&g_fm)` instead of
+  `fault_manager_clear_node(&g_fm, MC_NODE_BMS)`, so a BMS-scoped clear wrongly
+  drops the powertrain DTC too. The follow-up READ_DTCS reports 0. The single
+  seeded-bug branch is gated and off by default. The **fixed** reference
+  (`gateway_diag_clear`) clears only the BMS node, so the follow-up READ_DTCS
+  reports 1 (the powertrain fault survives). Both wired via
+  `microcar_boot_gateway_diag_clear{,bug}()` (coordinator) and the `src/lib.rs`
+  resolver (`gateway_diag_clearbug` matched **before** `gateway_diag_clear`,
+  both **before** `gateway_diag_fault` / `gateway_diag`).
+- **Corpus.** `dogfood/debug_gym/clear_dtcs_bug/{failing,fixed}.toml` (based on
+  the diagnostics `read_clear_dtcs_after_bms_fault` scenario, swapping only the
+  gateway firmware) + a new `SeedKind::ClearAllDtcs` in `debug_gym_corpus.rs`
+  that decodes the packed `gateway_diag_response` head
+  (`(req<<24)|(service<<16)|(status<<8)|value0`) to read the DTC count of the
+  pre-clear (req 3) and post-clear (req 5) READ_DTCS responses. It asserts
+  **bug-reproduced** (buggy: 2 DTCs before, 0 after — the powertrain fault
+  silently dropped), **bug-fixed** (fixed: 2 before, 1 after — only BMS cleared),
+  and **traces-diverge** (post-clear count 0 vs 1) — localizable by
+  breakpointing on the post-clear `gateway_diag_response` trace.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**96 unit tests** (92 → 96, +4) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **3/3** green (`ota_rollback`, `service_torque`,
+`clear_all_dtcs`); every other lane is unregressed (`debug-gym` 4/4 with
+unchanged hashes, `diagnostics` 2/2, `ota` 5/5, `charging` 1/1, `topology` 7/7,
+`toml-zoo` 11/11, `simfarm` PASS); the new Rust is clippy/fmt-clean. The
+debug_gym corpus now covers 3 of the plan's 7 seeds (OTA rollback, SERVICE
+torque clamp, clear-all-DTCs); the remaining diagnostics-seeded case
+(START_SESSION-succeeds-in-DRIVE) reuses this same harness, and the
+telematics/OTA-network/BMS-stale-sensor/dashboard-missed-warning seeds stay
+firmware-gated.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

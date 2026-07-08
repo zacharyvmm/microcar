@@ -367,21 +367,26 @@ Success criteria:
 
 ## 4. Debug Gym Seeded-Bug Corpus
 
-### Status (M19–M20): first two corpus cases delivered
+### Status (M19–M21): first three corpus cases delivered
 
-`dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` is **2/2** green:
+`dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` is **3/3** green:
 (1) **OTA rollback bug** (`gateway_ota_crcbug` broken CRC accepts a corrupt image
-and boots the bad slot vs `gateway_ota_badcrc` that rolls back), and (2)
+and boots the bad slot vs `gateway_ota_badcrc` that rolls back), (2)
 **SERVICE-mode torque-clamp bug** (`powertrain_diag_service_bug` skips the SERVICE
 safety clamp and commands drive torque vs `powertrain_diag_service` that clamps to
-0 / disables the motor — the Strategy A diagnostics seed). Each seed carries the
-plan's required metadata (description, symptom, minimal failing scenario, golden
-failing trace, primitive, fixed trace) and the harness asserts **bug-reproduced**
-+ **bug-fixed** + **traces-diverge** by running both scenarios through the
-product binary. Genuinely exercised (real buggy firmware, real traces), gated
-opt-in, golden traces byte-identical. The remaining seeds reuse this harness —
-more Strategy A diagnostics seeds (clears-all-DTCs, START_SESSION-in-DRIVE) are
-next; telematics/OTA-network seeds stay firmware-gated (Strategy C).
+0 / disables the motor), and (3) **clear-all-DTCs bug** (`gateway_diag_clearbug`
+calls `fault_manager_clear_all` on a BMS-scoped CLEAR_DTCS, silently dropping an
+unrelated powertrain DTC — 2 DTCs before, 0 after — vs `gateway_diag_clear` that
+clears only the BMS node, leaving 1). Cases (2) and (3) are the Strategy A
+diagnostics seeds. Each seed carries the plan's required metadata (description,
+symptom, minimal failing scenario, golden failing trace, primitive, fixed trace)
+and the harness asserts **bug-reproduced** + **bug-fixed** + **traces-diverge**
+by running both scenarios through the product binary. Genuinely exercised (real
+buggy firmware, real traces), gated opt-in, golden traces byte-identical. The
+remaining seeds reuse this harness — the last Strategy A diagnostics seed
+(START_SESSION-succeeds-in-DRIVE) is next; telematics/OTA-network and the
+BMS-stale-sensor / dashboard-missed-warning seeds stay firmware-gated
+(Strategy C).
 
 ### Blocker
 
@@ -761,8 +766,10 @@ Success criteria:
    assertions are required immediately.
 6. Debug gym corpus expansion using diagnostics/charging first, OTA/telematics later.
    ~~First corpus case (OTA rollback bug)~~ — **done (M19)**; ~~second case
-   (SERVICE torque-clamp bug, diagnostics-seeded)~~ — **done (M20)**: `harness
-   debug-gym-corpus` 2/2. Next: more diagnostics-seeded cases (Strategy A).
+   (SERVICE torque-clamp bug, diagnostics-seeded)~~ — **done (M20)**;
+   ~~third case (clear-all-DTCs bug, diagnostics-seeded)~~ — **done (M21)**:
+   `harness debug-gym-corpus` 3/3. Next: the last diagnostics-seeded case
+   (START_SESSION-succeeds-in-DRIVE, Strategy A).
 7. Telematics firmware and host-socket lane.
 8. Per-session state ownership, staged behind concrete two-session tests.
 9. Nightly/scale once the semantic lanes are individually green.

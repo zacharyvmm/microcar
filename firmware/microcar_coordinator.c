@@ -20,6 +20,7 @@ extern void bms_main(void *pvParameters);
 extern void dashboard_main(void *pvParameters);
 extern void diagnostics_tool_main(void *pvParameters);
 extern void gateway_enable_dogfood_diag_script(uint8_t inject_fault);
+extern void gateway_enable_dogfood_diag_clear_dtcs(uint8_t buggy);
 extern void powertrain_enable_dogfood_service_mode(void);
 extern void powertrain_enable_dogfood_service_clamp_bug(void);
 extern void gateway_enable_dogfood_charging_script(void);
@@ -101,6 +102,29 @@ void microcar_boot_gateway_diag_fault(void)
 {
     sim_trace_u32("microcar_boot_gateway_diag_fault", 1);
     gateway_enable_dogfood_diag_script(1);
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the clear-DTCs diagnostics script (BMS + powertrain DTCs,
+/// correct BMS-scoped clear). The fixed reference for the debug_gym
+/// `clear_all_dtcs` seed.
+void microcar_boot_gateway_diag_clear(void)
+{
+    sim_trace_u32("microcar_boot_gateway_diag_clear", 1);
+    gateway_enable_dogfood_diag_clear_dtcs(0);
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot the *buggy* clear-DTCs gateway firmware — the debug_gym `clear_all_dtcs`
+/// seeded bug. A BMS-scoped CLEAR_DTCS wrongly clears every node's DTCs, so an
+/// unrelated powertrain DTC is silently dropped. The fixed reference is
+/// microcar_boot_gateway_diag_clear.
+void microcar_boot_gateway_diag_clearbug(void)
+{
+    sim_trace_u32("microcar_boot_gateway_diag_clearbug", 1);
+    gateway_enable_dogfood_diag_clear_dtcs(1);
     microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

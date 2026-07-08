@@ -43,6 +43,8 @@ extern "C" {
     fn microcar_boot_gateway();
     fn microcar_boot_gateway_diag();
     fn microcar_boot_gateway_diag_fault();
+    fn microcar_boot_gateway_diag_clear();
+    fn microcar_boot_gateway_diag_clearbug();
     fn microcar_boot_powertrain();
     fn microcar_boot_powertrain_diag_service();
     fn microcar_boot_powertrain_diag_service_bug();
@@ -117,6 +119,12 @@ impl MicrocarFirmware {
             if path.contains("bt_demo") {
                 return "bt_demo";
             }
+            if path.contains("gateway_diag_clearbug") {
+                return "gateway_diag_clearbug";
+            }
+            if path.contains("gateway_diag_clear") {
+                return "gateway_diag_clear";
+            }
             if path.contains("gateway_diag_fault") {
                 return "gateway_diag_fault";
             }
@@ -189,6 +197,10 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_storage_demo();
             } else if ecu.starts_with("bt_demo") {
                 microcar_boot_bt_demo();
+            } else if ecu.starts_with("gateway_diag_clearbug") {
+                microcar_boot_gateway_diag_clearbug();
+            } else if ecu.starts_with("gateway_diag_clear") {
+                microcar_boot_gateway_diag_clear();
             } else if ecu.starts_with("gateway_diag_fault") {
                 microcar_boot_gateway_diag_fault();
             } else if ecu.starts_with("gateway_diag") {

@@ -112,20 +112,24 @@ the modeling approach (charging FSM depth, OTA slot model, and whether diagnosti
 must be over simulated CAN or may use trace-backed firmware hooks until the CAN RX/TX issue
 is fixed).
 
-### 2.2 `debug_gym` seeded-bug corpus  ⟶ 2 OF 7 CASES DELIVERED (M19–M20); rest firmware-gated
+### 2.2 `debug_gym` seeded-bug corpus  ⟶ 3 OF 7 CASES DELIVERED (M19–M21); rest firmware-gated
 
 **What the plan wants:** 7 seeded bugs (gateway race, powertrain timeout/cancel, BMS stale
 sensor, dashboard missed warning, telematics partial-write, OTA rollback, gateway bridge
 loop), each with: description, expected symptom, minimal failing scenario, **golden
 failing trace**, required debugging primitive, and **fixed trace**.
 
-**Delivered (M19–M20):** the first two corpus cases are done via
-`dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` (**2/2** green):
+**Delivered (M19–M21):** the first three corpus cases are done via
+`dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` (**3/3** green):
 (1) **OTA rollback bug** — a broken CRC check (`gateway_ota_crcbug`) accepts a corrupt image
 and boots the bad slot, vs the M16 `gateway_ota_badcrc` that rolls back; (2) **SERVICE-mode
 torque-clamp bug** — a powertrain that skips the SERVICE safety clamp
 (`powertrain_diag_service_bug`) commands drive torque during a service session, vs the M12
-`powertrain_diag_service` that clamps to 0 / disables the motor. Each seed carries the plan's
+`powertrain_diag_service` that clamps to 0 / disables the motor; (3) **clear-all-DTCs bug** —
+a gateway that calls `fault_manager_clear_all` on a BMS-scoped CLEAR_DTCS
+(`gateway_diag_clearbug`) silently drops an unrelated powertrain DTC (2 DTCs before, 0
+after), vs `gateway_diag_clear` that clears only the BMS node (2 before, 1 after). Cases
+(2) and (3) are the Strategy A diagnostics seeds. Each seed carries the plan's
 required metadata and the harness runs both the **failing** (buggy) and **fixed** scenarios
 through the product binary, asserting the bug reproduces (golden failing trace), the fix
 resolves it (fixed trace), and the two traces diverge at the documented point — exactly what
@@ -136,9 +140,9 @@ traces), gated opt-in, golden traces byte-identical.
 continue_until, keyframe replay, message breakpoint, and the determinism invariants), and
 the corpus *harness* now exists. The remaining seeds still need their own
 deliberately-buggy **firmware variants** to produce the golden failing/fixed traces. The
-diagnostics dogfood variants can seed one or two more cases now (UNBLOCKING §4 Strategy A —
-e.g. SERVICE-mode-fails-to-clamp-torque, START_SESSION-succeeds-in-DRIVE, clears-all-DTCs);
-the telematics and OTA-network seeds still need more firmware. The gateway-bridge-loop bug
+last diagnostics dogfood seed can be added now (UNBLOCKING §4 Strategy A —
+START_SESSION-succeeds-in-DRIVE); the telematics, OTA-network, BMS-stale-sensor and
+dashboard-missed-warning seeds still need more firmware. The gateway-bridge-loop bug
 is already exercised structurally by the topology `gateway_loop_prevention` scenario.
 
 **To unblock the remaining seeds:** add the next buggy firmware variants (diagnostics-seeded

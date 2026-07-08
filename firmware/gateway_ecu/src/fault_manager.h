@@ -50,6 +50,15 @@ void fault_manager_clear(fault_manager_t *fm, uint8_t source_node,
 /// Clear all faults from a source node (e.g., after a reboot).
 void fault_manager_clear_node(fault_manager_t *fm, uint8_t source_node);
 
+/// Clear every active fault regardless of source node.
+///
+/// NOTE: this is deliberately a *distinct* operation from
+/// fault_manager_clear_node. A diagnostic "clear DTCs" that is scoped to one
+/// subsystem (e.g. BMS) must NOT call this — doing so silently drops unrelated
+/// faults from other nodes. It exists for genuine clear-all cases (and is the
+/// point the debug_gym `clear_all_dtcs` seeded bug wrongly reaches).
+void fault_manager_clear_all(fault_manager_t *fm);
+
 /// Returns 1 if any critical-severity fault is active.
 uint8_t fault_manager_has_critical(const fault_manager_t *fm);
 

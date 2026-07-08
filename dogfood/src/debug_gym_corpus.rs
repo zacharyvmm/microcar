@@ -42,6 +42,13 @@ const NODE_GATEWAY: u64 = 1;
 /// The powertrain is machine id 2 in every corpus scenario.
 const NODE_POWERTRAIN: u64 = 2;
 
+/// Diagnostic service id for a "read stored DTCs" request.
+const DIAG_READ_DTCS: u8 = 3;
+/// Request id the clear-DTCs script uses for the READ_DTCS *before* the clear.
+const REQ_READ_DTCS_PRE: u8 = 3;
+/// Request id the clear-DTCs script uses for the READ_DTCS *after* the clear.
+const REQ_READ_DTCS_POST: u8 = 5;
+
 /// A user-u32 firmware trace event: `[machine.N] <t> user-u32 "label" = value`.
 #[derive(Debug, Clone)]
 struct UserTrace {
@@ -121,6 +128,24 @@ fn service_motor_commands(trace: &[UserTrace]) -> Vec<MotorCommand> {
         .collect()
 }
 
+/// Decode `value0` of a `gateway_diag_response` for the given service + request.
+///
+/// The gateway packs the response head as
+/// `(request_id << 24) | (service << 16) | (status << 8) | value0`.
+fn diag_response_value0(trace: &[UserTrace], service: u8, req: u8) -> Option<u8> {
+    trace
+        .iter()
+        .filter(|e| e.machine == NODE_GATEWAY && e.label == "gateway_diag_response")
+        .map(|e| e.value)
+        .find(|v| ((v >> 24) & 0xff) as u8 == req && ((v >> 16) & 0xff) as u8 == service)
+        .map(|v| (v & 0xff) as u8)
+}
+
+/// The DTC count reported by a READ_DTCS response with the given request id.
+fn dtc_count(trace: &[UserTrace], req: u8) -> Option<u8> {
+    diag_response_value0(trace, DIAG_READ_DTCS, req)
+}
+
 /// Which built-in bug a seed represents (selects the assertion logic).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeedKind {
@@ -130,6 +155,9 @@ pub enum SeedKind {
     /// SERVICE-mode torque clamp bug: the powertrain skips the SERVICE safety
     /// clamp, so a service session still commands drive torque.
     ServiceTorqueClamp,
+    /// Clear-all-DTCs bug: a BMS-scoped CLEAR_DTCS wrongly clears every node's
+    /// DTCs, silently dropping an unrelated (powertrain) fault.
+    ClearAllDtcs,
 }
 
 /// A seeded-bug corpus entry: metadata + the buggy/fixed scenario pair.
@@ -183,6 +211,23 @@ pub fn builtin_seeds() -> Vec<Seed> {
                     0/disabled.",
             failing_scenario: "service_torque_bug/failing.toml",
             fixed_scenario: "service_torque_bug/fixed.toml",
+        },
+        Seed {
+            name: "clear_all_dtcs",
+            kind: SeedKind::ClearAllDtcs,
+            description: "A diagnostic CLEAR_DTCS scoped to the BMS wrongly clears \
+                      EVERY node's DTCs (fault_manager_clear_all instead of \
+                      fault_manager_clear_node), silently dropping an unrelated \
+                      powertrain fault that was never serviced.",
+            symptom: "After a BMS-scoped clear, a follow-up READ_DTCS reports 0 \
+                  DTCs — the powertrain fault has vanished (the fix leaves 1 \
+                  behind).",
+            primitive: "message breakpoint / continue_until on the \
+                    gateway_diag_response trace: stop at the post-clear READ_DTCS \
+                    response and inspect its count — the buggy firmware reports 0 \
+                    where the fix reports 1, so the runs diverge at the clear.",
+            failing_scenario: "clear_dtcs_bug/failing.toml",
+            fixed_scenario: "clear_dtcs_bug/fixed.toml",
         },
     ]
 }
@@ -275,7 +320,73 @@ fn evaluate(kind: SeedKind, traces: &SeedTraces) -> Vec<CorpusCheck> {
     match kind {
         SeedKind::OtaRollback => evaluate_ota_rollback(traces),
         SeedKind::ServiceTorqueClamp => evaluate_service_torque_clamp(traces),
+        SeedKind::ClearAllDtcs => evaluate_clear_all_dtcs(traces),
     }
+}
+
+fn evaluate_clear_all_dtcs(traces: &SeedTraces) -> Vec<CorpusCheck> {
+    let f = &traces.failing;
+    let x = &traces.fixed;
+
+    let f_pre = dtc_count(f, REQ_READ_DTCS_PRE);
+    let f_post = dtc_count(f, REQ_READ_DTCS_POST);
+    let x_pre = dtc_count(x, REQ_READ_DTCS_PRE);
+    let x_post = dtc_count(x, REQ_READ_DTCS_POST);
+
+    // bug-reproduced: both DTCs are present before the clear (count 2), but the
+    // BMS-scoped clear wrongly drops the powertrain DTC too (post-clear 0).
+    let bug_reproduced = f_pre == Some(2) && f_post == Some(0);
+    let reproduced_detail = if bug_reproduced {
+        "buggy firmware cleared ALL DTCs on a BMS-scoped clear: 2 before, 0 after \
+         (the powertrain fault was silently dropped)"
+            .to_string()
+    } else {
+        format!(
+            "expected the buggy firmware to go 2 → 0 DTCs on a BMS-scoped clear; \
+             got pre={f_pre:?} post={f_post:?}"
+        )
+    };
+
+    // bug-fixed: both DTCs present before the clear (count 2), and only the BMS
+    // DTC is cleared — the powertrain DTC survives (post-clear 1).
+    let bug_fixed = x_pre == Some(2) && x_post == Some(1);
+    let fixed_detail = if bug_fixed {
+        "fixed firmware cleared only BMS DTCs: 2 before, 1 after (the powertrain \
+         fault survived the BMS-scoped clear)"
+            .to_string()
+    } else {
+        format!(
+            "expected the fixed firmware to go 2 → 1 DTCs on a BMS-scoped clear; \
+             got pre={x_pre:?} post={x_post:?}"
+        )
+    };
+
+    // traces-diverge: the post-clear DTC count is the localizing signal — 0
+    // (buggy, everything cleared) vs 1 (fixed, only BMS cleared).
+    let diverge = f_post == Some(0) && x_post == Some(1);
+    let diverge_detail = if diverge {
+        "post-clear READ_DTCS count diverges: 0 (buggy) vs 1 (fixed)".to_string()
+    } else {
+        format!("expected post-clear count 0 (buggy) vs 1 (fixed); got {f_post:?} vs {x_post:?}")
+    };
+
+    vec![
+        CorpusCheck {
+            name: "bug-reproduced".into(),
+            passed: bug_reproduced,
+            detail: reproduced_detail,
+        },
+        CorpusCheck {
+            name: "bug-fixed".into(),
+            passed: bug_fixed,
+            detail: fixed_detail,
+        },
+        CorpusCheck {
+            name: "traces-diverge".into(),
+            passed: diverge,
+            detail: diverge_detail,
+        },
+    ]
 }
 
 fn evaluate_service_torque_clamp(traces: &SeedTraces) -> Vec<CorpusCheck> {
@@ -649,6 +760,93 @@ mod tests {
             fixed: buggy_trace(),
         };
         let checks = evaluate(SeedKind::OtaRollback, &traces);
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "bug-fixed")
+                .unwrap()
+                .passed
+        );
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "traces-diverge")
+                .unwrap()
+                .passed
+        );
+    }
+
+    /// A gateway_diag_response for a READ_DTCS request with the given req + count.
+    fn dtc_resp(req: u8, count: u8) -> UserTrace {
+        UserTrace {
+            machine: NODE_GATEWAY,
+            label: "gateway_diag_response".into(),
+            value: ((req as u32) << 24) | ((DIAG_READ_DTCS as u32) << 16) | (count as u32),
+        }
+    }
+
+    // Real buggy trace: 2 DTCs before the clear, 0 after (everything cleared).
+    fn clear_bug_trace() -> Vec<UserTrace> {
+        vec![
+            dtc_resp(REQ_READ_DTCS_PRE, 2),
+            dtc_resp(REQ_READ_DTCS_POST, 0),
+        ]
+    }
+
+    // Real fixed trace: 2 DTCs before the clear, 1 after (powertrain survives).
+    fn clear_fixed_trace() -> Vec<UserTrace> {
+        vec![
+            dtc_resp(REQ_READ_DTCS_PRE, 2),
+            dtc_resp(REQ_READ_DTCS_POST, 1),
+        ]
+    }
+
+    #[test]
+    fn clear_all_dtcs_decodes_response_count() {
+        assert_eq!(dtc_count(&[dtc_resp(5, 1)], REQ_READ_DTCS_POST), Some(1));
+        assert_eq!(dtc_count(&[dtc_resp(3, 2)], REQ_READ_DTCS_PRE), Some(2));
+    }
+
+    #[test]
+    fn clear_all_dtcs_seed_passes_on_real_trace_pair() {
+        let traces = SeedTraces {
+            failing: clear_bug_trace(),
+            fixed: clear_fixed_trace(),
+        };
+        let checks = evaluate(SeedKind::ClearAllDtcs, &traces);
+        assert_eq!(checks.len(), 3);
+        for c in &checks {
+            assert!(c.passed, "{}: {}", c.name, c.detail);
+        }
+    }
+
+    #[test]
+    fn clear_all_dtcs_fails_when_buggy_firmware_scopes_clear() {
+        // If the "buggy" firmware only cleared BMS (post-clear 1), the bug did
+        // not reproduce.
+        let traces = SeedTraces {
+            failing: clear_fixed_trace(),
+            fixed: clear_fixed_trace(),
+        };
+        let checks = evaluate(SeedKind::ClearAllDtcs, &traces);
+        assert!(
+            !checks
+                .iter()
+                .find(|c| c.name == "bug-reproduced")
+                .unwrap()
+                .passed
+        );
+    }
+
+    #[test]
+    fn clear_all_dtcs_fails_when_fixed_firmware_still_clears_all() {
+        // If the "fixed" firmware still cleared everything (post-clear 0), it is
+        // not fixed and the traces do not diverge.
+        let traces = SeedTraces {
+            failing: clear_bug_trace(),
+            fixed: clear_bug_trace(),
+        };
+        let checks = evaluate(SeedKind::ClearAllDtcs, &traces);
         assert!(
             !checks
                 .iter()

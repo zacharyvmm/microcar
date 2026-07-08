@@ -74,6 +74,20 @@ static uint8_t             g_ota_fault_mode = OTA_FAULT_NONE;
 // stay byte-identical.
 static uint8_t             g_ota_crc_check_bug = 0;
 
+// diagnostics "clear DTCs" dogfood extension. The base diag script only injects
+// a single BMS DTC; these flags drive the debug_gym `clear_all_dtcs` seed, which
+// needs a *non-BMS* fault present when CLEAR_DTCS runs so the scoping matters.
+//
+//   g_diag_extra_pt_fault — also inject a powertrain (non-BMS) DTC, so a
+//     BMS-scoped clear must leave one DTC behind.
+//   g_diag_clear_all_bug  — SEEDED DEBUG-GYM BUG: a BMS-scoped CLEAR_DTCS wrongly
+//     clears EVERY node's DTCs (fault_manager_clear_all) instead of only the
+//     BMS node, silently dropping the unrelated powertrain fault. Off by
+//     default; only reachable via the dedicated gateway_diag_clearbug firmware
+//     path, so the default firmware and every other lane stay byte-identical.
+static uint8_t             g_diag_extra_pt_fault = 0;
+static uint8_t             g_diag_clear_all_bug = 0;
+
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
 /// Mutex protecting fault_manager_t (guards concurrent access from
@@ -134,6 +148,20 @@ void gateway_enable_dogfood_diag_script(uint8_t inject_fault)
 {
     g_diag_dogfood_script = 1;
     g_diag_dogfood_inject_fault = inject_fault ? 1 : 0;
+}
+
+// diagnostics "clear DTCs" dogfood lane / debug_gym `clear_all_dtcs` seed.
+// Runs the diag request script with BOTH a BMS DTC and a non-BMS (powertrain)
+// DTC present when CLEAR_DTCS runs. The correct firmware (buggy=0) clears only
+// the BMS-scoped DTCs, so the powertrain DTC survives (final READ_DTCS count 1).
+// The buggy firmware (buggy=1) wrongly clears every node's DTCs, so the
+// powertrain DTC is silently dropped (final READ_DTCS count 0).
+void gateway_enable_dogfood_diag_clear_dtcs(uint8_t buggy)
+{
+    g_diag_dogfood_script = 1;
+    g_diag_dogfood_inject_fault = 1; // BMS DTC at 300ms
+    g_diag_extra_pt_fault = 1;       // + powertrain DTC at 310ms
+    g_diag_clear_all_bug = buggy ? 1 : 0;
 }
 
 void gateway_enable_dogfood_charging_script(void)
@@ -322,7 +350,14 @@ static void handle_diag_request(const mc_can_frame_t *frame)
         if (!g_diag_session_active) {
             status = MC_DIAG_REJECTED;
         } else if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-            fault_manager_clear_node(&g_fm, MC_NODE_BMS);
+            if (g_diag_clear_all_bug) {
+                // SEEDED DEBUG-GYM BUG (clear_all_dtcs): a BMS-scoped clear
+                // request wrongly clears EVERY node's DTCs, silently dropping
+                // an unrelated (e.g. powertrain) fault. Off by default.
+                fault_manager_clear_all(&g_fm);
+            } else {
+                fault_manager_clear_node(&g_fm, MC_NODE_BMS);
+            }
             xSemaphoreGive(g_fm_mutex);
             value0 = 0;
         }
@@ -365,6 +400,17 @@ static void synth_bms_fault(uint8_t fault_code)
     handle_bms_fault(&rx);
 }
 
+// Report a fault from an arbitrary node directly into the fault manager (used to
+// seed a non-BMS DTC for the clear-DTCs dogfood lane). Mutex-protected like the
+// other g_fm writers.
+static void synth_report_fault(uint8_t node, uint8_t fault_code, uint8_t severity)
+{
+    if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        fault_manager_report(&g_fm, node, fault_code, severity);
+        xSemaphoreGive(g_fm_mutex);
+    }
+}
+
 static void run_dogfood_diag_script(uint32_t *script_ms, uint32_t *sent_mask)
 {
     if (!g_diag_dogfood_script) return;
@@ -384,6 +430,14 @@ static void run_dogfood_diag_script(uint32_t *script_ms, uint32_t *sent_mask)
         && !(*sent_mask & 0x04)) {
         synth_bms_fault(MC_BMS_FAULT_OVERTEMP);
         *sent_mask |= 0x04;
+    }
+    if (g_diag_extra_pt_fault
+        && *script_ms >= 310
+        && !(*sent_mask & 0x80)) {
+        // A non-BMS (powertrain) DTC. A BMS-scoped CLEAR_DTCS must leave this
+        // one behind; the clear-all seeded bug wrongly drops it.
+        synth_report_fault(MC_NODE_POWERTRAIN, MC_WARN_POWERTRAIN_OFFLINE, 1);
+        *sent_mask |= 0x80;
     }
     if (*script_ms >= 350 && !(*sent_mask & 0x08)) {
         synth_diag_request(MC_DIAG_ACTUATOR_TEST, 6);
