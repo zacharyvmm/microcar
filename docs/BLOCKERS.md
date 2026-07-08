@@ -1,9 +1,10 @@
 # costar + microcar Dogfood — Status & Blockers Report
 
-_Branch: `dogfood-milestone-1` on both repos. Updated after the M13 charging lane._
+_Branch: `dogfood-milestone-1` on both repos. Updated after the M14 cockpit
+gRPC-surface lane and the M15 OTA happy-path lane._
 
-- costar: `github.com/zacharyvmm/costar` @ `1ee4ad0`
-- microcar: `github.com/zacharyvmm/microcar` @ `6f2c0e8`
+- costar: `github.com/zacharyvmm/costar` @ `0c63a26`
+- microcar: `github.com/zacharyvmm/microcar` @ `b9d989b`
 - Host: Linux, Rust 1.96.1, workspace at `/home/zmm/projects`.
 
 This document explains **what is done**, **what remains**, and — in detail — **why each
@@ -28,16 +29,20 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 | M11 | Message breakpoint + `continue_until` fix | `World::run_to_frame`; fixed a predicate-miss on the `Done` step |
 | M12 | Diagnostics dogfood lane | `harness diagnostics` 2/2: SERVICE mode, read mode, read/clear DTCs, actuator self-test, SERVICE torque clamp |
 | M13 | Charging dogfood lane | `harness charging` 1/1: plug→CHARGING, drive blocked while plugged, powertrain torque clamped to 0 (trace-backed, golden traces byte-identical) |
+| M14 | Cockpit gRPC-surface lane (costar) | `crates/sim-grpc/tests/cockpit_test.rs`: session/board(display+touch+timer+adc)/run(stream_display)/touch/inspect + framebuffer-hash & tick/end determinism; test-only, golden traces unaffected |
+| M15 | OTA happy-path dogfood lane | `harness ota` 1/1: `ota_state` IDLE→…→HEALTHY, crc-ok, boot healthy (trace-backed, opt-in, golden traces byte-identical) |
 
 **Fully-delivered plan tracks:** engine stabilization; networking/device-edge hardening;
 `simfarm`; `toml_zoo`; `topology` (7/7); Trace v2 data model; debugging primitives
 (`step`, `continue_until`, keyframe replay, message breakpoint), the `debug_gym`
-determinism invariants, the first diagnostics lane, and the first charging safety lane.
+determinism invariants, the first diagnostics lane, the first charging safety lane,
+the first cockpit gRPC-surface lane, and the OTA happy-path lane.
 
-Test counts: costar `sim-world` 110 unit tests, `sim-core` 25; microcar `dogfood` 68 unit
-tests. All lanes green: `harness topology` 7/7, `toml-zoo` 11/11, `simfarm` PASS,
-`debug-gym` 4/4, `diagnostics` 2/2, `charging` 1/1. All 29 non-soak vehicle scenarios pass
-with golden traces intact.
+Test counts: costar `sim-world` 110 unit tests, `sim-core` 25, `sim-grpc` 15 integration
+tests (14 + 1 new cockpit); microcar `dogfood` 75 unit tests. All lanes green:
+`harness topology` 7/7, `toml-zoo` 11/11, `simfarm` PASS, `debug-gym` 4/4 (unchanged
+hashes), `diagnostics` 2/2, `charging` 1/1, `ota` 1/1. All 29 non-soak vehicle scenarios
+pass with golden traces intact.
 
 ---
 
@@ -70,8 +75,12 @@ passes 2/2.
    contract now has a green `harness charging` lane, using trace-backed charging dogfood
    firmware variants (`gateway_charging`, `powertrain_charging`) in the same pattern as
    diagnostics. Still missing: the richer charging FSM (handshake / temperature-rise /
-   reduced-current / charge-complete) and the charging plant physics. **OTA** behavior still
-   does not exist in firmware at all and needs new ECU logic + scenario contracts.
+   reduced-current / charge-complete) and the charging plant physics. **OTA: happy-path
+   lane delivered (M15).** A trace-backed `gateway_ota` dogfood variant now drives the
+   minimal OTA state sequence (IDLE→DOWNLOADING→VERIFYING→COMMIT_PENDING→REBOOTING→HEALTHY
+   with crc-ok / slot-B / boot-healthy markers) and `harness ota` is 1/1 green (opt-in,
+   golden traces byte-identical). Still missing: the 8-case power-cut/corruption/reset
+   **fault matrix** + rollback, a slot-metadata model, and OTA over real firmware CAN.
 2. The plan's deeper diagnostics item, live BMS data, is not implemented yet.
 3. A simulator integration gap remains: firmware-originated CAN and firmware RX are not a
    reliable assertion path in these diagnostics scenarios, so the diagnostics lane uses
@@ -103,37 +112,36 @@ gateway-bridge-loop bug is the one exception already exercised structurally by t
 
 **To unblock:** same as 2.1 — needs firmware.
 
-### 2.3 `cockpit` lane + gRPC control plane  ⟶ UNBLOCKED LOCALLY: workspace `protoc` installed
+### 2.3 `cockpit` lane + gRPC control plane  ⟶ FIRST INCREMENT DELIVERED (M14)
 
 **What the plan wants:** dogfood the GUI-facing path — `CreateSession`, `ConfigureBoard`
 (display + touch + timer + ADC), `Run(stream_display=true)`, `InjectTouch`,
 `InspectDevices`, framebuffer-hash assertions, trace↔device reconciliation. This is the
 `sim-grpc` product surface.
 
-**Previous blocker:** `sim-grpc`'s `build.rs` compiles `.proto` files via `tonic-build`,
-which requires the `protoc` protobuf compiler. `protoc` was not installed system-wide, and
-the earlier `apt-get install protobuf-compiler` path was not usable without root.
+**Previous blocker (cleared):** `sim-grpc`'s `build.rs` compiles `.proto` files via
+`tonic-build`, which requires the `protoc` protobuf compiler. A workspace-local official
+compiler is installed at `/home/zmm/projects/.tools/protoc-27.3/bin/protoc`; export
+`PROTOC` when building/testing costar.
 
-**Local unblock:** a workspace-local official protobuf compiler is installed at:
+**Delivered (M14):** `crates/sim-grpc/tests/cockpit_test.rs` — an additive, test-only
+integration test (`cockpit_grpc_surface_and_determinism`) that runs the full cockpit flow
+end-to-end (`CreateSession → LoadScenario → ConfigureBoard(display+touch+timer+adc,
+n=4) → Run(stream_display,stream_trace) + touch press/release + Stop → InspectDevices`),
+reconciles the inspected devices against `ConfigureBoard`, and asserts framebuffer-hash +
+tick-boundary + `SimulationEnd`-totals determinism across two **sequential** runs. Verified:
+`PROTOC=… cargo test -p sim-grpc` → 14 existing + 1 new cockpit test all pass. No server
+change ⇒ golden traces unaffected.
 
-```text
-/home/zmm/projects/.tools/protoc-27.3/bin/protoc
-```
-
-Use it by exporting `PROTOC` when building or testing costar:
-
-```sh
-cd /home/zmm/projects/costar
-PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc cargo build -p sim-grpc
-PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc cargo test -p sim-grpc
-```
-
-Verified: `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc cargo test -p sim-grpc`
-passes all 14 `sim-grpc` integration tests when localhost binding is allowed. In Codex's
-sandbox, those tests need an escalated run because they bind `127.0.0.1:0`.
-
-**Next step:** start the `cockpit` lane against the now-buildable `sim-grpc` product
-surface.
+**Remaining (follow-ups, not blocking):**
+1. A microcar `harness cockpit` wrapper — deferred to keep the dogfood harness std-only
+   (would need a gRPC client or a shell-out into the costar test).
+2. Rich framebuffer-content assertions (Strategy B) — need display-driving dashboard
+   firmware; the current scenarios emit zero DisplayFrame events (empty-frame determinism
+   is asserted honestly, no fabricated pixels).
+3. Dashboard-state↔trace reconciliation and concurrent multi-session isolation — the
+   latter interlocks with the per-session state refactor (2.4); the M14 test runs
+   sequentially because `sim-devices` registries are process-global.
 
 ### 2.4 Per-session state ownership ("Move State to Per-World Ownership")  ⟶ BLOCKED: large, high-risk refactor needing sign-off
 

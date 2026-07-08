@@ -793,6 +793,88 @@ scenario *schema* (a plug input / mode field), which this firmware-side lane
 does not yet add; OTA and the charging plant physics (temperature-rise /
 reduced-current / charge-complete) remain follow-ups.
 
+## Milestone 14 status (this branch)
+
+The fourteenth milestone delivers the first **cockpit** lane increment — proving
+the `sim-grpc` GUI-facing gRPC control plane end-to-end (UNBLOCKING.md §5
+Strategy A "prove the existing gRPC surface" + Strategy C interaction/inspection).
+It is **costar-only** and **additive test-only**: a new integration test at
+`crates/sim-grpc/tests/cockpit_test.rs` (376 lines, one `#[tokio::test]`
+`cockpit_grpc_surface_and_determinism`) with no change to server/session logic,
+so golden traces are unaffected.
+
+The old `protoc` blocker (§2.3) is cleared via the workspace compiler; the lane
+is built/tested with `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc
+cargo test -p sim-grpc`.
+
+The test exercises the full cockpit flow against the real gRPC product surface:
+`CreateSession → LoadScenario → ConfigureBoard(display + touch + timer + ADC ⇒
+n_peripherals=4) → Run(stream_display=true, stream_trace=true)` with an injected
+touch press + release then `Stop`, collecting the `RunEvent` stream (Tick /
+Trace / Display / End, asserting a `SimulationEnd` with no `SimulationError`),
+then `InspectDevices` reconciliation against `ConfigureBoard` (the display's
+width/height/color_mode, plus touch/timer/adc presence). Determinism is asserted
+by running the **entire flow twice, sequentially**, and comparing an aggregated
+`CockpitRunResult`: the FNV-1a framebuffer-byte hash, the DisplayFrame count, the
+tick-boundary timestamp sequence, and the `SimulationEnd` totals must all be
+identical.
+
+**Honesty note (no fabricated pixels):** none of these scenarios contain firmware
+that draws to the display, so the Run stream emits **zero DisplayFrame events**
+and the framebuffer-byte set is empty — the determinism check is `empty == empty`
+(a valid determinism assertion) alongside the tick/end-totals determinism. Rich
+framebuffer-content assertions (Strategy B) depend on display-driving dashboard
+firmware and are a deliberate follow-up. The two runs are **sequential** (not
+concurrent) because the `sim-devices` device registries are process-global;
+true in-process multi-session isolation is the deferred "Move State to Per-World
+Ownership" track (BLOCKERS §2.4).
+
+Verified locally: `PROTOC=… cargo test -p sim-grpc` → the 14 existing sim-grpc
+integration tests **plus** the new cockpit test all pass (15 total). Remaining
+cockpit follow-ups: a microcar `harness cockpit` wrapper (deferred to keep the
+dogfood harness std-only — it would need a gRPC client or a shell-out),
+display-driving dashboard firmware for real framebuffer-hash content, and the
+dashboard-state↔trace reconciliation.
+
+## Milestone 15 status (this branch)
+
+The fifteenth milestone adds the first **ota** lane increment — the OTA
+happy-path (UNBLOCKING.md §2 Strategy A "happy path first"), following the exact
+M12 diagnostics / M13 charging trace-backed dogfood-script pattern. It is
+**microcar-only** and gated behind an opt-in flag that defaults off, so every
+existing golden trace stays **byte-identical** (verified: the `debug_gym` trace
+hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` / `fa7f03709681` for the
+four scenarios are unchanged).
+
+- firmware: `gateway_enable_dogfood_ota_script()` + `run_dogfood_ota_script()` in
+  the gateway ECU, gated by `g_ota_dogfood_script` (default `0`). Called from the
+  gateway main task loop next to the diag/charging scripts, it steps the minimal
+  OTA state machine and traces compact `user-u32` events: `ota_state`
+  `IDLE(0)→DOWNLOADING(1)→VERIFYING(2)→COMMIT_PENDING(3)→REBOOTING(4)→HEALTHY(5)`
+  at 100–600 ms, plus `ota_crc_ok=1` (VERIFYING), `ota_slot=1` (COMMIT_PENDING,
+  slot B), and `ota_boot_result=1` (HEALTHY). `microcar_boot_gateway_ota()`
+  (in `microcar_coordinator.c`) enables the flag then boots the gateway;
+  `src/lib.rs` resolves `firmware/gateway_ota` (ordered before the generic
+  `gateway`). Because the flag defaults to `0`, the default gateway firmware is
+  unchanged.
+- microcar dogfood: `dogfood/ota/happy_path.toml` (with `# ota-expect:
+  state-sequence 0,1,2,3,4,5`, `crc-ok`, `healthy`), `dogfood/src/ota.rs`
+  (mirrors `charging.rs`: parses the directives into a `StateSequence`/`CrcOk`/
+  `Healthy` expectation set, decodes the `user-u32` traces, asserts the expected
+  monotonic `ota_state` subsequence occurred, `ota_crc_ok=1`, and
+  `ota_boot_result=1`, with a JSON report), and a `harness ota` subcommand.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**75 unit tests** (68 → 75, +7 OTA), all passing; `harness ota` is **1/1** green
+(state-sequence, crc-ok, healthy); and every other lane is unregressed
+(`charging` 1/1, `diagnostics` 2/2, `debug-gym` 4/4 with unchanged hashes,
+`topology` 7/7, `toml-zoo` 11/11). Remaining OTA follow-ups: the 8-case
+power-cut/corruption/reset **fault matrix** and rollback (UNBLOCKING §2
+Strategy C), a pure slot-metadata model with commit/rollback unit tests
+(Strategy B), the OTA-rollback `debug_gym` seed, and flipping the deferred
+`toml_zoo` `ota-while-drive` case (needs OTA represented in the scenario
+*schema*).
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

@@ -1,6 +1,6 @@
 # Microcar Dogfood Unblocking Strategy
 
-Last updated: 2026-07-08 (after the M13 charging safety lane)
+Last updated: 2026-07-08 (after the M14 cockpit gRPC-surface lane + M15 OTA happy-path lane)
 
 This report is a playbook for the remaining blockers in the costar/microcar
 dogfood plan. It assumes the current state after the diagnostics unblock and the
@@ -36,10 +36,10 @@ that make "unblocked" measurable.
 ## Current Remaining Blockers
 
 1. Charging firmware lane — **safety lane done (M13)**; deeper FSM + plant physics remain.
-2. OTA firmware lane.
+2. OTA firmware lane — **happy path done (M15)**; fault matrix + rollback remain.
 3. Diagnostics depth and product-grade diagnostics-over-bus.
 4. Debug gym seeded-bug corpus.
-5. Cockpit/gRPC dogfood lane.
+5. Cockpit/gRPC dogfood lane — **gRPC-surface proof done (M14)**; `harness cockpit` wrapper + display firmware remain.
 6. Telematics firmware and host-socket lane.
 7. Per-session state ownership refactor.
 8. Remaining breakpoint predicates and nightly/scale runs.
@@ -155,6 +155,25 @@ Success criteria:
 - SOC/charge-complete assertions are deterministic across repeated runs.
 
 ## 2. OTA Firmware Lane
+
+### Status (M15): happy path delivered
+
+Strategy A below was taken and its success criteria are met. A trace-backed,
+opt-in `gateway_ota` dogfood variant (`gateway_enable_dogfood_ota_script()` +
+`run_dogfood_ota_script()`, gated by `g_ota_dogfood_script` default `0`) drives
+the minimal OTA state sequence
+`IDLE(0)→DOWNLOADING(1)→VERIFYING(2)→COMMIT_PENDING(3)→REBOOTING(4)→HEALTHY(5)`
+and emits `ota_state`, `ota_crc_ok=1`, `ota_slot=1`, and `ota_boot_result=1`
+markers. `dogfood/src/ota.rs` + `dogfood/ota/happy_path.toml` + `harness ota`
+assert the expected monotonic state sequence, CRC-ok, and healthy boot.
+`harness ota` is 1/1 green; the dogfood crate is at 75 unit tests; and the
+`debug_gym` trace hashes are unchanged (default firmware byte-identical, opt-in).
+
+**Still open** (Strategy C is the natural next step): the eight-case
+power-cut/corruption/reset **fault matrix** + rollback, a pure slot-metadata
+model with commit/rollback unit tests (Strategy B), the OTA-rollback `debug_gym`
+seed, and flipping the deferred `toml_zoo` `ota-while-drive` case (needs OTA in
+the scenario *schema*).
 
 ### Blocker
 
@@ -386,6 +405,24 @@ Success criteria:
   telematics, OTA, and topology.
 
 ## 5. Cockpit / gRPC Dogfood Lane
+
+### Status (M14): gRPC-surface proof delivered
+
+Strategy A (prove the existing gRPC surface) + Strategy C (interaction/inspection)
+were taken. `crates/sim-grpc/tests/cockpit_test.rs` (additive, test-only) runs the
+full cockpit flow — `CreateSession → LoadScenario → ConfigureBoard(display + touch
++ timer + adc) → Run(stream_display,stream_trace) + touch press/release + Stop →
+InspectDevices` — reconciles inspected devices against `ConfigureBoard`, and
+asserts framebuffer-hash + tick + `SimulationEnd`-totals determinism across two
+sequential runs. Verified with `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc
+cargo test -p sim-grpc` (14 existing + 1 new cockpit test pass). No server change
+⇒ golden traces unaffected.
+
+**Still open:** a microcar `harness cockpit` wrapper (deferred to keep the harness
+std-only), Strategy B rich framebuffer content (needs display-driving dashboard
+firmware — current scenarios emit zero DisplayFrame events, so the determinism
+check is honestly `empty == empty`, no fabricated pixels), and concurrent
+multi-session isolation (interlocks with the per-session state refactor, section 7).
 
 ### Blocker
 
@@ -667,8 +704,8 @@ Success criteria:
 ## Recommended Execution Order
 
 1. ~~Charging safety lane~~ — **done (M13)**: drive blocked while plugged.
-2. Cockpit/gRPC, because `protoc` is unblocked and the lane is bounded.
-3. OTA happy path, then OTA fault matrix.
+2. ~~Cockpit/gRPC gRPC-surface proof~~ — **done (M14)**; `harness cockpit` wrapper + display firmware remain.
+3. ~~OTA happy path~~ — **done (M15)**; OTA fault matrix + rollback remain.
 4. Deeper charging FSM (handshake / temp-rise / reduced-current / complete) +
    charging plant physics; then flip the deferred `toml_zoo` `charging-while-drive`.
 5. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN
