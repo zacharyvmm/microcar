@@ -6,11 +6,11 @@
 //! Each machine with a `firmware` field gets a [`MicrocarFirmware`] instance
 //! that exercises costar's fiber scheduler.
 
-use sim_world::scenario::Scenario;
 use microcar::MicrocarFirmware;
 #[cfg(feature = "zephyr")]
 use microcar::ZephyrDashboardFirmware;
 use microcar_plant::MicrocarPlant;
+use sim_world::scenario::Scenario;
 
 fn main() {
     let scenario_path = std::env::args()
@@ -36,8 +36,8 @@ fn main() {
         if m.firmware.is_some() {
             if let Some(machine) = world.machine_mut(m.id) {
                 let fw = m.firmware.as_deref().unwrap_or("");
-                let rtos = m.rtos.as_deref().unwrap_or("freertos");
-                if rtos == "zephyr" {
+                let is_zephyr = matches!(m.rtos, Some(sim_world::RtosBackend::Zephyr));
+                if is_zephyr {
                     #[cfg(feature = "zephyr")]
                     {
                         machine.load_firmware(Box::new(ZephyrDashboardFirmware::new()));
@@ -50,14 +50,13 @@ fn main() {
                              falling back to FreeRTOS firmware",
                             m.name
                         );
-                        machine.load_firmware(Box::new(
-                            MicrocarFirmware::with_firmware_path(&m.name, fw)
-                        ));
+                        machine.load_firmware(Box::new(MicrocarFirmware::with_firmware_path(
+                            &m.name, fw,
+                        )));
                     }
                 } else {
-                    machine.load_firmware(Box::new(
-                        MicrocarFirmware::with_firmware_path(&m.name, fw)
-                    ));
+                    machine
+                        .load_firmware(Box::new(MicrocarFirmware::with_firmware_path(&m.name, fw)));
                 }
             }
         }

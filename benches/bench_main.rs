@@ -19,11 +19,7 @@ fn main() {
     let _args: Vec<String> = std::env::args().collect();
 
     // Default scenario paths
-    let default_scenarios = vec![
-        "fleet_of_8",
-        "fleet_of_16",
-        "normal_drive_cycle",
-    ];
+    let default_scenarios = vec!["fleet_of_8", "fleet_of_16", "normal_drive_cycle"];
 
     let microcar_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let scenarios_dir = microcar_dir.join("scenarios");
@@ -103,15 +99,16 @@ fn main() {
         println!("  Trace events: {}", trace_events);
 
         if virtual_ticks > 0 {
-            let events_per_second_vt =
-                (trace_events as f64 / duration_ms as f64) * 1000.0;
+            let events_per_second_vt = (trace_events as f64 / duration_ms as f64) * 1000.0;
             let wall_sec_per_1m_ticks =
                 (sim_time.as_secs_f64() / virtual_ticks as f64) * 1_000_000.0;
-            let virtual_tick_rate =
-                virtual_ticks as f64 / sim_time.as_secs_f64();
+            let virtual_tick_rate = virtual_ticks as f64 / sim_time.as_secs_f64();
 
             println!("  Events/sec (virtual): {:.2}", events_per_second_vt);
-            println!("  Wall sec / 1M virtual ticks: {:.6}", wall_sec_per_1m_ticks);
+            println!(
+                "  Wall sec / 1M virtual ticks: {:.6}",
+                wall_sec_per_1m_ticks
+            );
             println!("  Virtual tick rate: {:.0} ticks/sec", virtual_tick_rate);
         }
     }

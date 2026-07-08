@@ -1,19 +1,23 @@
 //! Quick trace dumper — runs a scenario and prints the raw trace.
 //! Usage: cargo run --example show_trace -- scenarios/<name>.toml
 
-use sim_world::scenario::Scenario;
 use microcar::MicrocarFirmware;
 use microcar_plant::MicrocarPlant;
+use sim_world::scenario::Scenario;
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: show_trace <scenario.toml>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: show_trace <scenario.toml>");
     let scenario = Scenario::from_file(&path).unwrap();
     let mut world = scenario.build_world().unwrap();
 
     if let Some(ref plant_def) = scenario.plant {
         let tick_ms = plant_def.tick_ms.unwrap_or(10);
         let plant = MicrocarPlant::new(tick_ms as u32);
-        scenario.attach_plant_to(&mut world, Box::new(plant)).unwrap();
+        scenario
+            .attach_plant_to(&mut world, Box::new(plant))
+            .unwrap();
     }
 
     for m in &scenario.machine {
@@ -35,5 +39,8 @@ fn main() {
     for line in world.drain_all_traces() {
         println!("{}", line);
     }
-    println!("\n=== Trace count: {} lines ===", world.drain_all_traces().len());
+    println!(
+        "\n=== Trace count: {} lines ===",
+        world.drain_all_traces().len()
+    );
 }
