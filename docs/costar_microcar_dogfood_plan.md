@@ -588,11 +588,15 @@ completing the topology lane's bridge scenario — is implemented on this branch
 This realizes the plan's topology assertions "gateway bridge emits exactly one
 forwarded frame", "forwarded frame preserves correlation id", and "trace
 includes source and destination component identity". The topology lane now
-covers 4 scenarios (`dual_bus_gateway`, `diag_request_through_gateway`,
-`fleet_16_nodes`, `drive_body_bus_bridge`), all green; the dogfood crate has 57
-unit tests. Still deferred: `gateway_loop_prevention` (needs multi-bridge
-de-duplication so multiple bridge paths inject a controller only once) and
-`fleet_64_nodes`.
+covers 5 scenarios (`dual_bus_gateway`, `diag_request_through_gateway`,
+`fleet_16_nodes`, `drive_body_bus_bridge`, `gateway_loop_prevention`), all green.
+`gateway_loop_prevention` demonstrates single-hop forwarding — a forwarded frame
+is never re-forwarded, so it cannot chain or loop across a bridge chain; the
+complementary multi-bridge de-duplication (several bridge paths inject a
+controller on a shared bus only once, keyed on `(source_bus, seq, target_bus)`)
+is covered by the costar `test_gateway_forwarding_dedups_multiple_bridges` engine
+test (sim-world now has 106 tests). Only `fleet_64_nodes` (a nightly-scale
+variant of `fleet_16_nodes`) remains deferred.
 
 ## Assumptions
 
