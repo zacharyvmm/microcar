@@ -981,6 +981,52 @@ commit, gateway/BMS reset during update, and the two mode-gated cases
 OTA-rollback `debug_gym` seed (now trivially seedable from `gateway_ota_badcrc` /
 `gateway_ota_badhealth`).
 
+## Milestone 18 status (this branch)
+
+The eighteenth milestone adds the OTA fault-matrix "power cut after write before
+commit" case (the plan's fault-matrix item 3) — arguably the most important OTA
+safety property: **commit atomicity**. It is **microcar-only**, opt-in, and
+reuses the M16 slot model + M17 rollback machinery, so every existing golden
+trace stays **byte-identical** (verified: the `debug_gym` hashes `c371b96e253e` /
+`68806f23c980` / `16684074b01c` / `fa7f03709681` are unchanged, and the happy
+path + the M16/M17 fault paths emit the exact same `ota_*` events).
+
+- **Firmware.** New fault selector `OTA_FAULT_POWERCUT_PRECOMMIT`
+  (`gateway_ota_powercut`): a valid image downloads and verifies (crc ok), but a
+  power cut strikes at the commit step — instead of `mc_ota_commit()`, the model
+  does `mc_ota_rollback()`, discarding the verified-but-uncommitted image and
+  reverting to slot A: `IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) →
+  ROLLED_BACK(6, slot A)`. This proves the commit is the point of no return — a
+  perfectly valid image still does NOT take effect if power is lost before it
+  commits, so the vehicle keeps running its previous firmware. Wired via
+  `microcar_boot_gateway_ota_powercut()` (coordinator) and the `src/lib.rs`
+  resolver (`gateway_ota_powercut` matched before `gateway_ota`).
+- **Harness / scenario.** No new expectation types — `dogfood/ota/
+  rollback_powercut_precommit.toml` asserts `state-sequence 0,1,2,6` + **crc-ok**
+  (the distinguishing marker vs the bad-CRC case, whose `0,1,2,6` carries
+  crc-bad) + rolled-back + active-slot 0. Added 1 dogfood unit test (dogfood
+  82 → **83**).
+
+Verified locally: `cargo build --bin microcar` OK; `state_tests` **99** and the
+dogfood crate **83** unit tests pass; `harness ota` is **5/5** green
+(`happy_path`, `rollback_bad_crc`, `rollback_failed_health`,
+`rollback_interrupted_write`, `rollback_powercut_precommit`); every other lane is
+unregressed (`charging` 1/1, `diagnostics` 2/2, `debug-gym` 4/4 with unchanged
+hashes, `topology` 7/7, `toml-zoo` 11/11); the touched Rust file is clippy-clean.
+The OTA fault matrix now covers **4 of the plan's 8 cases** (corrupt image,
+interrupted write, failed-boot rollback, power-cut-before-commit).
+
+The remaining 4 fault-matrix cases are **decision-gated** and were intentionally
+NOT done autonomously (to avoid guessing a modeling approach that could
+compromise the goal): **gateway reset during update** and **BMS critical fault
+during update** need a reliable cross-ECU / reset mechanism to model honestly
+(the current CAN-RX path is still unreliable — a trace-only stub would be
+fabricated rather than genuinely exercised); and **OTA-while-driving** /
+**OTA-while-charging** are mode-gated — they need OTA represented in the scenario
+*schema* (a design decision shared with the deferred `toml_zoo` `ota-while-drive`
+case). The OTA-rollback `debug_gym` seed is now trivially seedable from any of
+the four fault variants once the seeded-bug corpus format is agreed.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.

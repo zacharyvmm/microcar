@@ -26,6 +26,7 @@ extern void gateway_enable_dogfood_ota_script(void);
 extern void gateway_enable_dogfood_ota_fault_bad_crc(void);
 extern void gateway_enable_dogfood_ota_fault_interrupted_write(void);
 extern void gateway_enable_dogfood_ota_fault_bad_health(void);
+extern void gateway_enable_dogfood_ota_fault_powercut_precommit(void);
 extern void powertrain_enable_dogfood_charging(void);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
@@ -178,6 +179,17 @@ void microcar_boot_gateway_ota_badhealth(void)
 {
     sim_trace_u32("microcar_boot_gateway_ota_badhealth", 1);
     gateway_enable_dogfood_ota_fault_bad_health();
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with the OTA power-cut-before-commit fault variant — a valid
+/// image is written and verified, but a power cut before the atomic commit
+/// discards it and the bootloader stays on slot A (… → VERIFYING → ROLLED_BACK).
+void microcar_boot_gateway_ota_powercut(void)
+{
+    sim_trace_u32("microcar_boot_gateway_ota_powercut", 1);
+    gateway_enable_dogfood_ota_fault_powercut_precommit();
     microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

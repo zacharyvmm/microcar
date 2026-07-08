@@ -62,6 +62,7 @@ static uint8_t             g_ota_dogfood_script = 0;
 #define OTA_FAULT_BAD_CRC 1u
 #define OTA_FAULT_INTERRUPTED_WRITE 2u
 #define OTA_FAULT_BAD_HEALTH        3u
+#define OTA_FAULT_POWERCUT_PRECOMMIT 4u
 static uint8_t             g_ota_fault_mode = OTA_FAULT_NONE;
 
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
@@ -161,6 +162,17 @@ void gateway_enable_dogfood_ota_fault_bad_health(void)
 {
     g_ota_dogfood_script = 1;
     g_ota_fault_mode = OTA_FAULT_BAD_HEALTH;
+}
+
+// OTA fault-matrix variant: a power cut strikes after the image has been written
+// and verified but before the atomic commit. The verified-but-uncommitted image
+// is discarded and the bootloader stays on the known-good slot A — proving the
+// commit is the point of no return (a valid image still reverts if it never
+// committed).
+void gateway_enable_dogfood_ota_fault_powercut_precommit(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_POWERCUT_PRECOMMIT;
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -435,6 +447,9 @@ static void emit_ota_rollback(const mc_ota_slot_state_t *ota)
 ///       IDLE → DOWNLOADING → ROLLED_BACK (never verifies).
 ///   * OTA_FAULT_BAD_HEALTH        — armed image boots but fails self-test:
 ///       IDLE → DOWNLOADING → VERIFYING → COMMIT_PENDING → REBOOTING → ROLLED_BACK.
+///   * OTA_FAULT_POWERCUT_PRECOMMIT — power cut after verify, before the atomic
+///     commit; the verified-but-uncommitted image is discarded, revert to A:
+///       IDLE → DOWNLOADING → VERIFYING(crc ok) → ROLLED_BACK.
 /// States are traced as `ota_state` at successive scheduled times, with
 /// `ota_crc_ok`, `ota_slot`, `ota_boot_result`, `ota_rollback` and
 /// `ota_active_slot` marker events at the relevant steps.
@@ -486,11 +501,19 @@ static void run_dogfood_ota_script(uint32_t *ota_ms, uint32_t *ota_sent)
         *ota_sent |= 0x04;
     }
     // 400ms — COMMIT_PENDING: arm slot B as the boot target (only if verified).
+    // A power cut here (after verify, before the atomic commit) discards the
+    // verified-but-uncommitted image and reverts to slot A — the commit is the
+    // point of no return.
     if (*ota_ms >= 400 && !(*ota_sent & 0x08)) {
         if (ota.state == MC_OTA_VERIFYING) {
-            mc_ota_commit(&ota);
-            sim_trace_u32("ota_state", ota.state); // MC_OTA_COMMIT_PENDING
-            sim_trace_u32("ota_slot", ota.target_slot);
+            if (g_ota_fault_mode == OTA_FAULT_POWERCUT_PRECOMMIT) {
+                mc_ota_rollback(&ota);
+                emit_ota_rollback(&ota);
+            } else {
+                mc_ota_commit(&ota);
+                sim_trace_u32("ota_state", ota.state); // MC_OTA_COMMIT_PENDING
+                sim_trace_u32("ota_slot", ota.target_slot);
+            }
         }
         *ota_sent |= 0x08;
     }

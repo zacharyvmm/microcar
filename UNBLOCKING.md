@@ -1,6 +1,6 @@
 # Microcar Dogfood Unblocking Strategy
 
-Last updated: 2026-07-08 (after the M16 OTA slot-metadata model + rollback lane + the M17 OTA fault-matrix extension)
+Last updated: 2026-07-08 (after the M17 OTA fault-matrix extension + the M18 OTA commit-atomicity/power-cut fault case)
 
 This report is a playbook for the remaining blockers in the costar/microcar
 dogfood plan. It assumes the current state after the diagnostics unblock and the
@@ -36,7 +36,7 @@ that make "unblocked" measurable.
 ## Current Remaining Blockers
 
 1. Charging firmware lane — **safety lane done (M13)**; deeper FSM + plant physics remain.
-2. OTA firmware lane — **happy path done (M15)**, **slot-metadata model + 3 of 8 fault-matrix cases done (M16–M17)**; remaining fault cases (power-cut-after-write, gateway/BMS reset, ota-while-drive/charge) remain.
+2. OTA firmware lane — **happy path done (M15)**, **slot-metadata model + 4 of 8 fault-matrix cases done (M16–M18)**; the remaining fault cases are decision-gated (gateway/BMS-reset need a cross-ECU mechanism; ota-while-drive/charge need scenario-schema).
 3. Diagnostics depth and product-grade diagnostics-over-bus.
 4. Debug gym seeded-bug corpus.
 5. Cockpit/gRPC dogfood lane — **gRPC-surface proof done (M14)**; `harness cockpit` wrapper + display firmware remain.
@@ -188,11 +188,21 @@ gives every fault an identical rollback marker set. `harness ota` is now **4/4**
 (`happy_path`, `rollback_bad_crc`, `rollback_failed_health`, `rollback_interrupted_write`);
 3 of the plan's 8 fault cases are covered. No new harness expectation types were needed.
 
-**Still open** (continue Strategy C, fault-matrix driven): the remaining fault cases —
-power-cut after write before commit, gateway/BMS reset during update, and the two mode-gated
-cases (OTA-while-driving / OTA-while-charging, which need OTA in the scenario *schema*, shared
-with the deferred `toml_zoo` `ota-while-drive` case). Also open: the OTA-rollback `debug_gym`
-seed (now trivially seedable from any of the M16/M17 fault variants).
+**Update (M18): commit-atomicity (power-cut-before-commit) case shipped.** A fourth fault
+variant landed — `gateway_ota_powercut`: a valid image downloads and verifies (crc ok), but
+a power cut at the commit step discards the verified-but-uncommitted image and reverts to
+slot A (`0,1,2,6` with **crc-ok**, distinguishing it from bad-CRC's `0,1,2,6` with crc-bad).
+`harness ota` is now **5/5**; 4 of the plan's 8 fault cases are covered.
+
+**Still open — decision-gated (deliberately not guessed autonomously):** the remaining OTA
+fault cases need input. **gateway reset during update** and **BMS critical fault during
+update** need a reliable cross-ECU / reset mechanism to model honestly — the firmware CAN-RX
+path is still unreliable, so a trace-only stub would be *fabricated* rather than genuinely
+exercised (which would compromise the goal). **OTA-while-driving** / **OTA-while-charging**
+are mode-gated: they need OTA represented in the scenario *schema* (a plug/mode field in the
+TOML), a design decision shared with the deferred `toml_zoo` `ota-while-drive` case. The
+OTA-rollback `debug_gym` seed is trivially seedable from any of the four M16–M18 fault
+variants once the seeded-bug corpus format is agreed.
 
 ### Blocker
 
@@ -724,10 +734,11 @@ Success criteria:
 
 1. ~~Charging safety lane~~ — **done (M13)**: drive blocked while plugged.
 2. ~~Cockpit/gRPC gRPC-surface proof~~ — **done (M14)**; `harness cockpit` wrapper + display firmware remain.
-3. ~~OTA happy path~~ — **done (M15)**; ~~slot-metadata model + first rollback fault~~ —
-   **done (M16)**; ~~interrupted-write + failed-boot rollback~~ — **done (M17)**; remaining
-   OTA fault cases (power-cut-after-write-before-commit, gateway/BMS reset, ota-while-
-   drive/charge) remain — each a firmware fault variant + scenario reusing the M16 slot model.
+3. ~~OTA happy path~~ — **done (M15)**; ~~slot-metadata model + first rollback~~ —
+   **done (M16)**; ~~interrupted-write + failed-boot rollback~~ — **done (M17)**;
+   ~~commit-atomicity / power-cut-before-commit~~ — **done (M18)**; the remaining OTA fault
+   cases (gateway/BMS reset, ota-while-drive/charge) are decision-gated — see UNBLOCKING §2
+   "Still open" and BLOCKERS §3.
 4. Deeper charging FSM (handshake / temp-rise / reduced-current / complete) +
    charging plant physics; then flip the deferred `toml_zoo` `charging-while-drive`.
 5. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN

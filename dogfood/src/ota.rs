@@ -443,6 +443,23 @@ mod tests {
         ]
     }
 
+    /// A power-cut-before-commit campaign: a valid image verifies but a power cut
+    /// before the atomic commit discards it and reverts to slot A (mirrors the
+    /// `gateway_ota_powercut` firmware variant's trace). Distinguished from the
+    /// bad-CRC case by `ota_crc_ok=1` (the image was valid).
+    fn powercut_precommit_trace() -> Vec<UserTrace> {
+        vec![
+            t(NODE_GATEWAY, "ota_state", 0),
+            t(NODE_GATEWAY, "ota_state", 1),
+            t(NODE_GATEWAY, "ota_state", 2),
+            t(NODE_GATEWAY, "ota_crc_ok", 1),
+            t(NODE_GATEWAY, "ota_state", 6),
+            t(NODE_GATEWAY, "ota_rollback", 1),
+            t(NODE_GATEWAY, "ota_active_slot", 0),
+            t(NODE_GATEWAY, "ota_boot_result", 0),
+        ]
+    }
+
     #[test]
     fn parses_user_trace_line() {
         let line = r#"[machine.1]            0 user-u32 "ota_state" = 3"#;
@@ -617,5 +634,24 @@ mod tests {
         assert!(evaluate(&Expectation::ActiveSlot(0), &failed_health_trace()).passed);
         // The bad boot means it never committed healthy.
         assert!(!evaluate(&Expectation::Healthy, &failed_health_trace()).passed);
+    }
+
+    #[test]
+    fn powercut_precommit_reverts_valid_image_to_slot_a() {
+        // A valid image (crc ok) verifies, but a power cut before commit reverts.
+        assert!(
+            evaluate(
+                &Expectation::StateSequence(vec![0, 1, 2, 6]),
+                &powercut_precommit_trace()
+            )
+            .passed
+        );
+        // Distinguished from bad-CRC: the image WAS valid (crc ok, not crc bad).
+        assert!(evaluate(&Expectation::CrcOk, &powercut_precommit_trace()).passed);
+        assert!(!evaluate(&Expectation::CrcBad, &powercut_precommit_trace()).passed);
+        assert!(evaluate(&Expectation::RolledBack, &powercut_precommit_trace()).passed);
+        assert!(evaluate(&Expectation::ActiveSlot(0), &powercut_precommit_trace()).passed);
+        // It never committed the update (never reached HEALTHY).
+        assert!(!evaluate(&Expectation::Healthy, &powercut_precommit_trace()).passed);
     }
 }
