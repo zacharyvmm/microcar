@@ -38,6 +38,7 @@ pub const KNOWN_ECU_KEYWORDS: &[&str] = &[
     "net_demo",
     "storage_demo",
     "bt_demo",
+    "diagnostics",
     "gateway",
     "powertrain",
     "bms",
@@ -236,6 +237,10 @@ machine = "powertrain"
         assert_eq!(
             resolve_ecu(Some("firmware/dashboard_ecu"), "m"),
             Some("dashboard")
+        );
+        assert_eq!(
+            resolve_ecu(Some("firmware/diagnostics_tool_ecu"), "m"),
+            Some("diagnostics")
         );
         // Name-prefix fallback (firmware path has no keyword).
         assert_eq!(

@@ -1,0 +1,78 @@
+# service_mode_disables_drive — diagnostics service mode blocks drive torque.
+#
+# The gateway_diag firmware variant runs the diagnostic request script inside
+# gateway firmware. The powertrain_diag_service variant forces a SERVICE-mode
+# torque computation with throttle demand so the safety clamp is exercised.
+#
+# diagnostics-expect: service-mode
+# diagnostics-expect: actuator status=ok
+# diagnostics-expect: dtc req=3 count=0
+# diagnostics-expect: motor-torque max=0 after_ms=300
+
+name = "diagnostics_service_mode_disables_drive"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_diag_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_diag_service_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diagnostics_tool"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[input]]
+at_ms = 250
+type = "driver_input"
+throttle_percent = 80
+brake_pressed = false

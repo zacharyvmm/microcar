@@ -18,6 +18,9 @@ extern void gateway_main(void *pvParameters);
 extern void powertrain_main(void *pvParameters);
 extern void bms_main(void *pvParameters);
 extern void dashboard_main(void *pvParameters);
+extern void diagnostics_tool_main(void *pvParameters);
+extern void gateway_enable_dogfood_diag_script(uint8_t inject_fault);
+extern void powertrain_enable_dogfood_service_mode(void);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
 extern void bt_demo_main(void *pvParameters);
@@ -35,6 +38,7 @@ extern void bt_demo_main(void *pvParameters);
 #define BMS_PRIORITY        2
 #define DASHBOARD_PRIORITY  1
 #define DEMO_PRIORITY       2
+#define DIAGNOSTICS_PRIORITY 2
 
 // ── Helper: create a task with sim_create_task + xTaskCreate ──────────────
 
@@ -74,10 +78,37 @@ void microcar_boot_gateway(void)
     sim_trace_u32("microcar_tasks_created", 1);
 }
 
+/// Boot gateway with the diagnostics dogfood request script enabled.
+void microcar_boot_gateway_diag(void)
+{
+    sim_trace_u32("microcar_boot_gateway_diag", 1);
+    gateway_enable_dogfood_diag_script(0);
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot gateway with diagnostics script plus a synthetic BMS DTC.
+void microcar_boot_gateway_diag_fault(void)
+{
+    sim_trace_u32("microcar_boot_gateway_diag_fault", 1);
+    gateway_enable_dogfood_diag_script(1);
+    microcar_create_task("gateway", gateway_main, GATEWAY_STACK_WORDS, GATEWAY_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
 /// Boot only the powertrain ECU on this machine.
 void microcar_boot_powertrain(void)
 {
     sim_trace_u32("microcar_boot_powertrain", 1);
+    microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot powertrain forced into SERVICE-mode torque computation.
+void microcar_boot_powertrain_diag_service(void)
+{
+    sim_trace_u32("microcar_boot_powertrain_diag_service", 1);
+    powertrain_enable_dogfood_service_mode();
     microcar_create_task("powertrain", powertrain_main, POWERTRAIN_STACK_WORDS, POWERTRAIN_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }
@@ -95,6 +126,14 @@ void microcar_boot_dashboard(void)
 {
     sim_trace_u32("microcar_boot_dashboard", 1);
     microcar_create_task("dashboard", dashboard_main, DASHBOARD_STACK_WORDS, DASHBOARD_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot only the diagnostics tool ECU on this machine.
+void microcar_boot_diagnostics_tool(void)
+{
+    sim_trace_u32("microcar_boot_diagnostics_tool", 1);
+    microcar_create_task("diagnostics_tool", diagnostics_tool_main, DEMO_STACK_WORDS, DIAGNOSTICS_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }
 

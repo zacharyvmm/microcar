@@ -18,6 +18,7 @@ extern "C" {
 #define MC_NODE_POWERTRAIN    2
 #define MC_NODE_BMS           3
 #define MC_NODE_DASHBOARD     4
+#define MC_NODE_DIAGNOSTICS   5
 #define MC_NODE_PLANT         100
 #define MC_NODE_TEST_HARNESS  200
 
@@ -41,6 +42,12 @@ extern "C" {
 // Plant-published sensor data (SOC, voltage, temperature, current).
 #define MC_MSG_PLANT_SENSORS      0x500
 
+// Lightweight diagnostics request/response, used by the dogfood diagnostics
+// lane. Payloads keep byte 0 as sender id so C firmware can recover the source
+// from sim_can_recv() payloads.
+#define MC_MSG_DIAG_REQUEST       0x600
+#define MC_MSG_DIAG_RESPONSE      0x601
+
 // ── Vehicle Modes ────────────────────────────────────────────────────────
 
 typedef enum {
@@ -49,8 +56,45 @@ typedef enum {
     VEHICLE_DRIVE     = 2,
     VEHICLE_LIMP      = 3,
     VEHICLE_FAULT     = 4,
-    VEHICLE_CHARGING  = 5
+    VEHICLE_CHARGING  = 5,
+    VEHICLE_SERVICE   = 6,
+    VEHICLE_OTA_UPDATE = 7,
+    VEHICLE_TRANSPORT_MODE = 8
 } mc_vehicle_mode_t;
+
+// ── Diagnostics services ───────────────────────────────────────────────
+
+typedef enum {
+    MC_DIAG_START_SESSION = 1,
+    MC_DIAG_READ_MODE     = 2,
+    MC_DIAG_READ_DTCS     = 3,
+    MC_DIAG_CLEAR_DTCS    = 4,
+    MC_DIAG_LIVE_BMS      = 5,
+    MC_DIAG_ACTUATOR_TEST = 6,
+    MC_DIAG_END_SESSION   = 7
+} mc_diag_service_t;
+
+typedef enum {
+    MC_DIAG_OK          = 0,
+    MC_DIAG_REJECTED    = 1,
+    MC_DIAG_UNSUPPORTED = 2
+} mc_diag_status_t;
+
+typedef struct {
+    uint8_t source_node;
+    uint8_t service;
+    uint8_t request_id;
+    uint8_t param;
+} __attribute__((packed)) mc_diag_request_msg_t;
+
+typedef struct {
+    uint8_t source_node;
+    uint8_t service;
+    uint8_t request_id;
+    uint8_t status;
+    uint8_t value0;
+    uint8_t value1;
+} __attribute__((packed)) mc_diag_response_msg_t;
 
 // ── Powertrain States ────────────────────────────────────────────────────
 
@@ -206,6 +250,8 @@ typedef struct {
 #define MC_MOTOR_COMMAND_MSG_SIZE   sizeof(mc_motor_command_msg_t)
 #define MC_WHEEL_SPEED_MSG_SIZE     sizeof(mc_wheel_speed_msg_t)
 #define MC_WARNING_MSG_SIZE         sizeof(mc_warning_msg_t)
+#define MC_DIAG_REQUEST_MSG_SIZE    sizeof(mc_diag_request_msg_t)
+#define MC_DIAG_RESPONSE_MSG_SIZE   sizeof(mc_diag_response_msg_t)
 
 // Maximum payload size (for buffer allocation)
 #define MC_MAX_PAYLOAD_SIZE 8

@@ -38,6 +38,7 @@
 
 static torque_controller_t g_tc;
 static watchdog_task_t     g_wd;
+static uint8_t             g_diag_force_service_mode = 0;
 
 // ── Counting semaphore (CAN TX mailbox) ───────────────────────────────────
 
@@ -99,6 +100,11 @@ void powertrain_init(void)
 {
     torque_controller_init(&g_tc);
     watchdog_init(&g_wd);
+}
+
+void powertrain_enable_dogfood_service_mode(void)
+{
+    g_diag_force_service_mode = 1;
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -281,6 +287,10 @@ void powertrain_main(void *pvParameters)
     powertrain_init();
     powertrain_primitives_init();
     g_powertrain_task_handle = xTaskGetCurrentTaskHandle();
+    if (g_diag_force_service_mode) {
+        torque_controller_set_mode(&g_tc, VEHICLE_SERVICE);
+        torque_controller_set_input(&g_tc, 80, 0, 0);
+    }
 
     // Create subordinate tasks.
     xTaskCreate(sensor_poll, "sensor", 512, NULL, 3, NULL);
@@ -312,12 +322,21 @@ void powertrain_main(void *pvParameters)
             rx.len = (uint8_t)dlc;
             dispatch_frame(&rx);
         }
+        if (g_diag_force_service_mode) {
+            torque_controller_set_mode(&g_tc, VEHICLE_SERVICE);
+            torque_controller_set_input(&g_tc, 80, 0, 0);
+        }
 
         // ── Compute torque ────────────────────────────────────
         int8_t torque = torque_controller_compute(&g_tc);
 
         // ── Send motor command (with semaphore guard) ────────
         send_motor_command(torque, &tx);
+        if (g_tc.vehicle_mode == VEHICLE_SERVICE) {
+            sim_trace_u32("diag_motor_command",
+                          ((uint32_t)(uint8_t)torque << 8)
+                        | (uint32_t)g_tc.motor_enable);
+        }
         can_tx_with_semaphore(&tx);
 
         // ── Send heartbeat ────────────────────────────────────

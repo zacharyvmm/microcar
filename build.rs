@@ -20,6 +20,7 @@ fn main() {
     println!("cargo:rerun-if-changed=firmware/bms_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/dashboard_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/dashboard_ecu_zephyr/src/");
+    println!("cargo:rerun-if-changed=firmware/diagnostics_tool_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/gateway_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/powertrain_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/priority_inversion_demo/src/");
@@ -33,15 +34,33 @@ fn main() {
     println!("cargo:rerun-if-changed=firmware/zephyr_mock/");
 
     // Also re-run if the FreeRTOS config or sim ABI headers change.
-    println!("cargo:rerun-if-changed={}", freertos_port.join("c/FreeRTOSConfig.h").display());
-    println!("cargo:rerun-if-changed={}", freertos_port.join("c/portmacro.h").display());
-    println!("cargo:rerun-if-changed={}", sim_ffi_include.join("sim_abi.h").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        freertos_port.join("c/FreeRTOSConfig.h").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        freertos_port.join("c/portmacro.h").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        sim_ffi_include.join("sim_abi.h").display()
+    );
 
     // Also re-run if sim-zephyr-port headers change.
     let zephyr_port = costar_root.join("crates/sim-zephyr-port");
-    println!("cargo:rerun-if-changed={}", zephyr_port.join("c/sim_zephyr_abi.h").display());
-    println!("cargo:rerun-if-changed={}", zephyr_port.join("c/zephyr_arch.c").display());
-    println!("cargo:rerun-if-changed={}", zephyr_port.join("c/zephyr_glue.c").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        zephyr_port.join("c/sim_zephyr_abi.h").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        zephyr_port.join("c/zephyr_arch.c").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        zephyr_port.join("c/zephyr_glue.c").display()
+    );
 
     let mut build = cc::Build::new();
 
@@ -66,6 +85,9 @@ fn main() {
         .file("firmware/gateway_ecu/src/gateway_state.c")
         .file("firmware/gateway_ecu/src/heartbeat_monitor.c")
         .file("firmware/gateway_ecu/src/fault_manager.c");
+
+    // ── Diagnostics tool ECU ────────────────────────────────────────
+    build.file("firmware/diagnostics_tool_ecu/src/main.c");
 
     // ── Powertrain ECU ───────────────────────────────────────────────
     build
@@ -102,16 +124,18 @@ fn main() {
         build.file("firmware/zephyr_mock/kernel_impl.c");
 
         // ── Zephyr dashboard firmware ────────────────────────────
-        build.file("firmware/dashboard_ecu_zephyr/src/main.c")
-             .file("firmware/dashboard_ecu_zephyr/src/dashboard_state.c")
-             .file("firmware/dashboard_ecu_zephyr/src/warning_display.c");
+        build
+            .file("firmware/dashboard_ecu_zephyr/src/main.c")
+            .file("firmware/dashboard_ecu_zephyr/src/dashboard_state.c")
+            .file("firmware/dashboard_ecu_zephyr/src/warning_display.c");
 
         // ── Zephyr boot entry ────────────────────────────────────
         build.file("firmware/microcar_zephyr_boot.c");
 
         // ── sim-zephyr-port runtime (standalone mode) ────────────
-        build.file(zephyr_port.join("c/zephyr_arch.c"))
-             .file(zephyr_port.join("c/zephyr_glue.c"));
+        build
+            .file(zephyr_port.join("c/zephyr_arch.c"))
+            .file(zephyr_port.join("c/zephyr_glue.c"));
 
         // ── Zephyr include paths ─────────────────────────────────
         // Order matters:
@@ -119,10 +143,11 @@ fn main() {
         //   2. sim-zephyr-port config (generated syscalls)
         //   3. sim-zephyr-port c (sim_zephyr_abi.h, zephyr_arch.h)
         //   4. sim-ffi include (sim_abi.h)
-        build.include("firmware/zephyr_mock")
-             .include(zephyr_port.join("config"))
-             .include(zephyr_port.join("c"))
-             .include(&sim_ffi_include);
+        build
+            .include("firmware/zephyr_mock")
+            .include(zephyr_port.join("config"))
+            .include(zephyr_port.join("c"))
+            .include(&sim_ffi_include);
 
         // ── Zephyr-specific defines ──────────────────────────────
         build.define("SIMULATION_HOST_MODE", Some("1"));
@@ -142,6 +167,7 @@ fn main() {
         .include("firmware/bms_ecu/src")
         .include("firmware/dashboard_ecu/src")
         .include("firmware/dashboard_ecu_zephyr/src")
+        .include("firmware/diagnostics_tool_ecu/src")
         .include("firmware/gateway_ecu/src")
         .include("firmware/powertrain_ecu/src")
         .include("firmware/priority_inversion_demo/src")

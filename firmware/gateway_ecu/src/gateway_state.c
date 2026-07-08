@@ -60,6 +60,9 @@ const char *gateway_mode_string(mc_vehicle_mode_t mode)
     case VEHICLE_LIMP:     return MC_MODE_LIMP;
     case VEHICLE_FAULT:    return MC_MODE_FAULT;
     case VEHICLE_CHARGING: return MC_MODE_CHARGING;
+    case VEHICLE_SERVICE:  return "SERVICE";
+    case VEHICLE_OTA_UPDATE: return "OTA_UPDATE";
+    case VEHICLE_TRANSPORT_MODE: return "TRANSPORT_MODE";
     default:               return "UNKNOWN";
     }
 }

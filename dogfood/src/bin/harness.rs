@@ -21,15 +21,15 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use microcar_dogfood::debug_gym::DEFAULT_SCENARIOS;
 use microcar_dogfood::determinism::DeterminismReport;
+use microcar_dogfood::diagnostics::{self, DEFAULT_DIAGNOSTICS_DIR};
 use microcar_dogfood::invariants::CheckStatus;
 use microcar_dogfood::summary::{build_summary, ScenarioSummary};
-use microcar_dogfood::debug_gym::DEFAULT_SCENARIOS;
 use microcar_dogfood::toml_zoo::{self, DEFAULT_CORPUS_DIR};
 use microcar_dogfood::topology::{self, DEFAULT_TOPOLOGY_DIR};
 use microcar_dogfood::{
-    check_solo_vs_repeat, run_churn, run_debug_gym, run_panic_isolation, run_simfarm,
-    write_summary,
+    check_solo_vs_repeat, run_churn, run_debug_gym, run_panic_isolation, run_simfarm, write_summary,
 };
 
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
@@ -52,6 +52,7 @@ fn main() -> ExitCode {
         "simfarm" => cmd_simfarm(rest),
         "toml-zoo" | "toml_zoo" => cmd_toml_zoo(rest),
         "topology" => cmd_topology(rest),
+        "diagnostics" => cmd_diagnostics(rest),
         "debug-gym" | "debug_gym" => cmd_debug_gym(rest),
         "-h" | "--help" | "help" => {
             usage();
@@ -62,6 +63,99 @@ fn main() -> ExitCode {
             usage();
             ExitCode::from(2)
         }
+    }
+}
+
+/// `harness diagnostics [--dir DIR] [--timeout-secs S] [--json OUT]`
+///
+/// Runs the diagnostics lane: each scenario carries `# diagnostics-expect:`
+/// directives and is checked from Trace v2 payload summaries.
+fn cmd_diagnostics(args: &[String]) -> ExitCode {
+    let mut dir = PathBuf::from(DEFAULT_DIAGNOSTICS_DIR);
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
+    let mut json: Option<PathBuf> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => dir = PathBuf::from(v),
+                    None => return argerr("diagnostics", "--dir needs a path"),
+                }
+            }
+            "--timeout-secs" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse().ok()) {
+                    Some(v) => timeout_secs = v,
+                    None => return argerr("diagnostics", "--timeout-secs needs a number"),
+                }
+            }
+            "--json" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => json = Some(PathBuf::from(v)),
+                    None => return argerr("diagnostics", "--json needs a path"),
+                }
+            }
+            other if other.starts_with('-') => {
+                return argerr("diagnostics", &format!("unknown flag: {other}"));
+            }
+            other => dir = PathBuf::from(other),
+        }
+        i += 1;
+    }
+
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let timeout = Duration::from_secs(timeout_secs);
+
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
+    println!("microcar binary: {}", bin.display());
+    println!("diagnostics corpus: {}\n", dir.display());
+
+    let report = match diagnostics::run_diagnostics(&bin, &dir, timeout) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("harness diagnostics: reading corpus {}: {e}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+
+    for s in &report.scenarios {
+        println!("[{}] {}", okmark(s.passed), s.name);
+        if let Some(err) = &s.run_error {
+            println!("        - run error: {err}");
+        }
+        for c in &s.checks {
+            println!("        [{}] {} -> {}", okmark(c.passed), c.name, c.detail);
+        }
+    }
+
+    let (pass, fail) = report.totals();
+    println!("──────────────────────────────────────────");
+    println!(
+        "diagnostics: {pass} passed, {fail} failed (of {} scenarios)",
+        report.scenarios.len()
+    );
+
+    if let Some(path) = &json {
+        write_json(path, &report.to_json().to_pretty());
+    }
+
+    if report.passed() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
@@ -244,7 +338,12 @@ fn print_scenario(s: &ScenarioSummary) {
     // Show failing invariants so problems are visible; keep the happy path terse.
     for inv in &s.invariants {
         if inv.status == CheckStatus::Fail {
-            println!("        - {} {}: {}", inv.status.as_str(), inv.name, inv.message);
+            println!(
+                "        - {} {}: {}",
+                inv.status.as_str(),
+                inv.name,
+                inv.message
+            );
         }
     }
     if !s.deterministic {
@@ -397,9 +496,13 @@ fn cmd_simfarm(args: &[String]) -> ExitCode {
         }
     };
     let timeout = Duration::from_secs(timeout_secs);
-    let bad = bad.unwrap_or_else(|| PathBuf::from(format!("{DEFAULT_CORPUS_DIR}/missing_gateway.toml")));
+    let bad =
+        bad.unwrap_or_else(|| PathBuf::from(format!("{DEFAULT_CORPUS_DIR}/missing_gateway.toml")));
 
-    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
     println!("microcar binary: {}", bin.display());
     println!("simfarm: {}\n", scenario.display());
 
@@ -545,7 +648,10 @@ fn cmd_toml_zoo(args: &[String]) -> ExitCode {
     // Only run sibling isolation if the healthy scenario actually exists.
     let healthy = healthy.filter(|h| h.is_file());
 
-    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
     println!("microcar binary: {}", bin.display());
     println!("toml_zoo corpus: {}\n", dir.display());
 
@@ -639,7 +745,10 @@ fn cmd_topology(args: &[String]) -> ExitCode {
     };
     let timeout = Duration::from_secs(timeout_secs);
 
-    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
     println!("microcar binary: {}", bin.display());
     println!("topology corpus: {}\n", dir.display());
 
@@ -657,7 +766,12 @@ fn cmd_topology(args: &[String]) -> ExitCode {
             println!("        - run error: {err}");
         }
         for p in &s.probes {
-            println!("        [{}] probe {} -> {}", okmark(p.passed), p.id_hex, p.detail);
+            println!(
+                "        [{}] probe {} -> {}",
+                okmark(p.passed),
+                p.id_hex,
+                p.detail
+            );
         }
         for c in &s.correlations {
             println!(
@@ -751,10 +865,16 @@ fn cmd_debug_gym(args: &[String]) -> ExitCode {
                 return ExitCode::from(2);
             }
         },
-        None => DEFAULT_SCENARIOS.iter().map(|s| PathBuf::from(*s)).collect(),
+        None => DEFAULT_SCENARIOS
+            .iter()
+            .map(|s| PathBuf::from(*s))
+            .collect(),
     };
 
-    println!("microcar dogfood harness v{}", microcar_dogfood::HARNESS_VERSION);
+    println!(
+        "microcar dogfood harness v{}",
+        microcar_dogfood::HARNESS_VERSION
+    );
     println!("microcar binary: {}", bin.display());
     println!("debug_gym: {} scenario(s)\n", scenarios.len());
 
@@ -791,6 +911,7 @@ fn usage() {
          \x20 harness simfarm  <scenario.toml> [-n N] [--churn M] [--bad PATH] [--timeout-secs N] [--json OUT]\n\
          \x20 harness toml-zoo [--dir DIR] [--healthy SCENARIO] [--no-sibling] [--timeout-secs N] [--json OUT]\n\
          \x20 harness topology [--dir DIR] [--timeout-secs N] [--json OUT]\n\
+         \x20 harness diagnostics [--dir DIR] [--timeout-secs N] [--json OUT]\n\
          \x20 harness debug-gym [--scenario-dir DIR] [--timeout-secs N] [--json OUT]\n\
          \n\
          FLAGS:\n\

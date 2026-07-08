@@ -27,6 +27,7 @@
 
 pub mod debug_gym;
 pub mod determinism;
+pub mod diagnostics;
 pub mod invariants;
 pub mod json;
 pub mod runner;
@@ -38,6 +39,10 @@ pub mod trace_hash;
 
 pub use debug_gym::{run_debug_gym, DebugGymReport, DebugGymScenarioResult, DEFAULT_SCENARIOS};
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
+pub use diagnostics::{
+    run_diagnostics, run_diagnostics_scenario, DiagnosticsCheck, DiagnosticsReport,
+    DiagnosticsScenarioResult, DEFAULT_DIAGNOSTICS_DIR,
+};
 pub use invariants::{
     any_failed, check_all, check_default, default_invariants, CheckStatus, Invariant,
     InvariantResult,

@@ -47,6 +47,9 @@ typedef struct {
 static gateway_state_t     g_gs;
 static heartbeat_monitor_t g_hm;
 static fault_manager_t     g_fm;
+static uint8_t             g_diag_session_active = 0;
+static uint8_t             g_diag_dogfood_script = 0;
+static uint8_t             g_diag_dogfood_inject_fault = 0;
 
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
@@ -104,6 +107,12 @@ void gateway_init(void)
                                MC_SAFETY_BMS_HEARTBEAT_TIMEOUT_MS);
 }
 
+void gateway_enable_dogfood_diag_script(uint8_t inject_fault)
+{
+    g_diag_dogfood_script = 1;
+    g_diag_dogfood_inject_fault = inject_fault ? 1 : 0;
+}
+
 // ── Message handlers ──────────────────────────────────────────────────────
 
 /// Process a heartbeat frame (0x001) from any node.
@@ -135,6 +144,181 @@ static void handle_bms_fault(const mc_can_frame_t *frame)
     }
 }
 
+static uint8_t first_active_dtc(uint8_t *source_node, uint8_t *fault_code)
+{
+    uint8_t count = 0;
+    *source_node = 0;
+    *fault_code = 0;
+
+    if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        for (uint8_t i = 0; i < g_fm.fault_count; i++) {
+            if (g_fm.faults[i].active) {
+                if (count == 0) {
+                    *source_node = g_fm.faults[i].source_node;
+                    *fault_code = g_fm.faults[i].fault_code;
+                }
+                count++;
+            }
+        }
+        xSemaphoreGive(g_fm_mutex);
+    }
+
+    return count;
+}
+
+static void send_diag_response(uint8_t service, uint8_t request_id,
+                               uint8_t status, uint8_t value0,
+                               uint8_t value1)
+{
+    mc_can_frame_t tx;
+    mc_frame_init(&tx, MC_MSG_DIAG_RESPONSE, MC_NODE_GATEWAY,
+                  MC_DIAG_RESPONSE_MSG_SIZE);
+    tx.data[0] = MC_NODE_GATEWAY;
+    tx.data[1] = service;
+    tx.data[2] = request_id;
+    tx.data[3] = status;
+    tx.data[4] = value0;
+    tx.data[5] = value1;
+    sim_trace_u32("gateway_diag_response",
+                  ((uint32_t)request_id << 24)
+                | ((uint32_t)service << 16)
+                | ((uint32_t)status << 8)
+                | (uint32_t)value0);
+    sim_trace_u32("gateway_diag_response_v1",
+                  ((uint32_t)request_id << 24)
+                | ((uint32_t)service << 16)
+                | (uint32_t)value1);
+    sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
+}
+
+static void handle_diag_request(const mc_can_frame_t *frame)
+{
+    if (frame->len < MC_DIAG_REQUEST_MSG_SIZE) return;
+
+    uint8_t service = frame->data[1];
+    uint8_t request_id = frame->data[2];
+    uint8_t status = MC_DIAG_OK;
+    uint8_t value0 = 0;
+    uint8_t value1 = 0;
+
+    switch (service) {
+    case MC_DIAG_START_SESSION:
+        if (g_gs.mode == VEHICLE_DRIVE) {
+            status = MC_DIAG_REJECTED;
+        } else {
+            g_diag_session_active = 1;
+            g_gs.mode = VEHICLE_SERVICE;
+            value0 = (uint8_t)g_gs.mode;
+            sim_trace_u32("diag_session", 1);
+            sim_trace_u32("vehicle_mode", (uint32_t)g_gs.mode);
+            xEventGroupSetBits(g_mode_events, 0x01);
+        }
+        break;
+
+    case MC_DIAG_END_SESSION:
+        g_diag_session_active = 0;
+        value0 = (uint8_t)g_gs.mode;
+        sim_trace_u32("diag_session", 0);
+        break;
+
+    case MC_DIAG_READ_MODE:
+        value0 = (uint8_t)g_gs.mode;
+        break;
+
+    case MC_DIAG_READ_DTCS:
+        {
+            uint8_t source = 0;
+            value0 = first_active_dtc(&source, &value1);
+            (void)source;
+        }
+        status = MC_DIAG_OK;
+        break;
+
+    case MC_DIAG_CLEAR_DTCS:
+        if (!g_diag_session_active) {
+            status = MC_DIAG_REJECTED;
+        } else if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+            fault_manager_clear_node(&g_fm, MC_NODE_BMS);
+            xSemaphoreGive(g_fm_mutex);
+            value0 = 0;
+        }
+        break;
+
+    case MC_DIAG_ACTUATOR_TEST:
+        status = g_diag_session_active && g_gs.mode != VEHICLE_DRIVE
+            ? MC_DIAG_OK
+            : MC_DIAG_REJECTED;
+        value0 = (uint8_t)g_gs.mode;
+        break;
+
+    case MC_DIAG_LIVE_BMS:
+    default:
+        status = MC_DIAG_UNSUPPORTED;
+        break;
+    }
+
+    send_diag_response(service, request_id, status, value0, value1);
+}
+
+static void synth_diag_request(uint8_t service, uint8_t request_id)
+{
+    mc_can_frame_t rx;
+    mc_frame_init(&rx, MC_MSG_DIAG_REQUEST, MC_NODE_DIAGNOSTICS,
+                  MC_DIAG_REQUEST_MSG_SIZE);
+    rx.data[0] = MC_NODE_DIAGNOSTICS;
+    rx.data[1] = service;
+    rx.data[2] = request_id;
+    rx.data[3] = 0;
+    handle_diag_request(&rx);
+}
+
+static void synth_bms_fault(uint8_t fault_code)
+{
+    mc_can_frame_t rx;
+    mc_frame_init(&rx, MC_MSG_BMS_FAULT, MC_NODE_BMS, 2);
+    rx.data[0] = fault_code;
+    rx.data[1] = 0;
+    handle_bms_fault(&rx);
+}
+
+static void run_dogfood_diag_script(uint32_t *script_ms, uint32_t *sent_mask)
+{
+    if (!g_diag_dogfood_script) return;
+
+    *script_ms += 10;
+
+    if (*script_ms >= 100 && !(*sent_mask & 0x01)) {
+        synth_diag_request(MC_DIAG_START_SESSION, 1);
+        *sent_mask |= 0x01;
+    }
+    if (*script_ms >= 200 && !(*sent_mask & 0x02)) {
+        synth_diag_request(MC_DIAG_READ_MODE, 2);
+        *sent_mask |= 0x02;
+    }
+    if (g_diag_dogfood_inject_fault
+        && *script_ms >= 300
+        && !(*sent_mask & 0x04)) {
+        synth_bms_fault(MC_BMS_FAULT_OVERTEMP);
+        *sent_mask |= 0x04;
+    }
+    if (*script_ms >= 350 && !(*sent_mask & 0x08)) {
+        synth_diag_request(MC_DIAG_ACTUATOR_TEST, 6);
+        *sent_mask |= 0x08;
+    }
+    if (*script_ms >= 450 && !(*sent_mask & 0x10)) {
+        synth_diag_request(MC_DIAG_READ_DTCS, 3);
+        *sent_mask |= 0x10;
+    }
+    if (*script_ms >= 650 && !(*sent_mask & 0x20)) {
+        synth_diag_request(MC_DIAG_CLEAR_DTCS, 4);
+        *sent_mask |= 0x20;
+    }
+    if (*script_ms >= 750 && !(*sent_mask & 0x40)) {
+        synth_diag_request(MC_DIAG_READ_DTCS, 5);
+        *sent_mask |= 0x40;
+    }
+}
+
 /// Dispatch a received CAN frame to the appropriate handler.
 /// Called from heartbeat_rx task (only processes heartbeat and BMS fault).
 static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
@@ -157,6 +341,9 @@ static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
         break;
     case MC_MSG_BMS_FAULT:
         handle_bms_fault(frame);
+        break;
+    case MC_MSG_DIAG_REQUEST:
+        handle_diag_request(frame);
         break;
     default:
         break;
@@ -181,6 +368,15 @@ static mc_vehicle_mode_t update_vehicle_mode(uint32_t now_ms)
         bms_fault   = fault_manager_has_critical(&g_fm);
         fault_count = fault_manager_active_count(&g_fm);
         xSemaphoreGive(g_fm_mutex);
+    }
+
+    if (!bms_fault && g_diag_session_active) {
+        g_gs.all_nodes_online = all_online;
+        g_gs.bms_fault_active = bms_fault;
+        g_gs.bms_limp_requested = bms_limp;
+        g_gs.active_fault_count = fault_count;
+        g_gs.mode = VEHICLE_SERVICE;
+        return g_gs.mode;
     }
 
     return gateway_state_update(&g_gs, all_online, bms_fault,
@@ -335,6 +531,8 @@ void gateway_main(void *pvParameters)
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
+    uint32_t diag_script_ms = 0;
+    uint32_t diag_script_sent = 0;
 
     // Send initial heartbeat at boot.
     send_heartbeat(0, &tx);
@@ -349,6 +547,8 @@ void gateway_main(void *pvParameters)
         while (xQueueReceive(g_hb_queue, &ev, 0) == pdTRUE) {
             handle_heartbeat(now_ms, &ev);
         }
+
+        run_dogfood_diag_script(&diag_script_ms, &diag_script_sent);
 
         // ── Check for urgent fault notifications ────────────────
         uint32_t notify_val = 0;
@@ -375,7 +575,6 @@ void gateway_main(void *pvParameters)
         mc_vehicle_mode_t new_mode = update_vehicle_mode(now_ms);
 
         if (new_mode != old_mode) {
-            const char *mode_str = gateway_mode_string(new_mode);
             sim_trace_u32("vehicle_mode", (uint32_t)new_mode);
             // Signal mode change to event group.
             xEventGroupSetBits(g_mode_events, 0x01);
