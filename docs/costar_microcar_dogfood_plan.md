@@ -552,11 +552,16 @@ golden traces stay byte-identical — is implemented on this branch:
   output or the exit codes (0/1/2); the JSONL write is best-effort.
 
 This delivers the plan's "every transmit-to-receive path carries a correlation
-id" and "trace includes source and destination component identity". Remaining
-Trace v2 fields (`parent_id`, component/port ids, `task_id`, `rtos`,
-`payload_summary`) and gateway parent/child *forwarding* causality are additive
-follow-ups; the topology lane's correlation/identity assertions can now be
-upgraded to consume the v2 JSONL.
+id" and "trace includes source and destination component identity". The
+topology lane now **consumes** the v2 JSONL: `harness topology` runs each
+scenario with `--trace-v2` and, per probe, asserts every delivery shares one
+correlation id and one source and that the destinations equal the expected
+receivers (the plan's "forwarded frame preserves correlation id" for direct
+sends). The dogfood crate now has 56 unit tests (+4 trace-v2). Remaining Trace
+v2 fields (`parent_id`, component/port ids, `task_id`, `rtos`,
+`payload_summary`) and gateway parent/child *forwarding* causality (which the
+`drive_body_bus_bridge` / `gateway_loop_prevention` scenarios need) are additive
+follow-ups.
 
 ## Assumptions
 

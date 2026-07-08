@@ -75,10 +75,35 @@ pub struct ProbeResult {
 pub struct TopologyScenarioResult {
     pub name: String,
     pub probes: Vec<ProbeResult>,
-    /// True if the scenario ran cleanly and every probe passed.
+    /// Trace v2 correlation/identity checks per probe (from `--trace-v2` JSONL).
+    pub correlations: Vec<CorrelationResult>,
+    /// True if the scenario ran cleanly and every probe + correlation passed.
     pub passed: bool,
     /// Non-empty if the run itself failed (bad exit, panic, timeout).
     pub run_error: Option<String>,
+}
+
+/// A single Trace v2 delivery edge parsed from the `--trace-v2` JSONL.
+#[derive(Debug, Clone)]
+pub struct V2Edge {
+    pub correlation_id: u64,
+    pub direction: String,
+    pub message_id: u32,
+    pub source: u64,
+    pub destination: u64,
+}
+
+/// Result of the Trace v2 correlation/identity check for one probe: every
+/// delivery of the probe frame must share a single correlation id and a single
+/// source, its destinations must equal the expected receivers, and a matching
+/// `tx` edge must exist. This realizes the plan's "forwarded frame preserves
+/// correlation id" (for direct sends) and "trace includes source and
+/// destination component identity" assertions.
+#[derive(Debug, Clone)]
+pub struct CorrelationResult {
+    pub id_hex: String,
+    pub passed: bool,
+    pub detail: String,
 }
 
 /// The whole topology lane result.
@@ -128,10 +153,22 @@ impl TopologyReport {
                         ])
                     })
                     .collect();
+                let correlations: Vec<Json> = s
+                    .correlations
+                    .iter()
+                    .map(|c| {
+                        Json::Obj(vec![
+                            ("id".into(), Json::str(&c.id_hex)),
+                            ("passed".into(), Json::Bool(c.passed)),
+                            ("detail".into(), Json::str(&c.detail)),
+                        ])
+                    })
+                    .collect();
                 let mut fields = vec![
                     ("name".into(), Json::str(&s.name)),
                     ("passed".into(), Json::Bool(s.passed)),
                     ("probes".into(), Json::Arr(probes)),
+                    ("correlations".into(), Json::Arr(correlations)),
                 ];
                 if let Some(e) = &s.run_error {
                     fields.push(("run_error".into(), Json::str(e)));
@@ -259,8 +296,152 @@ fn evaluate_probe(probe: &Probe, actual: BTreeMap<u64, usize>) -> ProbeResult {
     }
 }
 
-/// Run one topology scenario and evaluate all its probes.
-pub fn run_topology_scenario(bin: &Path, scenario: &Path, timeout: Duration) -> TopologyScenarioResult {
+// ── Trace v2 (JSONL) correlation/identity checking ──────────────────────────
+
+/// Extract an unsigned integer field `"key":<digits>` from a JSON line.
+fn json_u64(line: &str, key: &str) -> Option<u64> {
+    let pat = format!("\"{key}\":");
+    let start = line.find(&pat)? + pat.len();
+    let rest = &line[start..];
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    rest[..end].parse::<u64>().ok()
+}
+
+/// Extract a string field `"key":"<value>"` from a JSON line.
+fn json_str<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let pat = format!("\"{key}\":\"");
+    let start = line.find(&pat)? + pat.len();
+    let rest = &line[start..];
+    let end = rest.find('"')?;
+    Some(&rest[..end])
+}
+
+/// Parse one Trace v2 JSONL record into a [`V2Edge`].
+pub fn parse_v2_line(line: &str) -> Option<V2Edge> {
+    Some(V2Edge {
+        correlation_id: json_u64(line, "correlation_id")?,
+        direction: json_str(line, "direction")?.to_string(),
+        message_id: json_u64(line, "message_id")? as u32,
+        source: json_u64(line, "source")?,
+        destination: json_u64(line, "destination")?,
+    })
+}
+
+/// Run the scenario with `--trace-v2` into a temp file and parse the edges.
+/// stdout/stderr are discarded (the probe check uses a separate plain run), so
+/// there is no pipe-drain deadlock risk.
+fn run_scenario_v2(bin: &Path, scenario: &Path, timeout: Duration) -> Vec<V2Edge> {
+    let tmp = std::env::temp_dir().join(format!(
+        "microcar_tv2_{}_{}.jsonl",
+        std::process::id(),
+        scenario.file_stem().and_then(|s| s.to_str()).unwrap_or("scn")
+    ));
+    let mut child = match std::process::Command::new(bin)
+        .arg(scenario)
+        .arg("--trace-v2")
+        .arg(&tmp)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(_) => break,
+        }
+    }
+    let edges = match fs::read_to_string(&tmp) {
+        Ok(content) => content.lines().filter_map(parse_v2_line).collect(),
+        Err(_) => Vec::new(),
+    };
+    let _ = fs::remove_file(&tmp);
+    edges
+}
+
+/// Evaluate the Trace v2 correlation/identity check for one probe: every
+/// delivery of the probe frame must share one correlation id and one source,
+/// its destinations must equal the expected receivers, and a matching `tx` edge
+/// must exist.
+fn evaluate_correlation(probe: &Probe, edges: &[V2Edge]) -> CorrelationResult {
+    let rx: Vec<&V2Edge> = edges
+        .iter()
+        .filter(|e| e.message_id == probe.id && e.direction == "rx")
+        .collect();
+    let tx: Vec<&V2Edge> = edges
+        .iter()
+        .filter(|e| e.message_id == probe.id && e.direction == "tx")
+        .collect();
+
+    if probe.expect.is_empty() {
+        let passed = rx.is_empty();
+        let detail = if passed {
+            "no delivery edges (as expected)".to_string()
+        } else {
+            format!("expected no delivery edges, saw {}", rx.len())
+        };
+        return CorrelationResult {
+            id_hex: probe.id_hex.clone(),
+            passed,
+            detail,
+        };
+    }
+
+    let corr: BTreeSet<u64> = rx.iter().map(|e| e.correlation_id).collect();
+    let sources: BTreeSet<u64> = rx.iter().map(|e| e.source).collect();
+    let dests: BTreeSet<u64> = rx.iter().map(|e| e.destination).collect();
+    let tx_corr_ok = tx.iter().any(|e| corr.contains(&e.correlation_id));
+
+    let passed = !rx.is_empty()
+        && corr.len() == 1
+        && sources.len() == 1
+        && dests == probe.expect
+        && tx_corr_ok;
+
+    let detail = if passed {
+        format!(
+            "correlation {}, source {}, delivered to {:?}",
+            corr.iter().next().copied().unwrap_or(0),
+            sources.iter().next().copied().unwrap_or(0),
+            dests
+        )
+    } else if rx.is_empty() {
+        "no trace v2 delivery edges (is --trace-v2 supported?)".to_string()
+    } else {
+        format!(
+            "mismatch: correlations={corr:?} sources={sources:?} dests={dests:?} \
+             (expected dests {:?}) tx_match={tx_corr_ok}",
+            probe.expect
+        )
+    };
+    CorrelationResult {
+        id_hex: probe.id_hex.clone(),
+        passed,
+        detail,
+    }
+}
+
+/// Run one topology scenario: routing/isolation from the human `can-rx` trace
+/// plus Trace v2 correlation/identity from a `--trace-v2` run.
+pub fn run_topology_scenario(
+    bin: &Path,
+    scenario: &Path,
+    timeout: Duration,
+) -> TopologyScenarioResult {
     let probes = parse_probes(scenario).unwrap_or_default();
     let run = run_scenario(bin, scenario, timeout);
     let name = run.scenario.clone();
@@ -275,27 +456,39 @@ pub fn run_topology_scenario(bin: &Path, scenario: &Path, timeout: Duration) -> 
         None
     };
 
-    // Build per-id receiver histograms once.
+    // Routing/isolation from the human can-rx trace.
     let mut by_id: BTreeMap<u32, BTreeMap<u64, usize>> = BTreeMap::new();
     for line in &run.trace {
         if let Some((receiver, id)) = parse_can_rx(line) {
             *by_id.entry(id).or_default().entry(receiver).or_default() += 1;
         }
     }
-
     let mut probe_results = Vec::with_capacity(probes.len());
     for probe in &probes {
         let actual = by_id.get(&probe.id).cloned().unwrap_or_default();
         probe_results.push(evaluate_probe(probe, actual));
     }
 
+    // Trace v2 correlation/identity from a --trace-v2 run.
+    let edges = if run_error.is_none() {
+        run_scenario_v2(bin, scenario, timeout)
+    } else {
+        Vec::new()
+    };
+    let correlations: Vec<CorrelationResult> = probes
+        .iter()
+        .map(|p| evaluate_correlation(p, &edges))
+        .collect();
+
     let passed = run_error.is_none()
         && !probe_results.is_empty()
-        && probe_results.iter().all(|p| p.passed);
+        && probe_results.iter().all(|p| p.passed)
+        && correlations.iter().all(|c| c.passed);
 
     TopologyScenarioResult {
         name,
         probes: probe_results,
+        correlations,
         passed,
         run_error,
     }
@@ -407,5 +600,70 @@ mod tests {
         assert_eq!(parse_hex_u32("0x07a0"), Some(0x07a0));
         assert_eq!(parse_hex_u32("1952"), Some(1952));
         assert_eq!(normalize_hex("0x7a0"), "0x07a0");
+    }
+
+    #[test]
+    fn parse_v2_line_extracts_edge() {
+        let line = r#"{"trace_id":1,"correlation_id":7,"virtual_time":50500,"event_type":"can_frame","direction":"rx","bus_or_link_id":"vcan_drive","message_id":1952,"source":2,"destination":3,"len":3}"#;
+        let e = parse_v2_line(line).unwrap();
+        assert_eq!(e.correlation_id, 7);
+        assert_eq!(e.direction, "rx");
+        assert_eq!(e.message_id, 1952);
+        assert_eq!(e.source, 2);
+        assert_eq!(e.destination, 3);
+        assert!(parse_v2_line("not json").is_none());
+    }
+
+    fn edge(dir: &str, corr: u64, src: u64, dst: u64) -> V2Edge {
+        V2Edge {
+            correlation_id: corr,
+            direction: dir.into(),
+            message_id: 0x07a0,
+            source: src,
+            destination: dst,
+        }
+    }
+
+    #[test]
+    fn correlation_passes_on_shared_id_source_and_expected_dests() {
+        let probe = Probe {
+            id: 0x07a0,
+            id_hex: "0x07a0".into(),
+            expect: BTreeSet::from([1u64, 3u64]),
+        };
+        let edges = vec![
+            edge("tx", 5, 2, 0),
+            edge("rx", 5, 2, 1),
+            edge("rx", 5, 2, 3),
+        ];
+        assert!(evaluate_correlation(&probe, &edges).passed);
+    }
+
+    #[test]
+    fn correlation_fails_on_split_correlation_id() {
+        let probe = Probe {
+            id: 0x07a0,
+            id_hex: "0x07a0".into(),
+            expect: BTreeSet::from([1u64, 3u64]),
+        };
+        // Two different correlation ids for the same probe frame -> not one send.
+        let edges = vec![
+            edge("tx", 5, 2, 0),
+            edge("rx", 5, 2, 1),
+            edge("rx", 6, 2, 3),
+        ];
+        assert!(!evaluate_correlation(&probe, &edges).passed);
+    }
+
+    #[test]
+    fn correlation_fails_when_v2_absent() {
+        let probe = Probe {
+            id: 0x07a0,
+            id_hex: "0x07a0".into(),
+            expect: BTreeSet::from([1u64]),
+        };
+        let r = evaluate_correlation(&probe, &[]);
+        assert!(!r.passed);
+        assert!(r.detail.contains("no trace v2"));
     }
 }

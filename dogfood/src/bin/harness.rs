@@ -656,6 +656,14 @@ fn cmd_topology(args: &[String]) -> ExitCode {
         for p in &s.probes {
             println!("        [{}] probe {} -> {}", okmark(p.passed), p.id_hex, p.detail);
         }
+        for c in &s.correlations {
+            println!(
+                "        [{}] correlate {} -> {}",
+                okmark(c.passed),
+                c.id_hex,
+                c.detail
+            );
+        }
     }
 
     let (pass, fail) = report.totals();
