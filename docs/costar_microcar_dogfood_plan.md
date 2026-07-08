@@ -665,6 +665,30 @@ simfarm) are unregressed. The remaining debug_gym pieces — the seeded-bug corp
 (golden failing/fixed traces per bug) and keyframe-restore replay (on the
 existing `save_keyframe`/`load_keyframe` scaffolding) — build on this.
 
+## Milestone 9 status (this branch)
+
+The ninth milestone completes the **topology** lane — all seven plan scenarios
+now pass (`harness topology` → 7/7). microcar-only (two new scenario files, no
+costar change, no regression to the other lanes):
+
+- `fleet_64_nodes.toml`: bus isolation at scale — 64 machines across 8 CAN
+  buses, the gateway the only shared hub node; three probes (8- and 7-node
+  fanout) each reach exactly their own bus and no node on any other, with v2
+  correlation/identity intact.
+- `bus_isolation_fault.toml`: a `drop_frame` fault isolates one bus. The gateway
+  bridges `vcan_a` ↔ `vcan_b`; a fault drops the probe id on `vcan_b` (applied
+  before the probe via an early warm-up tick), so the gateway's *forwarded* copy
+  is dropped and the `vcan_b` node is isolated while the `vcan_a` receivers
+  still get it. This combines M5 gateway forwarding with the existing
+  `drop_frame` bus fault: the forwarded frame is enqueued *during* the run, so
+  (unlike a pre-queued `bus_inject`) a mid-run drop fault can actually affect it
+  — which is exactly why this scenario was deferred until forwarding existed.
+
+The topology lane now covers every scenario listed in the plan
+(`dual_bus_gateway`, `drive_body_bus_bridge`, `diag_request_through_gateway`,
+`bus_isolation_fault`, `gateway_loop_prevention`, `fleet_16_nodes`,
+`fleet_64_nodes`), all green.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
