@@ -1,10 +1,11 @@
 # costar + microcar Dogfood — Status & Blockers Report
 
-_Branch: `dogfood-milestone-1` on both repos. Updated after the M17 OTA
-fault-matrix extension and the M18 OTA commit-atomicity (power-cut) fault case._
+_Branch: `dogfood-milestone-1` on both repos. Updated after the M19–M22
+`debug_gym` seeded-bug corpus cases (the corpus is now **4/7**; all
+diagnostics/OTA-seeded cases reachable without new firmware are done)._
 
 - costar: `github.com/zacharyvmm/costar` @ `0c63a26`
-- microcar: `github.com/zacharyvmm/microcar` @ `a6dc9a4`
+- microcar: `github.com/zacharyvmm/microcar` @ `8f03171`
 - Host: Linux, Rust 1.96.1, workspace at `/home/zmm/projects`.
 
 This document explains **what is done**, **what remains**, and — in detail — **why each
@@ -12,7 +13,7 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 
 ---
 
-## 1. What is complete (18 milestones, verified locally)
+## 1. What is complete (22 milestones, verified locally)
 
 | Milestone | Track | Result |
 |-----------|-------|--------|
@@ -34,19 +35,24 @@ remaining track is blocked** and exactly what input/decision is needed to unbloc
 | M16 | OTA slot-metadata model + rollback | pure C A/B-slot model (`common/microcar_ota_slot.c`) + Rust mirror (7 tests); `gateway_ota_badcrc` fault variant → corrupt image rolls back to slot A; `harness ota` **2/2** (opt-in, golden traces byte-identical) |
 | M17 | OTA fault-matrix extension | `gateway_ota_intwrite` (power-cut/interrupted write → rollback before verify) + `gateway_ota_badhealth` (valid image commits then fails self-test → rollback); shared `emit_ota_rollback()`; `harness ota` **4/4** (3 of 8 fault cases; opt-in, golden traces byte-identical) |
 | M18 | OTA commit-atomicity fault | `gateway_ota_powercut` — a valid, verified image is discarded by a power cut *before* the atomic commit and reverts to slot A (crc-ok yet rolled-back, distinguishing it from bad-CRC); `harness ota` **5/5** (4 of 8 fault cases; opt-in, golden traces byte-identical) |
+| M19 | `debug_gym` corpus #1 — OTA rollback bug | `gateway_ota_crcbug` (broken CRC accepts a corrupt image and boots the bad slot) vs `gateway_ota_badcrc` (rolls back); `dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` **1/1** (bug-reproduced / bug-fixed / traces-diverge; opt-in, golden traces byte-identical) |
+| M20 | `debug_gym` corpus #2 — SERVICE torque-clamp bug | `powertrain_diag_service_bug` (skips the SERVICE safety clamp, commands drive torque) vs `powertrain_diag_service` (clamps to 0 / motor off); `harness debug-gym-corpus` **2/2** (opt-in, golden traces byte-identical) |
+| M21 | `debug_gym` corpus #3 — clear-all-DTCs bug | `gateway_diag_clearbug` (`fault_manager_clear_all` on a BMS-scoped clear drops an unrelated powertrain DTC: 2→0) vs `gateway_diag_clear` (clears only BMS: 2→1); `harness debug-gym-corpus` **3/3** (opt-in, golden traces byte-identical) |
+| M22 | `debug_gym` corpus #4 — START_SESSION-in-DRIVE bug | `gateway_diag_startdrivebug` (skips the DRIVE guard, accepts a diagnostic session mid-drive: status=OK/SERVICE) vs `gateway_diag_startdrive` (rejects: status=REJECTED/DRIVE); `harness debug-gym-corpus` **4/4** (opt-in, golden traces byte-identical) |
 
 **Fully-delivered plan tracks:** engine stabilization; networking/device-edge hardening;
 `simfarm`; `toml_zoo`; `topology` (7/7); Trace v2 data model; debugging primitives
 (`step`, `continue_until`, keyframe replay, message breakpoint), the `debug_gym`
 determinism invariants, the first diagnostics lane, the first charging safety lane,
-the first cockpit gRPC-surface lane, the OTA happy-path lane, and the OTA
-slot-metadata model + first four fault-matrix (rollback) cases.
+the first cockpit gRPC-surface lane, the OTA happy-path lane, the OTA slot-metadata model
++ first four fault-matrix (rollback) cases, and the first four `debug_gym` seeded-bug
+corpus cases (4/7 — every diagnostics/OTA-seeded case reachable without new firmware).
 
 Test counts: costar `sim-world` 110 unit tests, `sim-core` 25, `sim-grpc` 15 integration
-tests (14 + 1 new cockpit); microcar `dogfood` 83 unit tests, `state_tests` 99 unit tests.
+tests (14 + 1 cockpit); microcar `dogfood` 100 unit tests, `state_tests` 99 unit tests.
 All lanes green: `harness topology` 7/7, `toml-zoo` 11/11, `simfarm` PASS, `debug-gym` 4/4
-(unchanged hashes), `diagnostics` 2/2, `charging` 1/1, `ota` 5/5. All 29 non-soak vehicle
-scenarios pass with golden traces intact.
+(unchanged hashes), `debug-gym-corpus` 4/4, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5.
+All 29 non-soak vehicle scenarios pass with golden traces intact.
 
 ---
 
@@ -148,8 +154,9 @@ warning**, and **telematics partial-write** — still need their own deliberatel
 telematics firmware from §2.5). The gateway-bridge-loop bug is already exercised structurally
 by the topology `gateway_loop_prevention` scenario.
 
-**To unblock the remaining seeds:** add the next buggy firmware variants (diagnostics-seeded
-first, telematics later) — each reuses the M19 `debug-gym-corpus` harness.
+**To unblock the remaining seeds:** add the buggy firmware variants for the BMS / dashboard /
+telematics subsystems (see track A in §3) — each reuses the M19 `debug-gym-corpus` harness
+unchanged; telematics also depends on the telematics firmware track (§2.5).
 
 ### 2.3 `cockpit` lane + gRPC control plane  ⟶ FIRST INCREMENT DELIVERED (M14)
 
@@ -232,31 +239,102 @@ the std-only dogfood crate once there is firmware that talks to the host.
 
 ---
 
-## 3. Summary of what input is needed
+## 3. Summary of what is still blocking, and the decisions needed to unblock
 
-The autonomous track has cleared the bounded environment issue and delivered the charging
-safety lane (M13), the cockpit gRPC-surface proof (M14), the OTA happy path (M15), the OTA
-slot-metadata model + first rollback fault (M16), and three more OTA fault-matrix cases
-(M17–M18, `harness ota` now 5/5 — 4 of 8 fault cases). The remaining work is now
-**decision-gated**: the easily-reachable, no-modeling-decision-required increments are done,
-and further progress needs the user to choose a modeling approach or grant sign-off:
+The autonomous track has now cleared **every increment reachable without a modeling
+decision or new firmware**: the charging safety lane (M13), the cockpit gRPC-surface proof
+(M14), the OTA happy path + slot model + 4 of 8 fault cases (M15–M18), and all four
+`debug_gym` seeded-bug corpus cases seedable from existing diagnostics/OTA firmware
+(M19–M22, `harness debug-gym-corpus` now 4/7).
 
-1. **Remaining firmware EV lanes** — the charging *safety* lane (M13) and 4 OTA fault cases
-   (M16–M18) are done. What remains needs approval + a confirmed modeling approach: the
-   richer charging FSM (handshake / temperature-rise / reduced-current / charge-complete) and
-   battery plant physics; the last OTA fault cases (**gateway reset** / **BMS critical fault**
-   during update — need a reliable cross-ECU/reset mechanism, not a fabricated trace stub) and
-   the mode-gated **OTA/charging-while-drive** cases (need a scenario-schema design for
-   representing OTA/charging mode in TOML — shared with the two deferred `toml_zoo` cases);
-   and diagnostics live-BMS. These also unblock the debug_gym seeded-bug corpus (an
-   OTA-rollback seed is trivially seedable from the M16–M18 fault variants once the corpus
-   format is agreed).
-2. **Cockpit / gRPC lane** — no longer blocked by `protoc`; proceed with the local
-   `PROTOC` path above.
-3. **Per-session state refactor** — the other big costar track; high-risk, needs sign-off
-   and a staged, heavily-verified approach.
+Everything that remains is **decision-gated** or **firmware-gated**. Proceeding on any of it
+would require either inventing a modeling approach or hand-rolling firmware behavior — which
+we deliberately do **not** do blind, because a fabricated/guessed model would compromise the
+dogfood's core value (every lane must be *genuinely exercised*, not faked). Each track below
+names exactly the decision needed.
 
-Recommended order if all are eventually wanted: continue the **OTA fault matrix** (cheap,
-reuses the M16 model) and the **deeper charging FSM** → **cockpit / gRPC** display firmware
-→ **per-session state** last (riskiest, but needed for product-grade in-process
-session/device isolation).
+### Blocked track A — remaining `debug_gym` corpus seeds (3 of 7 left)
+**Blocked on:** new firmware behavior to seed against. The three remaining plan seeds are
+**BMS stale sensor**, **dashboard missed warning**, and **telematics partial-write**. Each
+needs a deliberately-buggy firmware variant in a subsystem that does not yet have dogfood
+firmware (BMS sensor-staleness handling, dashboard warning latch, telematics host I/O).
+Telematics additionally depends on track D. The gateway-bridge-loop seed is already covered
+structurally by the topology `gateway_loop_prevention` scenario.
+**Decision needed:** approve adding BMS / dashboard / telematics dogfood firmware, and
+confirm which subsystem to seed first. Each new seed then reuses the M19 `debug-gym-corpus`
+harness unchanged.
+
+### Blocked track B — remaining OTA fault-matrix cases (4 of 8 left)
+**Blocked on:** two distinct decisions.
+- **Gateway reset during update** and **BMS critical fault during update** need a *reliable
+  cross-ECU / reset mechanism* to model honestly. The firmware CAN-RX path is still
+  unreliable, so a trace-only stub would be fabricated rather than genuinely exercised.
+  **Decision needed:** either (i) approve a narrow CAN RX/TX fix or an in-process reset
+  primitive so these can be exercised for real, or (ii) explicitly accept a documented
+  trace-backed stub as "good enough" for now (not recommended — weakens the guarantee).
+- **OTA-while-driving** and **OTA-while-charging** are mode-gated: they need OTA/charging
+  represented in the **scenario TOML schema** (a plug/mode/OTA-request field), which is the
+  same design shared with the two deferred `toml_zoo` cases (`charging-while-drive`,
+  `ota-while-drive`).
+  **Decision needed:** approve a scenario-schema design for expressing charging/OTA mode +
+  requests in TOML.
+
+### Blocked track C — deeper charging FSM + diagnostics live-BMS
+**Blocked on:** a confirmed model.
+- **Charging FSM:** the plan wants handshake → temperature-rise → reduced-current → charge
+  complete, plus charging plant physics. Only the "drive blocked while plugged" safety lane
+  exists (M13).
+  **Decision needed:** confirm the charging state model and how much plant physics to model
+  (deliberately simple is fine).
+- **Diagnostics live-BMS:** reachable now via trace-backed gateway hooks (UNBLOCKING §3
+  Strategy A) without CAN repair, but it needs a decision on the data source (what BMS
+  snapshot the gateway reports and where it gets it).
+  **Decision needed:** confirm live-BMS may use trace-backed firmware hooks (vs waiting for
+  product-grade diagnostics-over-bus, which is gated on the CAN RX/TX fix / per-session work).
+
+### Blocked track D — telematics lane
+**Blocked on:** new **telematics ECU firmware** (periodic host uploads / remote queries) plus
+a host-side TCP test rig. The host-networking engine edges are already hardened (M1); the
+std-only host-socket harness is buildable once firmware exists that talks to the host.
+**Decision needed:** approve the telematics firmware track.
+
+### Blocked track E — cockpit follow-ups (first increment done, M14)
+**Not blocked by `protoc`** (workspace compiler at
+`/home/zmm/projects/.tools/protoc-27.3/bin/protoc`). Remaining: a microcar `harness cockpit`
+wrapper (deferred to keep the dogfood harness std-only — would need a gRPC client / shell-out),
+rich framebuffer-content assertions (need display-driving dashboard firmware), and concurrent
+multi-session isolation (interlocks with track F).
+**Decision needed:** approve display-driving dashboard firmware (for real framebuffer
+content) and/or a non-std harness path for the `harness cockpit` wrapper.
+
+### Blocked track F — per-session state ownership refactor (costar, highest risk)
+**Blocked on:** explicit sign-off. This moves `SIM_NOW` / `CURRENT_TASK_ID` / device
+registries / net/display/touch state out of process-global / thread-local maps read by the C
+FFI during guest execution. It is the highest-risk change in the plan — a subtle mistake
+corrupts every firmware scenario's timing/trace — and is large and staged (devices → clock/
+task identity → net/display/touch). It also unlocks true in-process multi-session isolation
+for cockpit (track E) and product-grade diagnostics-over-bus.
+**Decision needed:** explicit sign-off to take it on, with agreement to proceed in small
+verified stages (start with the device registry, keep golden traces byte-identical at each
+step, expect several iterations).
+
+### Also open (thin, low-value without a consumer)
+Remaining breakpoint predicates (machine, vehicle-state, device-state, DTC-creation,
+assertion-failure) are thin wrappers over `continue_until`. Vehicle-state / DTC traces now
+exist, but device-state / assertion-failure predicates need product events, and none has a
+dogfood consumer yet — so they are deferred until a lane needs them.
+
+---
+
+### Recommended order (if all are eventually wanted)
+1. **Track A / C low-risk firmware:** add BMS/dashboard dogfood firmware → seeds 5–6 of the
+   `debug_gym` corpus **and** diagnostics live-BMS (shared firmware, cheap, reuses existing
+   harnesses).
+2. **Track B scenario-schema:** design the charging/OTA mode field → unblocks
+   OTA/charging-while-drive **and** the two deferred `toml_zoo` cases at once.
+3. **Track C charging FSM** + **track B reset mechanism** (deeper, needs the modeling calls).
+4. **Track D telematics** firmware + host-socket lane (also unblocks the telematics corpus
+   seed).
+5. **Track E cockpit** display firmware.
+6. **Track F per-session state** last — riskiest, but the prerequisite for product-grade
+   in-process session/device isolation.
