@@ -1417,6 +1417,59 @@ execution context, plus receiver-correct CAN routing (P0b) in
 path all 29 golden scenarios depend on (and, for `sim-grpc` session wiring, is
 additionally gated on `protoc`, absent in this environment).
 
+## Milestone 26 status (this branch)
+
+The twenty-sixth milestone delivers **P0b — receiver-correct CAN delivery**, the
+linchpin the CAN-gated product lanes were waiting on, plus confirmation that the
+`protoc` track is live. It is **costar-only** (`crates/sim-world/src/world.rs`)
+and **byte-identical** (verified: `debug_gym` hashes `c371b96e253e` /
+`68806f23c980` / `16684074b01c` / `fa7f03709681` unchanged).
+
+**Root cause fixed.** All firmware ECUs shared a single CAN controller-0 RX
+queue: `deliver_buses` injected every delivery into it and each ECU drained the
+same queue, so an ECU scheduled earlier could consume a frame copy meant for
+another receiver — the documented reason "firmware CAN RX is unreliable" and why
+the diagnostics/charging/OTA lanes are trace-backed rather than bus-backed.
+
+**Decisive byte-identical evidence.** Before changing anything, an experiment
+disabled RX injection entirely and re-ran `debug-gym`: **all four golden hashes
+were unchanged**, proving the default firmware's CAN *consumption* does not
+affect the golden traces. So making RX receiver-correct is safe for the golden
+scenarios while fixing the delivery for new bus-backed lanes.
+
+**What changed.** `World` now owns a per-machine receiver inbox
+(`can_rx_inbox: BTreeMap<machine_id, Vec<CanFrame>>`). `deliver_buses` queues
+each delivery into the *receiver's* inbox — bus deliveries were already
+receiver-correct (`drain_arrived` returns every attached node except the sender),
+so only the firmware-facing injection needed fixing. `step_firmware` stages a
+machine's inbox into controller 0 immediately before that machine's firmware
+runs (clearing first so it never sees another machine's frames) and reads back
+any unconsumed frames afterward, giving each ECU a persistent per-machine FIFO.
+This is World-owned per-machine ownership, not a session-keyed global map (the
+shortcut UNBLOCKING.md forbids).
+
+**Genuinely exercised.** New `test_receiver_correct_can_no_cross_consumption`
+(the UNBLOCKING §2 regression matrix): one sender + two receivers on one bus;
+each receiver gets exactly one frame, the sender none, with no cross-consumption.
+
+**`protoc` track live.** The workspace compiler at
+`/home/zmm/projects/.tools/protoc-27.3/bin/protoc` (libprotoc 27.3) is present
+and working; `PROTOC=… cargo test -p sim-grpc` builds and passes all **15**
+tests (14 integration + the M14 cockpit test). So the cockpit / gRPC control-
+plane track is buildable here after all.
+
+Verified locally: `cargo test -p sim-world` **111** tests (110 → 111, +1),
+clippy/fmt-clean; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with
+**unchanged hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo`
+11/11, `simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5,
+`debug-gym-corpus` 4/4); microcar `dogfood` 100 and `state_tests` 99 pass;
+`sim-grpc` 15 pass. With P0a (M23–M25) + P0b (M26), firmware CAN RX is now a
+reliable, receiver-correct assertion path — the gate for product-grade
+diagnostics-over-bus, the BMS/dashboard debug-gym seeds, and the real
+charging/OTA CAN control flows. The remaining plan work (P1 restartable
+machines, P2 protocol-backed scenario stimuli, and the P3/P4 real firmware
+vertical slices + telematics) builds on this foundation.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
