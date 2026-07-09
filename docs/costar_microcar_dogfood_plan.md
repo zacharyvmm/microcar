@@ -1313,6 +1313,62 @@ hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo` 11/11,
 verified slice landed" and is the prerequisite the CAN-RX-gated tracks (real
 diagnostics-over-bus, OTA gateway/BMS-reset faults, telematics) were waiting on.
 
+## Milestone 24 status (this branch)
+
+The twenty-fourth milestone is the **second P0a slice** — UNBLOCKING.md P0a
+migration-sequence **step 3**: "Extend `SimulatorActivation` into an
+execution-context guard that activates `SimGlobal`, `DeviceBank` … together.
+Test nested activation and panic/unwind restoration." It builds directly on the
+M23 `DeviceBank`. It is **costar-only** (`crates/sim-ffi/src/simulator.rs`),
+**opt-in**, and **byte-identical by construction** (verified: `debug_gym` hashes
+`c371b96e253e` / `68806f23c980` / `16684074b01c` / `fa7f03709681` unchanged).
+
+**What changed.** `sim_ffi::Simulator` may now own a `DeviceBank`
+(`owned_devices: Option<DeviceBank>`, opt-in via `enable_owned_devices()` /
+queried by `owns_devices()`). When a simulator owns one, `Simulator::activate()`
+scopes that bank alongside `SimGlobal`: the returned `SimulatorActivation` now
+also holds an `Option<sim_devices::BankGuard>`, so device C-ABI accessors
+(`with_can` / `with_uart` / …) called while the simulator is active resolve into
+*its* devices, and the guard restores **both** the prior `SimGlobal` and the
+prior device bank on drop — including on panic unwind. This is the execution-
+context-guard mechanism the later per-World / per-session isolation (cockpit
+concurrency, product-grade diagnostics-over-bus) will activate.
+
+**Byte-identical by construction.** `owned_devices` defaults to `None`, so every
+existing `Simulator` — including every microcar `Machine`, which constructs its
+simulator via `Simulator::new` and never opts in — activates `SimGlobal` only,
+exactly as before. Nothing in the production path sets it `Some`; only the new
+tests do. Hence all golden traces and every lane are unchanged.
+
+**Deliberately staged (not batched).** Per UNBLOCKING.md ("Do not batch clock,
+device, and C-state moves"), this slice scopes *device state only*. `SIM_NOW` /
+`CURRENT_TASK_ID` and the FreeRTOS C mutable globals are **not** moved here — and,
+importantly, the World's CAN delivery still uses the shared global controller 0
+mailbox (`deliver_buses` / `step_firmware` inject/drain `with_can_mut(0)` outside
+any per-machine activation). Making the *World/session* own and activate a bank
+per execution context — and the receiver-correct CAN routing (P0b) that per-
+machine isolation then requires to stay byte-identical — is the next, larger
+slice; wiring it into `sim-grpc` sessions is additionally gated in this
+environment on `protoc` (absent here).
+
+**Genuinely exercised.** Four new tests drive the real guard: two owned-device
+simulators each using **CAN controller id 0 do not cross-observe** their frames
+(the literal P0a exit test, now at execution-context granularity through
+`activate()`), **nested activation restores the outer context**, a **panic while
+active restores the previous device context** (probed with a test-unique
+controller id so the assertion is independent of any shared-default-bank state),
+and a default simulator owns no devices.
+
+Verified locally: `cargo test -p sim-ffi` **21** tests (17 → 21, +4),
+clippy/fmt-clean; `cargo test -p sim-world` 110 and `cargo test -p sim-devices`
+131 unchanged; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with
+**unchanged hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo`
+11/11, `simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5,
+`debug-gym-corpus` 4/4); microcar `dogfood` 100 and `state_tests` 99 pass. P0a
+now has both a per-World `DeviceBank` (M23) and the execution-context guard that
+scopes it (M24); the remaining P0a/P0b work is World/session ownership + receiver-
+correct CAN.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
