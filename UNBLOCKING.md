@@ -1,797 +1,518 @@
-# Microcar Dogfood Unblocking Strategy
-
-Last updated: 2026-07-08 (after the M17 OTA fault-matrix extension + the M18 OTA commit-atomicity/power-cut fault case)
-
-This report is a playbook for the remaining blockers in the costar/microcar
-dogfood plan. It assumes the current state after the diagnostics unblock and the
-M13 charging safety lane:
-
-- `harness diagnostics` is green for the first diagnostics dogfood lane.
-- `harness charging` is green for the first charging safety lane (drive blocked
-  while plugged) — see section 1, Strategy A: its success criteria are now met.
-- `sim-grpc` is locally buildable by exporting
-  `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc`.
-- Some firmware CAN RX/TX behavior is still not reliable enough for
-  product-grade diagnostics-over-bus assertions, so the diagnostics and charging
-  lanes use explicit dogfood firmware variants and firmware trace events.
-
-The goal is not to prescribe one implementation. It is to give the next agent
-several practical debugging strategies for each blocker, plus success criteria
-that make "unblocked" measurable.
-
-## Ground Rules
-
-1. Keep existing green lanes green after every stage:
-   - `cargo build --bin microcar`
-   - `cargo test --manifest-path dogfood/Cargo.toml`
-   - `MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- diagnostics`
-2. Prefer a small dogfood lane or one scenario before broad refactors.
-3. Do not depend on full golden traces for new volatile lanes. Assert compact
-   semantic trace events or structured JSON reports first.
-4. When a lane touches simulator state ownership, isolate the minimal simulator
-   bug before changing firmware.
-5. Treat `docs/BLOCKERS.md` as the status source and update it whenever a
-   blocker changes state.
-
-## Current Remaining Blockers
-
-1. Charging firmware lane — **safety lane done (M13)**; deeper FSM + plant physics remain.
-2. OTA firmware lane — **happy path done (M15)**, **slot-metadata model + 4 of 8 fault-matrix cases done (M16–M18)**; the remaining fault cases are decision-gated (gateway/BMS-reset need a cross-ECU mechanism; ota-while-drive/charge need scenario-schema).
-3. Diagnostics depth and product-grade diagnostics-over-bus.
-4. Debug gym seeded-bug corpus.
-5. Cockpit/gRPC dogfood lane — **gRPC-surface proof done (M14)**; `harness cockpit` wrapper + display firmware remain.
-6. Telematics firmware and host-socket lane.
-7. Per-session state ownership refactor.
-8. Remaining breakpoint predicates and nightly/scale runs.
-
-## 1. Charging Firmware Lane
-
-### Status (M13): safety lane delivered
-
-Strategy A below was taken and its success criteria are met: `harness charging`
-has a passing `plug_blocks_drive` scenario, `cargo test --manifest-path
-dogfood/Cargo.toml` stays green (68 tests), and existing non-charging scenarios
-are byte-identical (verified via the `debug_gym` trace hashes). Delivered
-trace-backed via dogfood firmware variants (`gateway_charging`,
-`powertrain_charging`) — no reliance on firmware CAN RX. It asserts
-`charging-mode` (gateway entered CHARGING on plug-in), `drive-blocked` (a drive
-request while plugged stayed CHARGING), and `motor-torque max=0` (powertrain
-clamped torque to 0 with the motor disabled).
-
-Key finding: `mc_gateway_determine_mode` already keeps `VEHICLE_CHARGING` sticky
-and `safety_mode_blocks_torque` already blocks torque outside DRIVE/LIMP — the
-gap was only a *trigger* to enter CHARGING and a lane to exercise it.
-
-**Still open for a future milestone** (Strategy C is the natural next step): the
-richer charging FSM (handshake, temperature-rise → reduced-current, charge
-complete, fault stops charging) and charging plant physics, plus flipping the
-deferred `toml_zoo` `charging-while-drive` case to active (needs charging in the
-scenario *schema*, e.g. a plug input / mode field).
-
-### Blocker
-
-The plan expects charging states and safety behavior that are not implemented
-yet: plug detection, handshake, charging, temperature/current limiting,
-completion, and "drive blocked while plugged".
-
-### Strategy A: Scenario-First Contract
-
-Use this when the state model is not settled.
-
-Steps:
-
-1. Add one minimal scenario, for example
-   `dogfood/charging/plug_blocks_drive.toml`.
-2. Express expectations as comments similar to diagnostics:
-   `# charging-expect: mode=CHARGING`, `# charging-expect: torque max=0`.
-3. Add a std-only `harness charging` parser that reports semantic checks.
-4. Stub the firmware traces first:
-   - gateway traces `charging_state`
-   - powertrain traces `charging_motor_command`
-   - BMS traces `charging_current_limit`
-5. Implement the smallest firmware behavior that makes the scenario pass.
-
-Debugging tactics:
-
-- If the gateway never enters `CHARGING`, trace the plug event and gateway mode
-  decision separately.
-- If powertrain still produces torque, trace both raw requested torque and
-  clamped torque.
-- If BMS limits do not affect charging current, add a direct BMS state unit test
-  before debugging the scenario.
-
-Success criteria:
-
-- `harness charging` has at least one passing plug-blocks-drive scenario.
-- `cargo test --manifest-path dogfood/Cargo.toml` stays green.
-- Existing non-charging scenarios do not change golden traces unless expected.
-
-### Strategy B: Firmware State Machine First
-
-Use this when the team has already agreed on charging states.
-
-Steps:
-
-1. Add a compact charging enum and transition table in gateway state code.
-2. Unit-test the transition table in `state_tests` or an equivalent small Rust
-   test.
-3. Wire the gateway mode broadcast.
-4. Add powertrain clamp behavior for `VEHICLE_CHARGING`.
-5. Only then add dogfood scenarios.
-
-Debugging tactics:
-
-- Table-test every transition before running the full simulator.
-- Make invalid transitions trace `charging_reject_reason`.
-- Keep gateway as sole charging mode authority.
-
-Success criteria:
-
-- State tests cover parked plug-in, drive request while plugged, charge complete,
-  and fault during charge.
-- Dogfood scenarios confirm the same behavior under FreeRTOS scheduling.
-
-### Strategy C: Plant/Battery-Centric Debugging
-
-Use this when charging current, SOC, or temperature behavior is the risk.
-
-Steps:
-
-1. Extend the plant model to expose charger input and battery temperature trend.
-2. Add a deterministic charging current profile.
-3. Add BMS current-limit traces.
-4. Assert SOC increases and temperature limiting reduces current.
-
-Debugging tactics:
-
-- Check plant tick order before blaming firmware.
-- Log `soc_percent`, `pack_temp_c_x10`, and current limit in the same virtual
-  time window.
-- Keep battery physics deliberately simple until the control-flow lane is green.
-
-Success criteria:
-
-- Charging current falls when high-temperature condition is injected.
-- SOC/charge-complete assertions are deterministic across repeated runs.
-
-## 2. OTA Firmware Lane
-
-### Status (M15): happy path delivered
-
-Strategy A below was taken and its success criteria are met. A trace-backed,
-opt-in `gateway_ota` dogfood variant (`gateway_enable_dogfood_ota_script()` +
-`run_dogfood_ota_script()`, gated by `g_ota_dogfood_script` default `0`) drives
-the minimal OTA state sequence
-`IDLE(0)→DOWNLOADING(1)→VERIFYING(2)→COMMIT_PENDING(3)→REBOOTING(4)→HEALTHY(5)`
-and emits `ota_state`, `ota_crc_ok=1`, `ota_slot=1`, and `ota_boot_result=1`
-markers. `dogfood/src/ota.rs` + `dogfood/ota/happy_path.toml` + `harness ota`
-assert the expected monotonic state sequence, CRC-ok, and healthy boot.
-`harness ota` is 1/1 green; the dogfood crate is at 75 unit tests; and the
-`debug_gym` trace hashes are unchanged (default firmware byte-identical, opt-in).
-
-**Update (M16): Strategy B done + first Strategy C fault case shipped.** A pure A/B
-slot-metadata model now exists — `common/src/microcar_ota_slot.c` +
-`common/include/microcar_ota_slot.h`, mirrored in `state_tests/src/ota_slot.rs` with
-**7 unit tests** covering commit, corrupt-CRC rollback, failed-health rollback, and
-interrupted-write rollback (Strategy B success criteria met). The gateway OTA script now
-drives this model (happy path byte-identical to M15), and a `gateway_ota_badcrc` fault
-variant runs the first Strategy C case: a corrupt image fails CRC and rolls back to slot A
-(`dogfood/ota/rollback_bad_crc.toml`, `harness ota` now **2/2**). The harness gained
-`crc-bad`, `rolled-back`, and `active-slot N` expectations.
-
-**Update (M17): two more fault-matrix cases shipped.** Reusing the M16 model, two more
-fault variants landed — `gateway_ota_intwrite` (power cut during write → the partial image
-is discarded and the update rolls back *before verifying*: `0,1,6`) and
-`gateway_ota_badhealth` (a valid image downloads/verifies/commits but the post-reboot
-self-test fails → rollback to slot A: `0,1,2,3,4,6`). A shared `emit_ota_rollback()` helper
-gives every fault an identical rollback marker set. `harness ota` is now **4/4**
-(`happy_path`, `rollback_bad_crc`, `rollback_failed_health`, `rollback_interrupted_write`);
-3 of the plan's 8 fault cases are covered. No new harness expectation types were needed.
-
-**Update (M18): commit-atomicity (power-cut-before-commit) case shipped.** A fourth fault
-variant landed — `gateway_ota_powercut`: a valid image downloads and verifies (crc ok), but
-a power cut at the commit step discards the verified-but-uncommitted image and reverts to
-slot A (`0,1,2,6` with **crc-ok**, distinguishing it from bad-CRC's `0,1,2,6` with crc-bad).
-`harness ota` is now **5/5**; 4 of the plan's 8 fault cases are covered.
-
-**Still open — decision-gated (deliberately not guessed autonomously):** the remaining OTA
-fault cases need input. **gateway reset during update** and **BMS critical fault during
-update** need a reliable cross-ECU / reset mechanism to model honestly — the firmware CAN-RX
-path is still unreliable, so a trace-only stub would be *fabricated* rather than genuinely
-exercised (which would compromise the goal). **OTA-while-driving** / **OTA-while-charging**
-are mode-gated: they need OTA represented in the scenario *schema* (a plug/mode field in the
-TOML), a design decision shared with the deferred `toml_zoo` `ota-while-drive` case. The
-OTA-rollback `debug_gym` seed is trivially seedable from any of the four M16–M18 fault
-variants once the seeded-bug corpus format is agreed.
-
-### Blocker
-
-OTA requires new firmware and boot behavior: download, slot-B write, CRC,
-commit, reboot, health check, rollback, and an eight-case power-cut/corruption
-matrix.
-
-### Strategy A: Happy Path First
-
-Use this to avoid being buried by the fault matrix.
-
-Steps:
-
-1. Define the smallest OTA state sequence:
-   `IDLE -> DOWNLOADING -> VERIFYING -> COMMIT_PENDING -> REBOOTING -> HEALTHY`.
-2. Trace `ota_state`, `ota_slot`, `ota_crc_ok`, and `ota_boot_result`.
-3. Add one `dogfood/ota/happy_path.toml`.
-4. Add `harness ota` with semantic assertions.
-5. Add rollback only after the happy path is green.
-
-Debugging tactics:
-
-- If state order is wrong, assert a monotonic expected sequence in the harness.
-- If CRC behavior is flaky, unit-test CRC over fixed byte arrays outside the
-  simulator first.
-- If reboot does not occur, trace boot flags before and after restart.
-
-Success criteria:
-
-- Happy-path OTA scenario passes with deterministic state sequence.
-- Existing lifecycle/reboot scenarios still pass.
-
-### Strategy B: Storage/Slot Model First
-
-Use this when the risk is persistence or slot ownership.
-
-Steps:
-
-1. Create a pure slot metadata model: active slot, pending slot, rollback flag,
-   health counter.
-2. Unit-test commit and rollback rules without FreeRTOS.
-3. Add firmware shims that call the model.
-4. Add simulator scenarios only after the model is stable.
-
-Debugging tactics:
-
-- Print or trace a packed `ota_flags` value after every transition.
-- Test corrupted image, missing commit flag, and failed health check as unit
-  cases first.
-- Avoid adding network/download behavior until slot rules are correct.
-
-Success criteria:
-
-- Slot model tests cover commit, rollback, corrupt CRC, and interrupted write.
-- Dogfood OTA scenarios reuse the same model behavior.
-
-### Strategy C: Fault-Matrix Driven
-
-Use this after the happy path exists.
-
-Steps:
-
-1. Build the eight failure scenarios one at a time.
-2. For each scenario, add:
-   - trigger time
-   - expected OTA state
-   - expected slot after reboot
-   - expected trace marker
-3. Keep each failing path small enough to debug independently.
-
-Debugging tactics:
-
-- Use `World::step()` or `microcar --step` to stop near the fault injection.
-- Use `run_to_frame` only for message-level bugs; use state traces for OTA
-  state bugs.
-- When rollback fails, compare pre-reboot and post-reboot `ota_flags`.
-
-Success criteria:
-
-- Fault matrix passes in the OTA harness.
-- `ota-while-drive` can move from deferred to active `toml_zoo` coverage.
-
-## 3. Diagnostics Depth And Diagnostics-Over-Bus
-
-### Blocker
-
-The first diagnostics dogfood lane is green, but live BMS data is not
-implemented. Also, firmware-originated CAN and firmware RX are not currently a
-reliable assertion path for this lane, so the lane uses dogfood firmware variants
-and trace events.
-
-### Strategy A: Live BMS Over Existing Trace Hooks
-
-Use this when the priority is plan coverage rather than simulator CAN repair.
-
-Steps:
-
-1. Add `MC_DIAG_LIVE_BMS` support in gateway diagnostics.
-2. Return a compact BMS snapshot from gateway-maintained state.
-3. Add `# diagnostics-expect: live-bms ...` directives.
-4. Assert gateway trace-backed responses in `harness diagnostics`.
-
-Debugging tactics:
-
-- First trace whether gateway ever receives or synthesizes BMS state.
-- Pack BMS values in two response bytes initially; avoid multi-frame protocol
-  until needed.
-- Add unit tests for response decoding in `dogfood/src/diagnostics.rs`.
-
-Success criteria:
-
-- Diagnostics harness checks live BMS data in at least one scenario.
-- No dependence on flaky firmware CAN RX/TX.
-
-### Strategy B: Minimal CAN RX/TX Repro
-
-Use this when the priority is product-grade diagnostics-over-bus.
-
-Steps:
-
-1. Create the smallest simulator scenario with two firmware machines:
-   one sends one CAN frame, one receives one CAN frame.
-2. Add temporary trace events around `sim_can_send`, world bus delivery, and
-   `sim_can_recv`.
-3. Prove whether the frame is lost, consumed by the wrong machine, or stuck in a
-   global queue.
-4. Fix the simulator integration before changing diagnostics firmware.
-
-Debugging tactics:
-
-- Compare human `can-rx`/`can-tx` trace against firmware `can_recv` values.
-- Inspect whether controller `0` is process-global, thread-local, or
-  machine-local at the point of delivery.
-- Add a regression test in costar if the bug is in simulator ownership.
-
-Success criteria:
-
-- A firmware receiver reliably consumes the frame intended for it.
-- Diagnostics scenarios can be rewritten to assert actual `0x600`/`0x601`
-  delivery instead of only trace-backed hooks.
-
-### Strategy C: Hybrid Transition
-
-Use this when dogfood must stay green while the simulator fix is in progress.
-
-Steps:
-
-1. Keep the existing trace-backed diagnostics lane.
-2. Add one skipped or expected-failing "over-bus" scenario documenting the gap.
-3. Flip it to active after the CAN fix lands.
-
-Debugging tactics:
-
-- Do not remove trace-backed assertions until the over-bus lane has repeated-run
-  stability.
-- Keep response payload expectations identical between both harness paths.
-
-Success criteria:
-
-- Both trace-backed and bus-backed diagnostics lanes pass, then retire the
-  trace-only dogfood variant if product requirements demand it.
-
-## 4. Debug Gym Seeded-Bug Corpus
-
-### Status (M19–M22): first four corpus cases delivered
-
-`dogfood/src/debug_gym_corpus.rs` + `harness debug-gym-corpus` is **4/4** green:
-(1) **OTA rollback bug** (`gateway_ota_crcbug` broken CRC accepts a corrupt image
-and boots the bad slot vs `gateway_ota_badcrc` that rolls back), (2)
-**SERVICE-mode torque-clamp bug** (`powertrain_diag_service_bug` skips the SERVICE
-safety clamp and commands drive torque vs `powertrain_diag_service` that clamps to
-0 / disables the motor), (3) **clear-all-DTCs bug** (`gateway_diag_clearbug`
-calls `fault_manager_clear_all` on a BMS-scoped CLEAR_DTCS, silently dropping an
-unrelated powertrain DTC — 2 DTCs before, 0 after — vs `gateway_diag_clear` that
-clears only the BMS node, leaving 1), and (4) **START_SESSION-in-DRIVE bug**
-(`gateway_diag_startdrivebug` skips the guard refusing a diagnostic session while
-driving and accepts START_SESSION mid-drive — status=OK, mode=SERVICE — vs
-`gateway_diag_startdrive` that rejects it, status=REJECTED, mode=DRIVE). Cases
-(2)–(4) are the Strategy A diagnostics seeds. Each seed carries the plan's
-required metadata (description, symptom, minimal failing scenario, golden failing
-trace, primitive, fixed trace) and the harness asserts **bug-reproduced** +
-**bug-fixed** + **traces-diverge** by running both scenarios through the product
-binary. Genuinely exercised (real buggy firmware, real traces), gated opt-in,
-golden traces byte-identical. All diagnostics/OTA-seeded cases reachable without
-new firmware are done; the remaining 3 seeds (BMS stale sensor, dashboard missed
-warning, telematics partial-write) stay firmware-gated (Strategy C).
-
-### Blocker
-
-The debugging primitives are implemented, but the seeded-bug corpus needs
-deliberately buggy firmware variants and expected failing/fixed traces.
-
-### Strategy A: Start With Diagnostics Bugs
-
-Use this now because diagnostics has dogfood firmware variants.
-
-Candidate bugs:
-
-- Gateway clears all DTCs instead of only BMS DTCs.
-- `START_SESSION` incorrectly succeeds while in `DRIVE`.
-- SERVICE mode fails to clamp powertrain torque.
-
-Debugging tactics:
-
-- Create `firmware/*_bug_*` variants or resolver-selected bug modes.
-- Record the failing symptom in the harness JSON.
-- Use `continue_until` on `gateway_diag_response` or `diag_motor_command`.
-
-Success criteria:
-
-- At least one debug-gym corpus case has failing and fixed traces.
-- The corpus documents which primitive solved the case.
-
-### Strategy B: Reuse Existing Topology Bridge Loop
-
-Use this for a simulator/networking-flavored seed.
-
-Steps:
-
-1. Treat `gateway_loop_prevention` as the fixed scenario.
-2. Add a deliberately broken bridge-loop variant or fixture.
-3. Use Trace v2 parent/correlation IDs as the debugging signal.
-
-Debugging tactics:
-
-- Assert duplicate deliveries and parent-chain growth.
-- Use `run_to_frame` to stop at the repeated message ID.
-
-Success criteria:
-
-- One seeded bug proves message breakpoint and Trace v2 causality debugging.
-
-### Strategy C: Wait For OTA/Telematics For Later Seeds
-
-Use this to avoid inventing shallow bugs.
-
-Steps:
-
-1. Mark OTA rollback and telematics partial-write bugs as dependent on those
-   lanes.
-2. Add them only after the real firmware behavior exists.
-3. Keep corpus metadata ready: name, symptom, primitive, fixed trace.
-
-Debugging tactics:
-
-- Do not hand-roll fake networking bugs before telematics firmware exists.
-- Make each seed fail for exactly one reason.
-
-Success criteria:
-
-- Seven-case corpus eventually spans gateway, powertrain, BMS, dashboard,
-  telematics, OTA, and topology.
-
-## 5. Cockpit / gRPC Dogfood Lane
-
-### Status (M14): gRPC-surface proof delivered
-
-Strategy A (prove the existing gRPC surface) + Strategy C (interaction/inspection)
-were taken. `crates/sim-grpc/tests/cockpit_test.rs` (additive, test-only) runs the
-full cockpit flow — `CreateSession → LoadScenario → ConfigureBoard(display + touch
-+ timer + adc) → Run(stream_display,stream_trace) + touch press/release + Stop →
-InspectDevices` — reconciles inspected devices against `ConfigureBoard`, and
-asserts framebuffer-hash + tick + `SimulationEnd`-totals determinism across two
-sequential runs. Verified with `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc
-cargo test -p sim-grpc` (14 existing + 1 new cockpit test pass). No server change
-⇒ golden traces unaffected.
-
-**Still open:** a microcar `harness cockpit` wrapper (deferred to keep the harness
-std-only), Strategy B rich framebuffer content (needs display-driving dashboard
-firmware — current scenarios emit zero DisplayFrame events, so the determinism
-check is honestly `empty == empty`, no fabricated pixels), and concurrent
-multi-session isolation (interlocks with the per-session state refactor, section 7).
-
-### Blocker
-
-The old `protoc` blocker is locally resolved. The remaining work is a lane
-implementation around `sim-grpc`.
-
-### Strategy A: Prove The Existing gRPC Surface
-
-Use this as the first path.
-
-Steps:
-
-1. Run:
-   `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc cargo test -p sim-grpc`
-   from `/home/zmm/projects/costar`.
-2. Create a small client flow:
-   `CreateSession -> ConfigureBoard -> Run(stream_display=true) -> InspectDevices`.
-3. Add `harness cockpit` only after the manual/client flow is stable.
-
-Debugging tactics:
-
-- If tests fail in sandbox due to localhost binding, rerun with approval outside
-  the sandbox.
-- If generated proto code is stale, clean only the relevant costar build output.
-- Log the gRPC request sequence before adding display assertions.
-
-Success criteria:
-
-- A dogfood cockpit run can create a session and inspect configured devices.
-
-### Strategy B: Framebuffer-First
-
-Use this if the product priority is GUI confidence.
-
-Steps:
-
-1. Configure only display and timer devices.
-2. Run with `stream_display=true`.
-3. Hash framebuffer frames.
-4. Assert frame count and stable hashes.
-
-Debugging tactics:
-
-- Start with one deterministic frame before checking streams.
-- Save expected hashes in harness JSON output, not full binary frames.
-- Compare trace timestamps with frame stream timestamps.
-
-Success criteria:
-
-- Cockpit lane reports deterministic framebuffer hashes across repeated runs.
-
-### Strategy C: Interaction-First
-
-Use this if touch/input correctness is the priority.
-
-Steps:
-
-1. Configure display plus touch.
-2. Inject one touch event.
-3. Inspect device state and trace output.
-4. Add multi-touch or repeated input only after the single event is stable.
-
-Debugging tactics:
-
-- Trace touch injection, firmware receive, and UI/device state separately.
-- Assert event order before asserting rendered output.
-
-Success criteria:
-
-- Touch injection produces the expected device state and trace evidence.
-
-## 6. Telematics Firmware And Host-Socket Lane
-
-### Blocker
-
-The host-networking engine edges were hardened, but there is no telematics ECU
-firmware and no dogfood host TCP rig for periodic uploads/remote queries.
-
-### Strategy A: Firmware Ping-Pong First
-
-Use this to prove a minimal telematics ECU.
-
-Steps:
-
-1. Add `firmware/telematics_ecu`.
-2. Send one deterministic host upload or query.
-3. Trace `telematics_send`, `telematics_recv`, and byte counts.
-4. Add one scenario without stressing partial writes.
-
-Debugging tactics:
-
-- Prove firmware task timing before debugging host sockets.
-- Keep payloads tiny until delivery is reliable.
-
-Success criteria:
-
-- A telematics scenario sends and receives one host message deterministically.
-
-### Strategy B: Host-Socket Stress Harness
-
-Use this after minimal firmware works.
-
-Steps:
-
-1. Add `harness telematics`.
-2. Start the costar server or microcar scenario under test.
-3. Connect a host TCP client with small socket buffers.
-4. Send bursts and assert response count.
-
-Debugging tactics:
-
-- Log partial-write boundaries and total bytes drained.
-- Assert conservation: bytes written by host equal bytes observed by simulated
-  device plus buffered remainder.
-- Run repeats to catch poller re-arm regressions.
-
-Success criteria:
-
-- No dropped requests under burst traffic and small buffers.
-
-### Strategy C: Trace/Data Reconciliation
-
-Use this for final product confidence.
-
-Steps:
-
-1. Capture host-side request IDs.
-2. Capture firmware trace request IDs.
-3. Capture network device inspection state.
-4. Reconcile all three in harness output.
-
-Debugging tactics:
-
-- If reconciliation fails, classify the failure as host-send, simulator-deliver,
-  firmware-handle, or firmware-reply.
-- Keep request IDs monotonic and small for readable traces.
-
-Success criteria:
-
-- Every request has matching host, simulator, and firmware evidence.
-
-## 7. Per-Session State Ownership Refactor
-
-### Blocker
-
-Some simulator state is still process-global or thread-local across sessions.
-Moving it is high risk because C FFI reads timing, task identity, and device
-state during guest firmware execution.
-
-### Strategy A: Device Registry First
-
-Use this as the safest initial refactor.
-
-Steps:
-
-1. Identify all device registry reads/writes.
-2. Move one device class to per-World ownership.
-3. Keep an active-simulator guard only for C callbacks.
-4. Add regression tests for two Worlds in one process.
-
-Debugging tactics:
-
-- Start with a low-risk device class before CAN/network/display.
-- Assert no cross-World device leakage.
-- Run golden microcar scenarios after each device class.
-
-Success criteria:
-
-- Two in-process Worlds can use the migrated device without shared state.
-
-### Strategy B: Clock/Task Identity Audit
-
-Use this before touching `SIM_NOW` or task IDs.
-
-Steps:
-
-1. List every read/write of `SIM_NOW`, current task ID, and scheduler identity.
-2. Add assertions documenting the current active simulator.
-3. Move reads behind a context object where possible.
-4. Keep FFI behavior byte-identical.
-
-Debugging tactics:
-
-- Add temporary panic-on-missing-active-sim checks in tests, not production paths.
-- Compare golden trace hashes before and after each step.
-- Avoid simultaneous clock and device registry moves.
-
-Success criteria:
-
-- Existing timing traces remain stable.
-- In-process multi-session tests stop sharing task/clock identity.
-
-### Strategy C: Product Surface Driven
-
-Use this if cockpit or telematics exposes concrete session leakage.
-
-Steps:
-
-1. Write a failing two-session test that reproduces the leak.
-2. Fix only the state class involved.
-3. Add the failing test as the regression.
-
-Debugging tactics:
-
-- Prefer concrete leakage tests over speculative refactors.
-- Record which state crossed the session boundary.
-
-Success criteria:
-
-- The two-session repro passes and no dogfood lane regresses.
-
-## 8. Remaining Breakpoint Predicates And Nightly/Scale
-
-### Blocker
-
-Message breakpoint exists. Other predicates need product events or more
-firmware traces: machine, vehicle-state, device-state, DTC-creation, and
-assertion-failure.
-
-### Strategy A: Predicate Wrappers Around Existing Traces
-
-Use this for vehicle mode and DTC now that diagnostics emits traces.
-
-Steps:
-
-1. Define trace labels accepted by each predicate.
-2. Add wrappers over `continue_until`.
-3. Add unit tests with synthetic traces.
-4. Add one scenario-level dogfood check.
-
-Debugging tactics:
-
-- If a predicate never fires, verify the trace label exists before debugging
-  `continue_until`.
-- Keep predicate matching exact and documented.
-
-Success criteria:
-
-- Vehicle-state and DTC predicates work on diagnostics scenarios.
-
-### Strategy B: Device-State Predicates After Cockpit
-
-Use this when display/touch/device inspection exists in cockpit.
-
-Steps:
-
-1. Define device-state events or inspection snapshots.
-2. Add predicate support for one device type first.
-3. Expand after the first type is stable.
-
-Debugging tactics:
-
-- Do not infer device state from unrelated trace strings.
-- Prefer structured inspection data where available.
-
-Success criteria:
-
-- A cockpit scenario can stop on a display/touch state condition.
-
-### Strategy C: Nightly/Scale After Semantic Lanes
-
-Use this after charging/OTA/telematics have small green lanes.
-
-Steps:
-
-1. Compose nightly from existing lane commands.
-2. Add repeats and timeouts.
-3. Add larger fleet/topology runs last.
-
-Debugging tactics:
-
-- Classify failures as nondeterminism, timeout, semantic assertion, or panic.
-- Keep JSON reports for trend comparison.
-
-Success criteria:
-
-- A single nightly command reports lane totals and isolates failing scenarios.
-
-## Recommended Execution Order
-
-1. ~~Charging safety lane~~ — **done (M13)**: drive blocked while plugged.
-2. ~~Cockpit/gRPC gRPC-surface proof~~ — **done (M14)**; `harness cockpit` wrapper + display firmware remain.
-3. ~~OTA happy path~~ — **done (M15)**; ~~slot-metadata model + first rollback~~ —
-   **done (M16)**; ~~interrupted-write + failed-boot rollback~~ — **done (M17)**;
-   ~~commit-atomicity / power-cut-before-commit~~ — **done (M18)**; the remaining OTA fault
-   cases (gateway/BMS reset, ota-while-drive/charge) are decision-gated — see UNBLOCKING §2
-   "Still open" and BLOCKERS §3.
-4. Deeper charging FSM (handshake / temp-rise / reduced-current / complete) +
-   charging plant physics; then flip the deferred `toml_zoo` `charging-while-drive`.
-5. Diagnostics-over-bus or live BMS, depending on whether product-grade CAN
-   assertions are required immediately.
-6. Debug gym corpus expansion using diagnostics/charging first, OTA/telematics later.
-   ~~First corpus case (OTA rollback bug)~~ — **done (M19)**; ~~second case
-   (SERVICE torque-clamp bug, diagnostics-seeded)~~ — **done (M20)**;
-   ~~third case (clear-all-DTCs bug, diagnostics-seeded)~~ — **done (M21)**;
-   ~~fourth case (START_SESSION-in-DRIVE bug, diagnostics-seeded)~~ — **done
-   (M22)**: `harness debug-gym-corpus` 4/4. All diagnostics/OTA-seeded cases
-   reachable without new firmware are done; the remaining 3 seeds (BMS stale
-   sensor, dashboard missed warning, telematics partial-write) are firmware-gated
-   (Strategy C).
-7. Telematics firmware and host-socket lane.
-8. Per-session state ownership, staged behind concrete two-session tests.
-9. Nightly/scale once the semantic lanes are individually green.
-
-## Fast Status Commands
-
-From `/home/zmm/projects/microcar`:
-
-```sh
-cargo build --bin microcar
-cargo test --manifest-path dogfood/Cargo.toml
-MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- diagnostics
-MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- charging
-```
-
-From `/home/zmm/projects/costar`:
-
-```sh
-PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc cargo test -p sim-grpc
-```
+# Microcar Dogfood Unblocking Plan
+
+Last reviewed: 2026-07-09
+
+docs/costar_microcar_dogfood_plan.md is the product goal and docs/BLOCKERS.md
+is the status record. This file is the implementation brief for the remaining
+work. It chooses durable designs instead of adding more trace-only fixtures
+around current simulator limitations.
+
+Starting point: the M12 diagnostics safety lane, M13 charging safety lane, M14
+gRPC-surface proof, M15-M18 OTA fixtures, and four debug-gym corpus cases are
+already delivered. Preserve them as regression coverage. The remaining corpus
+work is BMS stale sensor, dashboard missed warning, and telematics partial
+write; the remaining OTA work is the decision-gated real path described below.
+
+## What Unblocked Means
+
+A lane is not unblocked merely because it emits the desired trace label. A
+completed remaining lane must have all of these properties:
+
+1. The producer, transport/device layer, consumer, and observable result all
+   execute independently in the simulation.
+2. The harness asserts semantic state plus relevant transport/device evidence,
+   not only a firmware-local trace hook.
+3. Default vehicle scenarios and human golden traces remain byte-identical.
+   New behavior is enabled by new scenarios or explicit configuration.
+4. The lane is deterministic across repeated runs. Host-connected tests use
+   timeouts and transcripts, not golden traces.
+5. Failures have useful Trace v2, typed-state, or device-inspection evidence.
+
+The current gateway_diag_*, gateway_charging, and gateway_ota* variants are
+useful regression fixtures. Keep them green during the migration, but do not
+extend them as the final implementation of diagnostics, charging, or OTA. Their
+direct scripts bypass the path that this dogfood project is meant to exercise.
+
+## Decisions And Dependency Order
+
+| Stage | Deliverable | Why first | Unlocks |
+|---|---|---|---|
+| P0a | Per-machine execution/device context in costar | ECUs share thread-local device state, including CAN controller 0. | Real CAN, gRPC isolation, network isolation. |
+| P0b | Receiver-correct CAN and firmware-instance state | A frame must reach its intended ECU before bus-backed claims are credible. | Diagnostics, BMS/dashboard seeds, charging, OTA control. |
+| P1 | Restartable machine and persistent-storage boundary | Current reboot replaces a machine without restoring firmware. | Gateway-reset OTA fault and real boot recovery. |
+| P2 | Protocol-backed scenario stimuli | Prevents tests from forcing the vehicle state under test. | Charging/OTA mode gates and deferred toml_zoo cases. |
+| P3 | Real diagnostics, charging, and OTA slices | Delivers the EV behavior in the plan. | Remaining OTA matrix and two debug seeds. |
+| P4 | Dashboard/display and telematics slices | Both need P0 isolation. | Cockpit content and final debug seed. |
+| P5 | Typed breakpoints and nightly composition | These need real consumers first. | Product debugging and scale confidence. |
+
+P0 is a narrow vertical slice of the larger per-session refactor, not a
+permission for a speculative rewrite. Do not call it complete until two
+in-process worlds can each run an ECU using device ID 0 without observing the
+other world.
+
+## 1. Per-Machine Execution And Device Ownership (P0a)
+
+### Root cause
+
+Three current facts explain several blockers:
+
+- crates/sim-devices/src/lib.rs stores device maps in thread-local globals.
+- World::deliver_buses injects every CAN delivery into global controller 0, and
+  World::step_firmware drains that same controller for every sender.
+- sim-grpc configures and inspects those global maps directly in
+  crates/sim-grpc/src/server.rs.
+
+The existing active SimGlobal guard is useful, but SIM_NOW,
+CURRENT_TASK_ID, device registries, network registries, and some C firmware
+globals still escape it. This is why firmware CAN RX is unreliable and why the
+cockpit test is intentionally sequential.
+
+### Target ownership model
+
+    World
+      MachineRuntime (one per machine)
+        Simulator / scheduler / trace sink
+        DeviceBank (CAN, timers, IRQ, UART, display, touch, ADC, storage, ...)
+        GuestRuntime (current time, task identity, firmware-instance state)
+      World-owned buses, links, plant, and session metadata
+      World-owned network state where it is not machine-specific
+
+The FFI may keep a thread-local active-execution pointer only as an
+RAII-scoped dispatch mechanism while guest code runs. It must point to the
+owning MachineRuntime, restore the prior context on every exit path, and never
+be the storage location for state.
+
+- FFI reads of time and current task ID resolve through the active context, not
+  process-global atomics.
+- FFI device calls resolve a device ID inside the active machine DeviceBank.
+  Each ECU can continue to use controller ID 0 without collisions.
+- World and gRPC operations outside guest execution take an explicit World and
+  machine selector. They must not depend on the most recently active machine.
+- Host pollers, TAP/TCP bridges, smoltcp state, and display/touch state move
+  out of thread-local registries on the same ownership path.
+
+Do not fix CAN by introducing another process-global map keyed by session ID.
+
+### C firmware instance state is included
+
+The C ECU files also contain mutable static state, task handles, stacks, and
+TCBs. One linked copy is shared by all instances of an ECU type in the host
+process. A Rust-only DeviceBank migration therefore does not make fleets or
+concurrent gRPC sessions safe.
+
+Add a small FFI-backed firmware-instance storage API, conceptually:
+
+    mc_instance_state(module_key, size, alignment)
+      -> pointer owned by the active machine
+
+Its volatile region belongs to GuestRuntime and is reset by a machine reboot.
+Its persistent region is backed by virtual flash. Migrate mutable C state into
+per-instance structs in this order:
+
+1. Gateway state, fault manager, queues, semaphores, and selectors.
+2. Powertrain controller and task handles.
+3. BMS state, calibration state, stacks, and TCBs.
+4. Dashboard state, warning/display task state, stacks, and TCBs.
+5. New charging, OTA, and telematics state.
+
+Immutable lookup tables may stay static const. Do not use C thread-local storage
+as a substitute: sessions can execute on the same worker thread.
+
+### Migration sequence
+
+1. Inventory every thread_local, static device registry, SIM_NOW,
+   CURRENT_TASK_ID, active simulator guard, and C mutable global. Assign each
+   an owner: machine, world, session, or true process service.
+2. Add DeviceBank and explicit accessors in sim-devices. Port one low-risk
+   device class plus inspection and add two-world leakage tests.
+3. Extend SimulatorActivation into an execution-context guard that activates
+   SimGlobal, DeviceBank, time, and task identity together. Test nested
+   activation and panic/unwind restoration.
+4. Port CAN next, then timers/IRQ, then display/touch/ADC/storage.
+5. Port sim-net and the host poller after the device API shape is stable. A
+   host bridge belongs to one world/session and is cleaned up on destruction.
+6. Migrate microcar C globals before enabling in-process fleet or concurrent
+   gRPC tests with duplicate ECU types.
+7. Remove production use of legacy global accessors.
+
+### P0a exit tests
+
+- Two worlds on one thread, each with CAN controller 0, enqueue and receive
+  different frames without cross-observation.
+- Interleaving those worlds in either order produces each solo trace.
+- A panic in one active world restores the prior active context and a sibling
+  world still runs.
+- Two same-type microcar ECUs have independent task IDs, C state, and queues.
+- Existing costar and microcar golden scenarios remain byte-identical after
+  every migration slice. Do not batch clock, device, and C-state moves.
+
+## 2. Correct CAN Delivery (P0b)
+
+After P0a, repair CAN as a direct consequence of ownership, not with
+receiver-side filtering workarounds.
+
+For each logical send, World must:
+
+1. Drain the sender machine active controller 0 after that firmware steps.
+2. Put the frame only on buses to which that sender is attached.
+3. Deliver one copy to each eligible receiver on that bus.
+4. Inject the copy into that receiver controller 0 inbox.
+5. Record one sender CanTx and one receiver CanRx per delivery while preserving
+   existing Trace v2 correlation and parent behavior.
+
+The current assumption that firmware can discard unrelated frames is invalid:
+an unrelated ECU can consume the shared queue first. Sender exclusion and bridge
+loop prevention remain World/bus responsibilities.
+
+Required regression matrix:
+
+- Three firmware ECUs using controller 0: one sender and two receivers. Each
+  receiver gets exactly one intended frame.
+- A gateway on two buses forwards exactly once with a child correlation ID.
+- A passive external sender injected through bus_inject reaches only attached
+  receivers.
+- A 100-run repetition proves ordering and trace hashes are stable.
+- Two gRPC sessions use the same controller IDs concurrently and each
+  InspectDevices result is session-local.
+
+This is the gate for replacing the diagnostics scripts with the existing
+diagnostics-tool ECU. It is also the gate for claiming OTA reset or BMS fault
+paths are end to end.
+
+## 3. Restartable Machines And Persistent State (P1)
+
+FaultAction::Reboot currently creates a fresh default Machine and loses its
+firmware. It is not a reset primitive suitable for OTA. Fix generic simulator
+semantics first; do not model a gateway reset with a trace marker.
+
+### Reboot contract
+
+Store a restartable firmware specification/factory in Machine or scenario
+construction. A reboot must:
+
+1. Preserve machine identity, bus attachments, board/device assignment, and
+   persistent flash/EEPROM.
+2. Discard guest RAM, task/fiber state, volatile device registers/mailboxes,
+   and per-instance C volatile state.
+3. Keep frames already transmitted on the bus in flight, but discard the reset
+   target pre-reset receive queue. Frames sent while it is down are not
+   delivered retroactively after boot.
+4. Recreate original firmware from its factory and call its normal boot path
+   after an explicit deterministic downtime_ms interval.
+5. Emit structured machine_reset_begin and machine_reset_boot events with
+   identity and virtual time.
+
+Add downtime_ms as an optional generic field to the existing machine.reboot
+fault. It belongs in costar because it is generic reset semantics. OTA scenarios
+should use a nonzero duration and assert the boot boundary.
+
+### Persistence contract
+
+A/B metadata is persistent storage, not a C static local to an OTA script.
+Store metadata and image validity in the gateway persistent flash region. The
+RAM-side worker may disappear at reset; boot recovery must re-read metadata and
+choose the known-good slot or the eligible target deterministically.
+
+Extend common/microcar_ota_slot.c and its Rust mirror with explicit recovery,
+for example abort(reason) and recover_after_reset(). Keep it pure and
+unit-test every transition before FreeRTOS integration.
+
+### P1 exit tests
+
+- A normal gateway reboot runs its original firmware again and resumes a
+  heartbeat after downtime.
+- Rebooting one ECU does not reset sibling ECUs or devices.
+- An uncommitted target is rejected after gateway reset and slot A remains
+  active.
+- A failed post-update health check rolls back from persistent metadata, not
+  surviving RAM.
+- Keyframe replay around reset reproduces the same future.
+
+## 4. Scenario Stimuli Without Forced Vehicle State (P2)
+
+Do not add mode = "CHARGING" or mode = "OTA_UPDATE" to scenarios. That would
+bypass gateway authority and make safety assertions circular.
+
+The existing generic bus_inject mechanism is enough for the first real vehicle
+stimuli. Model external actors as passive named machines attached to the correct
+bus, with no firmware, such as evse, update_tool_host, or test_harness. They
+supply a real sender identity and use normal World bus delivery.
+
+    [[machine]]
+    id = 6
+    name = "evse"
+
+    [[bus.node]]
+    bus = "vcan_body"
+    machine = "evse"
+
+    [[bus_inject]]
+    at_ms = 100
+    bus = "vcan_body"
+    sender = "evse"
+    id = 0x620 # example: MC_MSG_EVSE_STATUS
+    data = [6, 1, 0, 0]
+
+Protocol IDs and payloads belong in microcar/common/include/microcar_protocol.h;
+costar only knows this is a CAN frame. Add microcar semantic validation that:
+
+- the passive sender is attached to the named bus;
+- payload byte 0 matches the declared protocol node ID where the protocol uses
+  an in-payload source ID;
+- event order and values are legal for the relevant vehicle protocol;
+- a scenario cannot bypass gateway admission.
+
+Use generic fault for physical failure/reset timing and bus_inject for external
+protocol events. Add a new generic scenario field only if it represents a
+reusable simulator concept that neither primitive can express.
+
+This solves the deferred mode cases without a schema shortcut:
+
+- charging-while-drive: driver input establishes DRIVE, then EVSE plug and
+  handshake frames arrive; gateway/powertrain block torque.
+- ota-while-drive: driver input establishes DRIVE, then a real OTA request
+  arrives; gateway rejects it.
+- ota-while-charging: EVSE establishes CHARGING, then a real OTA request
+  arrives; gateway rejects it.
+
+## 5. Real Firmware Vertical Slices
+
+### 5.1 Diagnostics: live BMS data over real CAN
+
+The diagnostics-tool ECU already sends 0x600 requests and decodes 0x601
+responses. After P0b it becomes the authoritative path.
+
+1. BMS publishes a compact, sequenced snapshot from data it actually receives
+   from the plant. Use a source byte and fixed-point fields that fit in one CAN
+   payload. Do not claim ISO-TP or UDS support.
+2. Gateway caches the latest valid snapshot with sequence and receive time. It
+   answers MC_DIAG_LIVE_BMS only while fresh, otherwise responds
+   REJECTED/STALE instead of replaying old data.
+3. Keep the two-byte response shape with documented snapshot selectors:
+   SOC/temperature, voltage, and current can be separate deterministic requests
+   with fixed scaling. The tool assembles the snapshot.
+4. The harness asserts tool CanTx, gateway CanRx, gateway CanTx, tool CanRx,
+   decoded values, freshness, and Trace v2 causality.
+
+Add a successful live-data scenario and an actual stale-data scenario. Staleness
+must be caused by missing/stopped plant-to-BMS data or BMS publication, not a
+gateway trace flag. This work is the basis for the BMS stale-sensor seed.
+
+### 5.2 Charging: small closed-loop EV model
+
+Use a compact gateway-owned FSM:
+
+    DISCONNECTED -> PLUG_DETECTED -> HANDSHAKE -> ACTIVE
+                                             -> LIMITED
+    ACTIVE/LIMITED -> COMPLETE | FAULT
+
+Vehicle mode remains CHARGING while plugged, including COMPLETE. Only unplug
+plus normal gateway checks can leave it. The powertrain rule independently
+allows torque only in DRIVE/LIMP.
+
+Implementation order:
+
+1. Define EVSE status/request and charge-command messages in the microcar
+   protocol. EVSE is an external bus actor; BMS supplies a real charge-current
+   limit based on temperature/SOC.
+2. Put the transition table in a pure unit-tested charging module. Invalid
+   events emit a rejection reason; no state is silently forced.
+3. Make the plant a real bus endpoint for actuator commands. It consumes
+   powertrain motor commands and gateway/BMS charge commands through an
+   explicit plant inbox/environment callback, not by mapping driver throttle
+   directly to motor torque as the MVP plant currently does.
+4. Extend the fixed-point battery model with signed charge current, deterministic
+   SOC increase, temperature evolution, and bounded current limiting.
+5. Broadcast mode/charge command through real CAN and have powertrain receive
+   mode through its own controller before clamping torque.
+
+Add scenarios in this order: plug/handshake reaches ACTIVE; high temperature
+reaches LIMITED; SOC target reaches COMPLETE; critical BMS fault stops charging;
+and drive while plugged produces zero torque. Assert transitions, current bounds,
+SOC direction, and real frame delivery. Retain the existing script scenario as
+a regression until the real scenario replaces it.
+
+### 5.3 OTA: real request, storage, reboot, rollback
+
+Add a small ota_tool_ecu (or named update-service firmware) rather than growing
+the gateway timed OTA script. Use a deliberately compact CAN protocol:
+request, fixed-size image chunks, finish/CRC result, status, and abort. This is
+a deterministic dogfood transport, not a claim to implement a production
+secure bootloader.
+
+Gateway responsibilities:
+
+1. Admit an update only when not DRIVE, not plugged in, no critical BMS fault,
+   and required state is fresh.
+2. Enter OTA_UPDATE, broadcast it, and rely on the independent powertrain clamp
+   to disable torque.
+3. Drive the A/B slot model from persistent metadata and real chunks. Trace
+   transition, slot, CRC, reset recovery, and abort reason as structured events.
+4. On abort, clear pending target atomically and retain the known-good slot.
+
+Use this fault matrix. Keep current rollback fixtures, but only count their
+real OTA-tool equivalents as product-grade coverage.
+
+| Case | Real trigger | Required result |
+|---|---|---|
+| Corrupt image | Tool sends bad CRC/manifest. | Target never commits; slot A stays active. |
+| Interrupted write | Fault stops chunk transfer before completion. | Partial target is discarded; no verify/commit. |
+| Power cut before commit | Reset/power fault after verify, before atomic commit. | Verified but uncommitted target never boots. |
+| Failed health | New target boots and fails health. | Bootloader rolls back to known-good slot. |
+| Gateway reset during update | Generic machine reboot at a documented checkpoint. | Recovery reads persistent metadata and aborts safely. |
+| BMS critical fault during update | Plant temperature causes actual BMS fault over CAN. | Gateway aborts OTA and keeps known-good slot. |
+| OTA while driving | Driver input establishes DRIVE before request. | Request is rejected; no write begins. |
+| OTA while charging | EVSE establishes CHARGING before request. | Request is rejected; no write begins. |
+
+If power cut before write is distinct from interrupted write, add it explicitly
+instead of silently relabeling a case. Update the count in BLOCKERS.md only
+after the exact mapping is verified.
+
+### 5.4 Dashboard and cockpit: real display state
+
+The cockpit test correctly proves control-plane determinism, but its framebuffer
+is empty. Make dashboard firmware produce meaningful frames:
+
+1. Bind board configuration to a specific machine. Extend the gRPC API
+   compatibly with an optional target; preserve old behavior only for a single
+   unambiguous machine.
+2. ConfigureBoard creates devices in that world target DeviceBank and
+   InspectDevices queries the same world explicitly.
+3. Add a deterministic dashboard renderer for boot, drive, charging, OTA, and
+   warning state. Render on a state change or fixed refresh tick so hashes and
+   dirty rectangles are stable.
+4. Make touch a harmless dashboard-local action, such as page selection or
+   acknowledgement of a noncritical warning. Do not let touch bypass vehicle
+   safety authority.
+5. Reconcile mode/warning events, inspected state, dirty rectangles, and hashes
+   in the cockpit test. Run two sessions concurrently after P0.
+
+Do not prioritize a std-only harness cockpit wrapper over real display state.
+The sim-grpc integration test remains the correct product-surface home.
+
+### 5.5 Telematics: deterministic protocol, then host socket
+
+Build telematics_ecu on existing Ethernet abstractions only after network state
+is per machine/session. Use a compact application protocol with monotonic
+request IDs and framed status/ack records.
+
+Deliver it in two levels:
+
+1. Deterministic virtual network: periodic status, remote query, and
+   acknowledgement through virtual Ethernet. Assert IDs and response counts
+   without host timing.
+2. Host-connected integration: start a local loopback TCP server on an
+   ephemeral port, run a costar server/session, configure small socket buffers,
+   and exercise bursts plus fragmented reads/writes. Record a host transcript
+   and assert every request has one response, bytes are conserved, and repeated
+   readiness wakeups work.
+
+Use loopback only, bounded timeouts, and complete cleanup. Do not add raw host
+sockets to microcar C firmware or mask partial writes with a test-only retry.
+The TCP bridge and firmware parser must retain incomplete data until one complete
+length-prefixed record is available.
+
+## 6. Remaining Debug-Gym Seeds
+
+Reuse dogfood/src/debug_gym_corpus.rs and its paired failing/fixed shape. Every
+new seed needs a real gated buggy firmware variant and the same transport path
+as its fixed counterpart.
+
+| Seed | Correct behavior | Buggy variant | Localizing signal |
+|---|---|---|---|
+| BMS stale sensor | BMS/gateway rejects stale snapshot and publishes correct safety result. | Freshness check is skipped/reversed so old safe data is accepted. | Typed snapshot/freshness event: age, sequence, and resulting fault/mode. |
+| Dashboard missed warning | Dashboard receives real warning, updates state, and renders it. | Warning is dropped or a lower-priority state overwrites critical warning. | Warning breakpoint plus inspection/framebuffer at same virtual time. |
+| Telematics partial write | Parser buffers fragments and acknowledges each complete request once. | Parser treats partial data as complete or drops remainder. | Host transcript and request-ID trace at the fragment boundary. |
+
+Each seed must retain the existing three checks: bug-reproduced, bug-fixed, and
+traces-diverge. Divergence must be the documented debugging primitive, not only
+a changed final hash. Do not add a seed that directly invokes a private helper.
+
+## 7. Typed Breakpoints And Nightly/Scale (P5)
+
+Implement predicates over structured events and snapshots, not formatted human
+trace strings. Define a stable event vocabulary for vehicle mode, DTC creation,
+BMS snapshot freshness, OTA transition/abort, and dashboard state. Device
+predicates consume session-owned inspection snapshots.
+
+Add predicates only with a consumer scenario:
+
+1. vehicle_state and dtc_created with real diagnostics scenarios.
+2. device_state with dashboard cockpit scenario.
+3. assertion_failure with a semantic harness assertion event.
+
+Each predicate needs a synthetic unit test, an end-to-end hit test, a no-hit
+test, and keyframe/replay equivalence. continue_until and run_to_frame remain
+the underlying primitives; do not add another scheduler path.
+
+Compose nightly only after semantic lanes are individually green. It should run
+repeated deterministic lanes, real debug-gym corpus, topology/fleet scale, and
+host telematics separately. Classify failures as nondeterminism, timeout,
+transport loss, semantic assertion, or panic.
+
+## 8. Patch Boundaries And Verification
+
+### Costar ownership
+
+- sim-devices: DeviceBank and context-aware inspection.
+- sim-ffi: active context for time, task identity, devices, and firmware
+  instance storage.
+- sim-world: receiver-owned CAN/link delivery, plant actuator inbox/callback,
+  and restartable machines.
+- sim-net: Ethernet, bridges, and host poller under world/machine ownership.
+- sim-grpc: board, touch, inspection, and run lifecycle bound to session world.
+
+### Microcar ownership
+
+- common: compact protocol payloads and pure charging/OTA state rules.
+- ECU firmware: per-instance mutable state plus real BMS, charging, OTA,
+  dashboard, and telematics flows.
+- plant: real actuator/charge inputs and deterministic fixed-point sensors.
+- src/validate.rs: microcar protocol-level validation while costar retains
+  generic scenario parsing.
+- dogfood: semantic parsers/scenarios after the real path exists; old trace
+  lanes remain regressions during migration.
+
+Use small patches with one observable contract each. Preferred sequence:
+
+    context test
+    -> CAN routing
+    -> diagnostics over bus
+    -> reboot factory
+    -> OTA recovery
+    -> charging FSM/plant
+    -> dashboard/cockpit
+    -> telematics
+    -> remaining seeds
+    -> predicates/nightly
+
+Run focused two-world, CAN, and reboot tests before broad regressions. Then:
+
+    cd /home/zmm/projects/microcar
+    cargo build --bin microcar
+    cargo test --manifest-path state_tests/Cargo.toml
+    cargo test --manifest-path dogfood/Cargo.toml
+    MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- diagnostics
+    MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- charging
+    MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- ota
+    MICROCAR_BIN=target/debug/microcar cargo run --manifest-path dogfood/Cargo.toml --bin harness -- debug-gym-corpus
+
+    cd /home/zmm/projects/costar
+    PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc cargo test -p sim-world -p sim-ffi -p sim-devices -p sim-grpc
+
+For host telematics, run its integration test separately with an explicit
+timeout and transcript artifact. Once a track is real and green, update
+docs/BLOCKERS.md with scenario names, whether the path is trace-backed or
+bus-backed, and exact verification commands.
+
+## Do Not Take These Shortcuts
+
+- Do not force vehicle modes from TOML or mutate gateway state to prove a mode
+  guard.
+- Do not count a trace-only reset, BMS fault, or OTA transition as a real matrix
+  case.
+- Do not make a global registry keyed by session ID and call it isolation.
+- Do not use C thread-local globals as per-machine firmware state.
+- Do not replace semantic assertions with full golden traces for host I/O.
+- Do not remove current green lanes until their real replacements have
+  repeated-run stability and cover the same safety property.

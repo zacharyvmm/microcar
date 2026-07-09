@@ -1243,6 +1243,76 @@ remaining 3 seeds (BMS stale sensor, dashboard missed warning, telematics
 partial-write) stay firmware-gated (Strategy C); the gateway-bridge-loop bug is
 already exercised structurally by the topology `gateway_loop_prevention` scenario.
 
+## Milestone 23 status (this branch)
+
+The twenty-third milestone starts the **P0a "Per-Machine Execution And Device
+Ownership"** track from `UNBLOCKING.md` — the *root-cause* unblocker that every
+remaining product-grade lane (real CAN RX/TX, gRPC session isolation, gateway
+reset, telematics) ultimately depends on. It is the first, deliberately narrow
+slice of that refactor (migration-sequence step 2: "Add `DeviceBank` and
+explicit accessors in sim-devices … add two-world leakage tests"), **not** a
+speculative rewrite. It is **costar-only** and, because nothing activates a bank
+yet, every existing golden trace stays **byte-identical** (verified: the
+`debug_gym` hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` /
+`fa7f03709681` are unchanged).
+
+**Root cause addressed.** Every virtual-device type stored its instances in a
+*per-type* thread-local `BTreeMap<u32, T>` keyed only by device id
+(`crates/sim-devices/src/lib.rs`). Two in-process `World`s each using CAN
+controller id `0` (a fleet run, or two concurrent gRPC sessions) collide on that
+map — the documented reason firmware CAN RX is unreliable and the M14 cockpit
+test must run sequentially.
+
+**What was built (`crates/sim-devices/src/bank.rs`, new).** A `DeviceBank` owns
+one `RefCell<BTreeMap<u32, T>>` per device type (UART, timer, GPIO, I2C, SPI,
+CAN, BT, ADC, temp-sensor, entropy, EEPROM, flash, block, display, touch) **plus
+the `FaultInjector` singleton**, so fault injection is per-World too. Borrow
+granularity is per-field, identical to the legacy per-type thread-locals, so no
+new re-entrancy/double-borrow hazard is introduced. An RAII active-context guard
+(`DeviceBank::activate` / `activate_bank` → `BankGuard`, resolved by `with_bank`)
+sets a thread-local *pointer* to the owning bank while its code runs and restores
+the previous context on every exit path including panic unwind — the pointer is a
+**dispatch mechanism only, never the storage**. This deliberately mirrors the
+proven `with_sim_global` / `activate_sim_global` / `SimGlobalGuard` pattern
+already used in `sim-ffi` for `SimGlobal`.
+
+**Wiring.** The `device_registry!` macro (all 15 map-backed device classes),
+`drain_expired_timers`, and `with_fault_injector_mut` now route through
+`bank::with_bank(...)`. When no bank is active the accessors fall back to a
+thread-local `DEFAULT_BANK`, preserving the legacy single-store-per-thread
+behavior exactly — which is why the whole existing FFI/World path (which does not
+yet activate a bank) is byte-identical. The public `sim_devices::with_*` API is
+unchanged, so `sim-ffi`/`sim-world`/`sim-grpc` need no edits.
+
+**Genuinely exercised, not a parallel stub.** All device storage now flows
+through `DeviceBank` (via the default bank), and true per-World isolation is
+proven by five new tests: **two banks each using CAN controller id 0 do not
+cross-observe** their frames (the P0a exit test), a fresh bank is isolated from
+the default store, **device inspection (`DeviceSnapshot::collect_all`) is
+bank-scoped**, **nested activation restores the outer bank**, and a **panic while
+a bank is active restores the previous context** so a sibling world still runs.
+
+**Deliberately staged (not batched).** Per `UNBLOCKING.md` ("Do not batch clock,
+device, and C-state moves"), this slice moves *device state only*. `SIM_NOW` /
+`CURRENT_TASK_ID` (sim-ffi atomics), the IRQ controller (`sim-devices/irq.rs`),
+`sim-net`/host-poller state, and the FreeRTOS C mutable globals are **not** touched
+here — they are later steps (extend the activation into a unified execution-context
+guard, then port CAN delivery to receiver-owned, then net, then C-instance state).
+Crucially, `sim-world` does **not** yet activate a per-machine bank, so behavior —
+and every golden trace — is unchanged; wiring the World to own and activate a bank
+per machine is the next increment (P0a step 3), and only *then* does P0b
+receiver-correct CAN become creditable.
+
+Verified locally: `cargo test -p sim-devices` **131** tests (126 → 131, +5 bank),
+clippy/fmt-clean; `cargo test -p sim-ffi` 17 and `cargo test -p sim-world` 110 all
+pass; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with **unchanged
+hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo` 11/11,
+`simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5, `debug-gym-corpus`
+4/4); microcar `dogfood` 100 and `state_tests` 99 unit tests pass. This flips
+`BLOCKERS.md` §2.4 / track F from "fully blocked, needs sign-off" to "first
+verified slice landed" and is the prerequisite the CAN-RX-gated tracks (real
+diagnostics-over-bus, OTA gateway/BMS-reset faults, telematics) were waiting on.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
