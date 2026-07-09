@@ -1470,6 +1470,56 @@ charging/OTA CAN control flows. The remaining plan work (P1 restartable
 machines, P2 protocol-backed scenario stimuli, and the P3/P4 real firmware
 vertical slices + telematics) builds on this foundation.
 
+## Milestone 27 status (this branch)
+
+The twenty-seventh milestone delivers **P1 — restartable machines**
+(UNBLOCKING.md §3), the generic reset primitive the OTA gateway-reset fault
+needs. It is **costar-only** (`sim-world`) and **byte-identical** (verified: the
+`gateway_reboot` / `dashboard_reboot` / `ecu_reboot` golden scenarios still PASS
+and all four `debug_gym` hashes are unchanged).
+
+**Root cause fixed.** `FaultAction::Reboot` replaced a machine with a bare
+`Machine::with_defaults` — losing its firmware entirely, so it was a cold-wipe,
+not a restart.
+
+**What changed.**
+- `Machine` gains an optional cloneable `FirmwareFactory`
+  (`Arc<dyn Fn() -> Box<dyn Firmware>>`), set via `load_firmware_from_factory` /
+  `set_firmware_factory`. On restart the factory recreates the *original*
+  firmware and runs its boot path (`Firmware::init`).
+- `FaultAction::Reboot` gains an optional `downtime_ms`. With a factory and/or a
+  downtime it takes the **restart path**: a fresh `Machine` preserving identity,
+  name, and factory (bus attachments are World-owned/keyed by machine id, so they
+  survive automatically); guest RAM/task state discarded (fresh `Simulator`); the
+  P0b CAN RX inbox cleared (the pre-reset receive queue is dropped); and
+  structured `machine_reset_begin` / `machine_reset_boot` markers emitted. A
+  nonzero downtime marks the machine stopped and queues its boot in
+  `World.pending_boots`, processed when virtual time reaches `boot_time` (added
+  to `next_global_event_time` and to the `step` Done condition so the sim stays
+  alive across the downtime).
+- Scenario schema: `FaultDef` gains an optional `downtime_ms` (`deny_unknown_fields`
+  + `#[serde(default)]`, so existing scenarios are unaffected).
+
+**Byte-identical by construction.** With **no** factory and **no** downtime the
+legacy immediate bare cold-boot path (the `fault:reboot` marker) is preserved
+exactly — which is the path all existing reboot golden scenarios take (microcar
+does not yet set factories, and none set `downtime_ms`). `pending_boots` is only
+ever non-empty on the new path, so the `step` Done-condition change is inert for
+existing scenarios.
+
+**Genuinely exercised.** New `test_restart_recreates_firmware_from_factory`: a
+restart with a 1 ms downtime recreates and re-boots the firmware (boot count
+1 → 2) and emits the `machine_reset_begin` / `machine_reset_boot` markers.
+
+Verified locally: `cargo test -p sim-world` **112** tests (111 → 112, +1),
+clippy/fmt-clean; `cargo build --bin microcar` OK; the three reboot golden
+scenarios PASS; `harness debug-gym` 4/4 unchanged hashes; every other lane
+unregressed (`topology` 7/7, `toml-zoo` 11/11, `diagnostics` 2/2, `charging`
+1/1, `ota` 5/5, `debug-gym-corpus` 4/4); microcar `dogfood` 100 and
+`state_tests` 99 pass; `sim-grpc` builds. The microcar consumer (setting ECU
+firmware factories, and a real OTA gateway-reset scenario using `downtime_ms`)
+is the follow-up that exercises this end-to-end.
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
