@@ -1369,6 +1369,54 @@ now has both a per-World `DeviceBank` (M23) and the execution-context guard that
 scopes it (M24); the remaining P0a/P0b work is World/session ownership + receiver-
 correct CAN.
 
+## Milestone 25 status (this branch)
+
+The twenty-fifth milestone continues the P0a device-ownership migration
+(UNBLOCKING.md migration-sequence **step 4**, the IRQ slice: "Port CAN next, then
+timers/IRQ …"). The interrupt controller was the **last device-class singleton
+still living in its own process/thread-local** (`IRQ_CTRL` in
+`crates/sim-devices/src/irq.rs`), outside the M23 `DeviceBank`. This milestone
+moves it into the bank. It is **costar-only** and **byte-identical by
+construction** (verified: `debug_gym` hashes `c371b96e253e` / `68806f23c980` /
+`16684074b01c` / `fa7f03709681` unchanged — a meaningful check here because
+timers raise IRQs on the firmware execution path).
+
+**What changed.** `DeviceBank` gains an `irq_ctrl: RefCell<IrqController>` field
+(alongside the M23 `fault_injector` singleton). `sim_devices::irq::with_irq` /
+`with_irq_mut` now route through `bank::with_bank(...)` instead of the removed
+`IRQ_CTRL` thread-local — exactly mirroring the M23 `FaultInjector` migration. So
+interrupt state is per-World when a bank is active, and falls back to the
+thread-local default bank otherwise (the whole production path today), which is
+why every golden trace is unchanged. The public
+`sim_devices::irq::with_irq[_mut]` API is unchanged; all consumers (`sim-ffi`
+`device_ffi` IRQ delivery, `timer.fire()`, and tests) are unaffected.
+
+**Re-entrancy checked.** `drain_expired_timers` holds the `timers` RefCell borrow
+(via `with_bank`) and `timer.fire()` raises an IRQ through `with_irq_mut` →
+nested `with_bank` → the `irq_ctrl` RefCell — a *different* bank field, so no
+double-borrow, and a nested `.with()` on the same thread-local is safe. Confirmed
+green by `test_drain_expired_timers` after the migration.
+
+**Genuinely exercised.** A new `irq_controller_is_bank_scoped` test raises IRQ 7
+under bank A, shows bank B does not observe it (and raises its own IRQ 9), then
+re-activates A and confirms A still has IRQ 7 and never saw B's IRQ 9 — the same
+two-world isolation shape as the M23 CAN leakage test, now for interrupts.
+
+Verified locally: `cargo test -p sim-devices` **132** tests (131 → 132, +1),
+clippy/fmt-clean; `cargo test -p sim-ffi` 21 and `cargo test -p sim-world` 110
+unchanged; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with
+**unchanged hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo`
+11/11, `simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5,
+`debug-gym-corpus` 4/4); microcar `dogfood` 100 and `state_tests` 99 pass. With
+this, **every device-class store in `sim-devices` (all 15 maps + the fault
+injector + the IRQ controller) now lives in the `DeviceBank`** — the process/
+thread-global device registries are gone. The remaining P0a/P0b work is the
+higher-risk part: making the *World/session* own and activate a bank per
+execution context, plus receiver-correct CAN routing (P0b) in
+`deliver_buses`/`step_firmware`, which touches the shared-controller-0 delivery
+path all 29 golden scenarios depend on (and, for `sim-grpc` session wiring, is
+additionally gated on `protoc`, absent in this environment).
+
 ## Assumptions
 
 - `microcar/docs/costar_microcar_dogfood_plan.md` is the canonical planning document.
