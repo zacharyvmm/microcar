@@ -20,12 +20,14 @@
 //! The binary never panics on malformed input: every fallible step is handled.
 
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use microcar::validate::validate_scenario;
 use microcar::MicrocarFirmware;
 #[cfg(feature = "zephyr")]
 use microcar::ZephyrDashboardFirmware;
 use microcar_plant::MicrocarPlant;
+use sim_world::firmware::FirmwareFactory;
 use sim_world::scenario::{Scenario, ScenarioError};
 
 const EXIT_PASS: u8 = 0;
@@ -148,6 +150,9 @@ fn main() -> ExitCode {
     }
 
     // ── Attach firmware to each machine ─────────────────────────
+    // Uses `load_firmware_from_factory` so a later restart (P1, B3)
+    // can recreate the original firmware and run its boot path —
+    // instead of leaving a bare machine after reboot.
     for m in &scenario.machine {
         if m.firmware.is_some() {
             if let Some(machine) = world.machine_mut(m.id) {
@@ -156,7 +161,9 @@ fn main() -> ExitCode {
                 if is_zephyr {
                     #[cfg(feature = "zephyr")]
                     {
-                        machine.load_firmware(Box::new(ZephyrDashboardFirmware::new()));
+                        let factory: FirmwareFactory =
+                            Arc::new(|| Box::new(ZephyrDashboardFirmware::new()));
+                        machine.load_firmware_from_factory(factory);
                     }
                     #[cfg(not(feature = "zephyr"))]
                     {
@@ -166,13 +173,26 @@ fn main() -> ExitCode {
                              falling back to FreeRTOS firmware",
                             m.name
                         );
-                        machine.load_firmware(Box::new(MicrocarFirmware::with_firmware_path(
-                            &m.name, fw,
-                        )));
+                        let name = m.name.clone();
+                        let fw_path = fw.to_string();
+                        let factory: FirmwareFactory = Arc::new(move || {
+                            Box::new(MicrocarFirmware::with_firmware_path(
+                                name.clone(),
+                                fw_path.clone(),
+                            ))
+                        });
+                        machine.load_firmware_from_factory(factory);
                     }
                 } else {
-                    machine
-                        .load_firmware(Box::new(MicrocarFirmware::with_firmware_path(&m.name, fw)));
+                    let name = m.name.clone();
+                    let fw_path = fw.to_string();
+                    let factory: FirmwareFactory = Arc::new(move || {
+                        Box::new(MicrocarFirmware::with_firmware_path(
+                            name.clone(),
+                            fw_path.clone(),
+                        ))
+                    });
+                    machine.load_firmware_from_factory(factory);
                 }
             }
         }
