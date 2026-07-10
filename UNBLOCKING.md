@@ -1,6 +1,6 @@
 # Microcar Dogfood Unblocking Plan
 
-Last reviewed: 2026-07-09
+Last reviewed: 2026-07-10
 
 docs/costar_microcar_dogfood_plan.md is the product goal and docs/BLOCKERS.md
 is the status record. This file is the implementation brief for the remaining
@@ -50,15 +50,124 @@ permission for a speculative rewrite. Do not call it complete until two
 in-process worlds can each run an ECU using device ID 0 without observing the
 other world.
 
+## Implementation Review: M23-M27 Remediation Gate
+
+The M23-M27 costar commits provide useful migration primitives, but they do
+**not** yet satisfy the P0a, P0b, or P1 contracts in this document. Treat them
+as staged implementation, not as completed infrastructure. In particular, do
+not claim a bus-backed diagnostics, charging, OTA, cockpit, or reboot lane is
+real until this gate is closed.
+
+### Defects found in the staged implementation
+
+1. `DeviceBank::activate` exposes a safe guard backed by a thread-local raw
+   pointer. Dropping outer and inner guards out of LIFO order, or forgetting a
+   guard, can leave the active pointer dangling. `with_bank` then dereferences
+   that pointer in safe code. The analogous `SimGlobal` raw-pointer guard must
+   be audited at the same time; do not extend an unsafe lifetime pattern into a
+   unified execution context.
+2. `Machine` constructs a `Simulator` with no owned device bank, and no
+   production `World` or microcar path calls `enable_owned_devices`. gRPC board
+   configuration, touch, display streaming, and inspection also call the
+   `sim_devices` fallback registry directly. The staged banks therefore prove
+   only standalone unit isolation, not World/session isolation.
+3. The P0b inbox stages and drains `with_can_mut(0)` outside the receiver
+   machine's active context. Enabling an owned bank would make World write the
+   default bank while firmware reads its owned bank. In addition,
+   `Machine::advance_to` can call `Firmware::step` after the World bridge has
+   run; CAN TX/RX from that invocation is not staged or drained in the correct
+   machine context and can be attributed to a later machine.
+4. The microcar binary attaches firmware with `load_firmware`, not a restart
+   factory. A `downtime_ms` reboot therefore creates a bare machine and emits a
+   boot marker without restoring firmware. Replacing a machine with
+   `Machine::with_defaults` also loses its RTOS and simulator configuration.
+5. Bus delivery currently queues frames for stopped machines. Those frames
+   survive downtime and are staged after boot, contradicting the reboot
+   contract below.
+
+### Primary implementation surfaces
+
+| Gate | Primary files | Required ownership boundary |
+|---|---|---|
+| B0 context safety | `costar/crates/sim-devices/src/bank.rs`; `costar/crates/sim-ffi/src/lib.rs` | Active-context lifetime and restoration. |
+| B1 Machine/session devices | `costar/crates/sim-ffi/src/simulator.rs`; `costar/crates/sim-world/src/machine.rs`; `costar/crates/sim-world/src/board.rs`; `costar/crates/sim-grpc/src/server.rs` | Device provision, inspection, touch, and display belong to the selected machine in one session World. |
+| B2 CAN execution | `costar/crates/sim-world/src/world.rs`; `costar/crates/sim-world/src/machine.rs` | Firmware invocation, RX staging, and TX drain happen in one active-machine sequence. |
+| B3 restart/product wiring | `costar/crates/sim-world/src/world.rs`; `costar/crates/sim-world/src/machine.rs`; `microcar/src/main.rs`; reboot scenarios | Immutable machine specification survives; volatile runtime resets; the microcar factory is actually used. |
+
+### Required implementation sequence
+
+1. **Make active-context lifetime safe before using it in World.** Prefer a
+   closure-scoped activation API that cannot be forgotten or dropped out of
+   order. If a guard remains necessary, its active state must retain a valid
+   owner for both the current and restored contexts; a raw pointer plus
+   `PhantomData` is insufficient. Keep the fallback bank only for legacy
+   single-simulator tests during migration, not as a production ownership path.
+2. **Make each Machine own and provision its DeviceBank.** Construct that bank
+   as part of machine creation and provide an explicit machine-context helper
+   for device configuration and inspection. Board/device assignment must name
+   the target machine; a World or gRPC operation outside firmware execution
+   must select and activate that machine explicitly. Do not repair this with a
+   session-keyed global registry.
+3. **Centralize all firmware execution and CAN bridging in World.** There must
+   be one code path that, while the sender/receiver machine context is active,
+   stages that machine's RX inbox, invokes firmware, drains that machine's TX
+   queue, and restores unconsumed RX. Remove or refactor the extra
+   `Firmware::step` call in `Machine::advance_to` so it cannot bypass this
+   sequence. Preserve World-owned bus routing, correlation IDs, sender
+   exclusion, and bridge loop prevention.
+4. **Bind gRPC to the session World and machine.** ConfigureBoard, touch,
+   display streaming, and InspectDevices must access the selected session's
+   machine-owned bank while that World is locked. A request for one session
+   must never overwrite or inspect controller/display ID 0 in another session.
+5. **Finish restart semantics before adding the OTA reset lane.** Store an
+   immutable machine specification (identity, name, RTOS, simulator config,
+   board/device assignment, and firmware factory) and use it to recreate the
+   volatile runtime. Preserve persistent flash/EEPROM, reset volatile devices
+   and guest/C state, and keep exactly one pending boot per machine. Drop bus
+   deliveries to a stopped machine. At `boot_at`, transition the machine to
+   running before processing bus arrivals at that timestamp, so arrivals before
+   `boot_at` are dropped and arrivals at or after it are normal post-boot input.
+6. **Wire the product consumer.** In `microcar/src/main.rs`, build factories
+   from immutable scenario firmware metadata for FreeRTOS and Zephyr machines
+   and attach with `load_firmware_from_factory`. Add a real gateway reset
+   scenario with nonzero `downtime_ms`; a reset trace marker alone is not
+   evidence of reboot recovery.
+7. **Only then continue the broader P0 migration.** Move time/task identity,
+   network state, and C firmware instance state in separate verified slices as
+   specified below. Do not use the successful device-only tests to claim
+   duplicate ECU types or concurrent sessions are isolated.
+
+### Mandatory remediation tests
+
+- A context-lifetime regression proves nested contexts restore correctly and
+  the public API cannot leave a dangling active context through ordinary safe
+  control flow.
+- Two actual `World`s on one thread, each with firmware and CAN controller 0,
+  can interleave sends and receives without leakage. This is not satisfied by
+  two standalone `DeviceBank` or `Simulator` tests.
+- A sender that emits CAN work from the formerly separate `advance_to` path is
+  attributed to that sender and only reaches its attached buses.
+- Two concurrent gRPC sessions each configure, touch, stream, and inspect
+  controller/display ID 0 without cross-observation.
+- A microcar gateway reboot with nonzero downtime creates a new firmware
+  instance, re-runs its boot path, resumes its heartbeat, preserves its RTOS
+  and persistent storage, and leaves sibling ECUs intact.
+- Frames sent before the reset remain in flight as appropriate; frames sent
+  while the target is down are dropped and cannot appear after boot.
+- Run the two-World, gRPC, CAN, and reboot tests repeatedly (at least 100
+  iterations where practical) and retain byte-identical existing golden lanes.
+
 ## 1. Per-Machine Execution And Device Ownership (P0a)
 
 ### Root cause
 
 Three current facts explain several blockers:
 
-- crates/sim-devices/src/lib.rs stores device maps in thread-local globals.
-- World::deliver_buses injects every CAN delivery into global controller 0, and
-  World::step_firmware drains that same controller for every sender.
+- `sim_devices` accessors fall back to a thread-local default bank because no
+  production `Machine` owns and activates its own bank.
+- World keeps receiver inboxes, but stages and drains controller 0 through that
+  fallback outside the relevant machine context; `Machine::advance_to` also has
+  a firmware execution path outside the World bridge.
 - sim-grpc configures and inspects those global maps directly in
   crates/sim-grpc/src/server.rs.
 
@@ -142,6 +251,8 @@ as a substitute: sessions can execute on the same worker thread.
 - Interleaving those worlds in either order produces each solo trace.
 - A panic in one active world restores the prior active context and a sibling
   world still runs.
+- Board configuration, inspection, touch, and display streaming are
+  session-local when two gRPC sessions use the same device IDs.
 - Two same-type microcar ECUs have independent task IDs, C state, and queues.
 - Existing costar and microcar golden scenarios remain byte-identical after
   every migration slice. Do not batch clock, device, and C-state moves.
@@ -181,9 +292,10 @@ paths are end to end.
 
 ## 3. Restartable Machines And Persistent State (P1)
 
-FaultAction::Reboot currently creates a fresh default Machine and loses its
-firmware. It is not a reset primitive suitable for OTA. Fix generic simulator
-semantics first; do not model a gateway reset with a trace marker.
+The current microcar product path still creates a fresh default Machine without
+restoring firmware because it does not register a firmware factory. It is not a
+reset primitive suitable for OTA. Fix generic simulator semantics and wire the
+product consumer first; do not model a gateway reset with a trace marker.
 
 ### Reboot contract
 
@@ -222,6 +334,10 @@ unit-test every transition before FreeRTOS integration.
 - A normal gateway reboot runs its original firmware again and resumes a
   heartbeat after downtime.
 - Rebooting one ECU does not reset sibling ECUs or devices.
+- The rebooted machine preserves RTOS/configuration and persistent storage while
+  discarding only volatile runtime state.
+- Frames arriving before `boot_at` are dropped; they cannot be delivered after
+  boot. A frame at `boot_at` follows the documented post-boot ordering.
 - An uncommitted target is rejected after gateway reset and slot A remains
   active.
 - A failed post-update health check rolls back from persistent metadata, not

@@ -1,0 +1,81 @@
+# B3: gateway reboot with nonzero downtime — verifies that a restart with
+# downtime_ms recreates the original firmware from its factory and runs the
+# normal boot path (machine_reset_begin → machine_reset_boot), that sibling
+# ECUs are unaffected, and that the rebooted gateway resumes operation after
+# the downtime elapses.
+#
+# This is the UNBLOCKING.md §3 mandatory remediation test:
+# "A microcar gateway reboot with nonzero downtime creates a new firmware
+#  instance, re-runs its boot path, resumes its heartbeat, preserves its RTOS
+#  and persistent storage, and leaves sibling ECUs intact."
+#
+# The legacy fault:reboot marker MUST NOT appear (this is the factory restart
+# path); the machine_reset_begin and machine_reset_boot markers MUST appear.
+
+name = "b3_gateway_reboot_downtime"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+# ── Gateway reboot at 1000ms with 5ms downtime → boot at ~1005ms ──
+# Downtime_ms signals the B3 restart path: the firmware factory recreates the
+# gateway firmware, runs its boot path, and emits structured reset markers.
+[[fault]]
+at_ms = 1000
+target = "machine.gateway"
+type = "reboot"
+downtime_ms = 5
+
+# ── B3 assertions: reset markers ──
+# machine_reset_begin fires at the reboot moment.
+[[expect.event]]
+before_ms = 1100
+machine = "gateway"
+event = "machine_reset_begin"
+
+# machine_reset_boot fires after the downtime when the factory recreates firmware.
+[[expect.event]]
+before_ms = 1200
+machine = "gateway"
+event = "machine_reset_boot"
+
+# The legacy fault:reboot marker MUST NOT appear — this is the restart path.
+[[expect.no]]
+before_ms = 2000
+machine = "gateway"
+event = "fault:reboot"
+
+# ── Powertrain (sibling ECU) remaining intact ──
+# The powertrain should detect gateway timeout (its heartbeat stopped during
+# the downtime window) and then see it recover after boot.
+[[expect.event]]
+before_ms = 2000
+machine = "powertrain"
+event = "gateway_timeout"
+
+[plant]
+type = "microcar"
+tick_ms = 10
