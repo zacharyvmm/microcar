@@ -4,6 +4,11 @@
 
 This plan turns `microcar` into the canonical dogfood project for `costar`: a compact passenger-EV embedded-system benchmark that exercises the simulator surfaces the product needs most.
 
+> **Implementation-status correction (2026-07-10):** M23-M27 landed staged
+> primitives, not accepted P0a/P0b/P1 infrastructure. The required repair order
+> and acceptance tests live in [`../UNBLOCKING.md`](../UNBLOCKING.md); do not
+> treat a trace-only CAN or reboot result as a completed dogfood lane.
+
 The work should be sequenced in two tracks:
 
 1. Stabilize `costar`'s simulator chassis: correctness, per-session isolation, trace identity, topology, breakpoints, replay, and control-plane reliability.
@@ -651,6 +656,32 @@ Fault matrix:
 - [ ] Add manual/demo checklist.
 - [ ] Emit JSON summaries suitable for CI artifacts.
 - [ ] Document expected runtime budget for each lane.
+
+## M23-M27 Implementation Review Correction
+
+The milestone notes above record the staged implementation and its local tests;
+they do not clear the plan's isolation, CAN, or restart gates. Before advancing
+to real diagnostics, charging, OTA reset, cockpit multi-session, or fleet
+claims, implement the remediation gate in `../UNBLOCKING.md`:
+
+1. Replace the public raw-pointer `DeviceBank` activation guard with a
+   lifetime-safe scoped context, and audit the matching `SimGlobal` mechanism.
+2. Give every production `Machine` an owned/provisioned device bank and bind all
+   gRPC board, touch, display, and inspection calls to an explicit session World
+   and machine.
+3. Centralize all firmware stepping, receiver inbox staging, and sender TX
+   draining in that active machine context; no `advance_to` path may bypass it.
+4. Preserve immutable machine configuration and persistent storage across
+   restart, wire factories in the microcar binary, and drop frames sent while a
+   machine is down.
+5. Prove the result with actual two-World, concurrent-gRPC, CAN-boundary, and
+   microcar gateway-reboot tests, then retain existing byte-identical lanes as
+   regressions.
+
+The later migration of clock/task identity, network state, and C firmware
+instance state remains separate. It is required before claiming concurrent
+duplicate-ECU or fleet isolation, but it must not be used as a reason to defer
+the B0-B3 remediation above.
 
 ## Assumptions
 

@@ -26,7 +26,26 @@ fn main() {
     let scenario = Scenario::from_file(&scenario_path).unwrap();
     println!("=== {} ===\n", scenario.name);
 
-    let mut world = scenario.build_world().unwrap();
+    // ── Build world ─────────────────────────────────────────────
+    let mut world = match scenario.build_world() {
+        Ok(w) => w,
+        Err(e) => return fail_scenario(scenario_error_kind(&e), e),
+    };
+
+    // ── B1: per-machine device ownership ───────────────────────
+    // Every machine gets its own DeviceBank so CAN controller 0 and other
+    // virtual devices are scoped per-machine rather than shared across the
+    // process (UNBLOCKING.md §B1).  This is the gate for reliable firmware
+    // CAN RX/TX and the basis for real diagnostics/charging/OTA over CAN.
+    // Enabled BEFORE firmware attachment so the lazy CAN controller-0
+    // provisioning is visible during Firmware::init.
+    world.enable_owned_device_banks();
+
+    // Enable the opt-in Trace v2 sink if requested (additive; does not change
+    // the default human trace output).
+    if trace_v2_path.is_some() {
+        world.enable_trace_v2();
+    }
 
     // ── Attach plant model ──────────────────────────────────────
     if let Some(ref plant_def) = scenario.plant {
