@@ -28,22 +28,9 @@ use std::collections::BTreeSet;
 
 use sim_world::scenario::Scenario;
 
-/// Canonical ECU keywords, in the same precedence order as
-/// [`MicrocarFirmware::ecu_type`](crate::MicrocarFirmware) uses internally.
-/// A firmware path or machine name that contains / starts with one of these
-/// resolves to that ECU; anything else falls back to the generic boot.
-pub const KNOWN_ECU_KEYWORDS: &[&str] = &[
-    "priority_inversion",
-    "lifecycle_stress",
-    "net_demo",
-    "storage_demo",
-    "bt_demo",
-    "diagnostics",
-    "gateway",
-    "powertrain",
-    "bms",
-    "dashboard",
-];
+// ECU resolution is centralised in the crate root via
+// `microcar::ECU_CATEGORY_PATTERNS` and `microcar::resolve_ecu_category`.
+// This module imports them; it does NOT maintain its own keyword list.
 
 /// A structured validation failure: a stable machine-readable `kind` tag plus a
 /// human-readable `message`. The `kind` is what the `toml_zoo` lane asserts on,
@@ -74,25 +61,13 @@ impl std::fmt::Display for ValidationError {
 impl std::error::Error for ValidationError {}
 
 /// Resolve a machine (its optional `firmware` path and its `name`) to the
-/// canonical ECU keyword it will boot, or `None` if it resolves to the generic
+/// canonical ECU category it will boot, or `None` if it resolves to the generic
 /// `microcar_boot()` fallback.
 ///
-/// This mirrors `MicrocarFirmware::ecu_type`: firmware-path substring match
-/// first (in [`KNOWN_ECU_KEYWORDS`] order), then a machine-name prefix match.
+/// Delegates to [`crate::resolve_ecu_category`], the single source of truth
+/// shared with [`MicrocarFirmware::ecu_type`](crate::MicrocarFirmware).
 pub fn resolve_ecu(firmware: Option<&str>, name: &str) -> Option<&'static str> {
-    if let Some(fw) = firmware {
-        for kw in KNOWN_ECU_KEYWORDS {
-            if fw.contains(kw) {
-                return Some(kw);
-            }
-        }
-    }
-    for kw in KNOWN_ECU_KEYWORDS {
-        if name.starts_with(kw) {
-            return Some(kw);
-        }
-    }
-    None
+    crate::resolve_ecu_category(firmware, name)
 }
 
 /// Run the microcar-semantic validation over a (already costar-validated)
@@ -109,7 +84,14 @@ pub fn validate_scenario(scenario: &Scenario) -> Result<(), ValidationError> {
                         "machine '{}' firmware '{}' does not name a known ECU (expected one of: {})",
                         m.name,
                         fw,
-                        KNOWN_ECU_KEYWORDS.join(", ")
+                        crate::ECU_CATEGORY_PATTERNS
+                            .iter()
+                            .map(|(_, cat)| *cat)
+                            .collect::<BTreeSet<_>>()
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                 ));
             }

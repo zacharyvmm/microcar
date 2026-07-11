@@ -26,17 +26,18 @@
 //! meaning "the frame with id 0x07a0 must be received by exactly machines 1 and
 //! 3, each once". `expect=` with no ids means the frame must reach nobody.
 //!
-//! ## Deferred to later milestones
+//! ## Current vs. future work
 //!
-//! The plan's `topology` assertions "forwarded frame preserves correlation id"
-//! and "trace includes source *and* destination component identity" need
-//! costar's Trace v2 (correlation ids + per-event source/dest identity) and
-//! gateway frame *forwarding* — neither exists yet. The `drive_body_bus_bridge`
-//! and `gateway_loop_prevention` scenarios (which require gateway forwarding)
-//! and `fleet_64_nodes` are therefore deferred to the Trace-v2 / gateway-bridge
-//! milestone. What is asserted here — routing, isolation, no-duplication — is
-//! the foundation those build on, and it is backed by the costar
-//! `test_firmware_can_tx_respects_bus_membership` engine test.
+//! **Shipped (M5–M6):** direct-send routing (+ isolation from human trace),
+//! Trace v2 correlation/identity via `--trace-v2` JSONL, and gateway bridge
+//! forwarding with parent-id causality. Topology lane now scores 7/7:
+//! routing, isolation, no-duplication, fleet_64_nodes scale,
+//! bus_isolation_fault via drop-fault, and Trace v2 correlation/identity.
+//!
+//! **Remaining future work:** richer component/port identity, typed topology
+//! graph (BTreeMap-based adjacency), and a GUI-facing topology model — all
+//! dependent on the gRPC cockpit surface and live introspection, not the
+//! headless harness.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

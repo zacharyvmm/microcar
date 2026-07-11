@@ -87,6 +87,75 @@ pub struct MicrocarFirmware {
     booted: bool,
 }
 
+// ── Shared ECU resolution (single source of truth) ────────────────────────
+//
+// Used by both `MicrocarFirmware::ecu_type()` (for boot dispatch) and
+// `validate::resolve_ecu()` (for automotive-semantic validation) so the two
+// never drift.  Patterns are ordered most-specific-first; `contains()`
+// returns the first match.
+//
+// Each entry is (firmware_path_substring, canonical_ecu_category).
+// The category is the broad ECU kind used by validation and boot dispatch.
+
+/// Shared ECU resolution patterns: (path substring, canonical category).
+/// Ordered most-specific-first — e.g. `gateway_diag_clearbug` before
+/// `gateway_diag` before `gateway`.
+pub const ECU_CATEGORY_PATTERNS: &[(&str, &str)] = &[
+    // Demo / test ECUs
+    ("priority_inversion", "priority_inversion"),
+    ("lifecycle_stress", "lifecycle_stress"),
+    ("net_demo", "net_demo"),
+    ("storage_demo", "storage_demo"),
+    ("bt_demo", "bt_demo"),
+    // Diagnostics variants (specific → broad)
+    ("gateway_diag_clearbug", "diagnostics"),
+    ("gateway_diag_clear", "diagnostics"),
+    ("gateway_diag_startdrivebug", "diagnostics"),
+    ("gateway_diag_startdrive", "diagnostics"),
+    ("gateway_diag_fault", "diagnostics"),
+    ("gateway_diag", "diagnostics"),
+    ("powertrain_diag_service_bug", "powertrain"),
+    ("powertrain_diag_service", "powertrain"),
+    // OTA variants
+    ("gateway_ota_badcrc", "gateway"),
+    ("gateway_ota_intwrite", "gateway"),
+    ("gateway_ota_badhealth", "gateway"),
+    ("gateway_ota_powercut", "gateway"),
+    ("gateway_ota_crcbug", "gateway"),
+    ("gateway_ota", "gateway"),
+    // Charging variants
+    ("gateway_charging", "gateway"),
+    ("powertrain_charging", "powertrain"),
+    // Broad base ECUs (checked LAST)
+    ("diagnostics", "diagnostics"),
+    ("gateway", "gateway"),
+    ("powertrain", "powertrain"),
+    ("bms", "bms"),
+    ("dashboard", "dashboard"),
+];
+
+/// Resolve a machine's firmware path to its canonical ECU category.
+///
+/// Matches the firmware path against [`ECU_CATEGORY_PATTERNS`] using
+/// substring `contains()`, most-specific-first.  Falls back to matching
+/// against the machine name prefix if firmware path yields no match.
+/// Returns `None` for unknown firmware.
+pub fn resolve_ecu_category(firmware: Option<&str>, name: &str) -> Option<&'static str> {
+    if let Some(path) = firmware {
+        for (pattern, category) in ECU_CATEGORY_PATTERNS {
+            if path.contains(pattern) {
+                return Some(category);
+            }
+        }
+    }
+    for (pattern, category) in ECU_CATEGORY_PATTERNS {
+        if name.starts_with(pattern) {
+            return Some(category);
+        }
+    }
+    None
+}
+
 impl MicrocarFirmware {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
