@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn differing_hashes_is_nondeterministic() {
-        let hashes = vec!["abc".to_string(), "abc".to_string(), "xyz".to_string()];
+        let hashes = ["abc".to_string(), "abc".to_string(), "xyz".to_string()];
         let deterministic = hashes.iter().all(|h| h == &hashes[0]);
         assert!(!deterministic);
     }

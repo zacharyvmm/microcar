@@ -19,7 +19,7 @@ pub struct BatteryModel {
     pub voltage_mv: u16,
 
     /// Pack current in milliamps (positive = discharge).
-    pub current_ma: i16,
+    pub current_ma: i32,
 
     /// Pre-computed nominal voltage (~48V for small EV).
     nominal_voltage_mv: u16,
@@ -68,7 +68,7 @@ impl BatteryModel {
         // At 100% torque: ~50A = 50000mA.  Scale linearly.
         let abs_torque = (torque_percent as i32).unsigned_abs() as i64;
         let current_ma_i64 = abs_torque * 500; // 0.5A per torque percent
-        self.current_ma = current_ma_i64 as i16;
+        self.current_ma = current_ma_i64 as i32;
 
         // ── SOC: milli-percent precision ──────────────────────────
         // capacity = 50000 mAh = 50 Ah
@@ -109,6 +109,41 @@ impl BatteryModel {
         self.voltage_mv = self.calc_voltage();
     }
 
+    /// Advance the battery applying an explicit signed pack current (mA).
+    ///
+    /// Positive current discharges; negative charges. Uses the same 50 Ah
+    /// capacity calculation as [`step`](Self::step) for both directions, clamps
+    /// SOC to 0..100%, and retains I²R heating with passive cooling.
+    pub fn step_with_current(&mut self, current_ma: i32, dt_ms: u32) {
+        let dt = dt_ms as i64;
+        self.current_ma = current_ma;
+        let current_i64 = current_ma as i64;
+
+        // capacity = 50 Ah. Positive current reduces SOC, negative raises it.
+        let capacity_mah: i64 = 50_000;
+        let soc_delta_milli = current_i64 * dt * 1000 / (3600 * capacity_mah);
+        self.soc_milli = (self.soc_milli - soc_delta_milli).clamp(0, 100_000);
+        self.soc_percent = ((self.soc_milli + 500) / 1000).min(100) as u8;
+
+        // I²R heating uses the current magnitude (both directions heat).
+        let i_amps = current_i64.abs() / 1000;
+        let heat_rise = i_amps * i_amps * dt / 25000;
+        let above_ambient = (self.temp_c_x10 as i64 - 250).max(0);
+        let cooling = above_ambient * dt / 100000;
+        let new_temp = (self.temp_c_x10 as i64)
+            .saturating_add(heat_rise)
+            .saturating_sub(cooling)
+            .max(200);
+        self.temp_c_x10 = new_temp as i16;
+
+        self.voltage_mv = self.calc_voltage();
+    }
+
+    /// Pack current saturated to `i16` for the existing CAN payload encoding.
+    pub fn current_ma_i16(&self) -> i16 {
+        self.current_ma.clamp(i16::MIN as i32, i16::MAX as i32) as i16
+    }
+
     /// Force the battery temperature to a specific value (fault injection).
     pub fn force_temperature(&mut self, temp_c: f32) {
         self.temp_c_x10 = (temp_c * 10.0) as i16;
@@ -117,7 +152,7 @@ impl BatteryModel {
     /// Calculate pack voltage from SOC and current (simplified).
     fn calc_voltage(&self) -> u16 {
         let soc_factor = self.soc_percent as u32;
-        let sag = (self.current_ma.unsigned_abs() as u32) / 10; // 100mV per 10A
+        let sag = self.current_ma.unsigned_abs() / 10; // 100mV per 10A
         let v = (self.nominal_voltage_mv as u32) * soc_factor / 100;
         v.saturating_sub(sag) as u16
     }
@@ -176,7 +211,6 @@ mod tests {
     #[test]
     fn test_no_load_no_temp_rise() {
         let mut bat = BatteryModel::with_state(80, 250);
-        let initial_temp = bat.temp_c_x10;
 
         // 1 second of zero torque — cooling only
         for _ in 0..100 {
@@ -185,5 +219,66 @@ mod tests {
 
         // At ambient temp, cooling is zero, so temp stays at 25°C
         assert_eq!(bat.temp_c_x10, 250, "temp at ambient should not change");
+    }
+
+    #[test]
+    fn charge_current_raises_soc() {
+        let mut bat = BatteryModel::with_state(60, 250);
+        let initial = bat.soc_percent;
+        // Negative current = charging, for 10 s of virtual time.
+        for _ in 0..1000 {
+            bat.step_with_current(-32_000, 10); // -32 A
+        }
+        assert!(
+            bat.soc_percent > initial,
+            "charging must raise SOC (initial={initial}, final={})",
+            bat.soc_percent
+        );
+        assert_eq!(bat.current_ma, -32_000);
+    }
+
+    #[test]
+    fn discharge_current_lowers_soc() {
+        let mut bat = BatteryModel::with_state(60, 250);
+        let initial = bat.soc_percent;
+        for _ in 0..1000 {
+            bat.step_with_current(32_000, 10); // +32 A
+        }
+        assert!(bat.soc_percent < initial, "discharge must lower SOC");
+    }
+
+    #[test]
+    fn soc_clamped_to_full_and_empty() {
+        let mut bat = BatteryModel::with_state(99, 250);
+        for _ in 0..100_000 {
+            bat.step_with_current(-64_000, 10); // heavy charge
+        }
+        assert_eq!(bat.soc_percent, 100, "SOC clamps at 100%");
+
+        let mut bat = BatteryModel::with_state(1, 250);
+        for _ in 0..100_000 {
+            bat.step_with_current(64_000, 10); // heavy discharge
+        }
+        assert_eq!(bat.soc_percent, 0, "SOC clamps at 0%");
+    }
+
+    #[test]
+    fn charge_current_heats_via_i2r() {
+        let mut bat = BatteryModel::with_state(50, 250);
+        let initial = bat.temp_c_x10;
+        for _ in 0..1000 {
+            bat.step_with_current(-50_000, 10); // charging still heats (I²R)
+        }
+        assert!(bat.temp_c_x10 > initial, "charge current heats the pack");
+    }
+
+    #[test]
+    fn current_saturates_to_i16_for_can() {
+        let mut bat = BatteryModel::new();
+        bat.step_with_current(50_000, 10); // > i16::MAX
+        assert_eq!(bat.current_ma, 50_000);
+        assert_eq!(bat.current_ma_i16(), i16::MAX);
+        bat.step_with_current(-50_000, 10);
+        assert_eq!(bat.current_ma_i16(), i16::MIN);
     }
 }

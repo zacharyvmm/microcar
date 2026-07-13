@@ -19,6 +19,44 @@ repair order.
 
 ---
 
+## 0. Dogfood-plan implementation status (current session)
+
+This section reflects the state after implementing `costar_microcar_dogfood_plan.md`.
+It distinguishes **verified cores** (pure logic + unit tests, non-breaking,
+existing golden traces byte-identical) from the **end-to-end lanes** in §16,
+which additionally require firmware `main.c` integration + scenarios + harness
+assertions and are not yet complete.
+
+**CI gates green on both repos** (were red before): `cargo fmt --all --check`,
+`cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo build --bin microcar`. costar 433 tests, microcar 260 tests, all passing.
+
+| Stage | Verified core delivered | End-to-end lane (§16) |
+|---|---|---|
+| A (gate) | **Complete + verified**: `Machine::with_device_context`/`configure_board`, `World::with_machine_devices`/`machine_ids`/`WorldError`; gRPC `machine_id` targeting + `Arc<Mutex<Session>>` map + resource bounds + terminal states; `PersistentDeviceState` + A3 restart algorithm; `control::drive_world` (both servers); A4 acceptance incl. `two_worlds_owned_can_interleave_100x`, `restart_downtime_delivery_boundary`, gRPC `concurrent_sessions_isolate_device_zero` (100×); A5 session-limit/keyframe/trace-ring/TTL tests | Residuals: gRPC `failed_session` test (needs firmware-injection hook), `serve.rs` `Arc<Mutex>` structural map refactor, microcar `b3` assertion extension |
+| B1 | `sim_instance_state` allocator + `AlignedRegion` + `GuestRuntime` (6 tests) | `SIM_NOW`/`CURRENT_TASK_ID` migration onto the active runtime deferred (golden-risky) |
+| B2/B3/B4 | — | 8-ECU C-global migration onto `sim_instance_state`; `NetworkBank`; isolation acceptance |
+| C1 | protocol node/msg IDs, packed structs, EVSE/charge enums, `MC_DIAG_STALE`, Rust mirror, docs | BMS_STATUS byte-7 `seq` deferred (lands with D + regenerated goldens) |
+| C2 | `validate_external_actor_frames` static validation (10 tests) | hostile scenarios + `harness charging`/`ota` runtime asserts |
+| D | — | real diagnostics firmware (BMS seq + gateway cache + tool selectors) + Trace v2 causality harness |
+| E1 | pure charging FSM C + Rust mirror (13 tests) | — |
+| E2 | `BatteryModel::step_with_current` + i32 current + saturation (5 tests) | World plant CAN inbox + gateway/BMS/powertrain wiring + 5 scenarios |
+| F1 | 32-byte OTA metadata record + CRC32 + `select`/`abort`/`recover_after_reset` C + Rust (5 tests) | — |
+| F2/F3 | — | OTA tool ECU + gateway worker + 9 scenarios |
+| G | pure dashboard framebuffer renderer C (per-screen pixel test) | cockpit wiring + FNV framebuffer hashes |
+| H | telematics record parser C + Rust mirror (9 tests: byte-boundary, burst, errors) | telematics ECU + Ethernet/TCP tests + harness |
+| I1 | — | 3 debug seeds |
+| I2 | typed `ContinuePredicate`/`DeviceCondition`/`ScalarValue` + evaluator + sinks (5 tests) | microcar semantic-event emission + end-to-end/replay tests |
+| J1 | `TraceStats` accumulator + bounded retention (5 tests) | World/CLI wiring |
+| J2/J3 | — | Rust soak harness + RSS bounds + CI wiring |
+
+Also fixed pre-existing blockers unmasked while greening microcar: the
+`microcar-plant` 4-vs-7-tuple test compile error, two stale examples
+(`diag`, `boot_test`), several `clippy -D warnings` violations, and costar
+`rustfmt` drift.
+
+---
+
 ## 1. What is complete (M1-M22) and staged (M23-M27)
 
 | Milestone | Track | Result |
