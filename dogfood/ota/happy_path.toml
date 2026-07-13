@@ -1,22 +1,29 @@
-# happy_path — full OTA update flow: request → admit → chunks → finish → verify → commit → reboot → healthy
+# happy_path — a complete OTA (over-the-air update) campaign succeeds.
 #
-# The gateway admits the OTA request when the vehicle is in READY mode (parked),
-# receives all chunks, verifies the CRC, commits the update to slot B, reboots,
-# and reports healthy after the new firmware boots.
+# This is the first `ota` dogfood lane scenario. Like the diagnostics and
+# charging lanes it checks compact firmware trace events (it does not depend on
+# the still-unreliable firmware-originated CAN RX path), so it uses an explicit
+# OTA dogfood firmware variant:
 #
-# CAN frames:
-#   0x630 OTA_REQUEST  — ota_tool → gateway: [7, req_id, version, total_chunks]
-#   0x631 OTA_CHUNK    — ota_tool → gateway: [7, req_id, chunk_idx, data[5]]
-#   0x632 OTA_FINISH   — ota_tool → gateway: [7, req_id, total_chunks, crc[4]]
-#   0x633 OTA_STATUS   — gateway → ota_tool: status response
+#   * gateway_ota — runs the happy-path OTA script inside gateway firmware,
+#     stepping the update state machine at successive scheduled times:
+#       IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3,
+#       slot B) → REBOOTING(4) → HEALTHY(5, boot ok).
+#
+# The lane asserts the monotonic state sequence, that the image CRC verified,
+# and that the new slot booted healthy (the update committed permanently).
+#
+# ota-expect: state-sequence 0,1,2,3,4,5
+# ota-expect: crc-ok
+# ota-expect: healthy
 
 name = "ota_happy_path"
-duration_ms = 8000
+duration_ms = 1000
 
 [[machine]]
 id = 1
 name = "gateway"
-firmware = "firmware/gateway_ecu"
+firmware = "firmware/gateway_ota"
 rtos = "freertos"
 
 [[machine]]
@@ -31,10 +38,11 @@ name = "bms"
 firmware = "firmware/bms_ecu"
 rtos = "freertos"
 
-# ota_tool as passive external actor (no firmware, bus_inject only)
 [[machine]]
-id = 7
-name = "ota_tool"
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
 
 [[bus]]
 name = "vcan0"
@@ -55,219 +63,7 @@ machine = "bms"
 
 [[bus.node]]
 bus = "vcan0"
-machine = "ota_tool"
-
-# ── Boot sequence: each ECU sends heartbeat so gateway transitions to READY ──
-
-[[bus_inject]]
-at_ms = 50
-bus = "vcan0"
-sender = "gateway"
-id = 0x001
-data = [1, 0, 0, 0, 50]
-
-[[bus_inject]]
-at_ms = 70
-bus = "vcan0"
-sender = "powertrain"
-id = 0x001
-data = [2, 0, 0, 0, 70]
-
-[[bus_inject]]
-at_ms = 80
-bus = "vcan0"
-sender = "bms"
-id = 0x001
-data = [3, 0, 0, 0, 80]
-
-[[bus_inject]]
-at_ms = 150
-bus = "vcan0"
-sender = "gateway"
-id = 0x001
-data = [1, 0, 0, 0, 150]
-
-[[bus_inject]]
-at_ms = 170
-bus = "vcan0"
-sender = "powertrain"
-id = 0x001
-data = [2, 0, 0, 0, 170]
-
-[[bus_inject]]
-at_ms = 180
-bus = "vcan0"
-sender = "bms"
-id = 0x001
-data = [3, 0, 0, 0, 180]
-
-# ── Plant sensor data: SOC=80%, voltage=360V, temp=25°C ──
-[[bus_inject]]
-at_ms = 200
-bus = "vcan0"
-sender = "plant"
-id = 0x500
-data = [80, 1, 104, 0, 250, 0, 100]
-
-# ── Gateway heartbeat — keeps vehicle in READY ──
-[[bus_inject]]
-at_ms = 250
-bus = "vcan0"
-sender = "gateway"
-id = 0x001
-data = [1, 0, 0, 0, 250]
-
-[[bus_inject]]
-at_ms = 270
-bus = "vcan0"
-sender = "powertrain"
-id = 0x001
-data = [2, 0, 0, 0, 270]
-
-[[bus_inject]]
-at_ms = 280
-bus = "vcan0"
-sender = "bms"
-id = 0x001
-data = [3, 0, 0, 0, 280]
-
-# ── OTA_REQUEST: request_id=1, version=2, total_chunks=4 ──
-# payload: [source=7, request_id=1, version=2, total_chunks=4]
-[[bus_inject]]
-at_ms = 500
-bus = "vcan0"
-sender = "ota_tool"
-id = 0x630
-data = [7, 1, 2, 4]
-
-# ── OTA_CHUNK 0: [7, req_id=1, chunk=0, data=[0xA0,0xA1,0xA2,0xA3,0xA4]] ──
-[[bus_inject]]
-at_ms = 600
-bus = "vcan0"
-sender = "ota_tool"
-id = 0x631
-data = [7, 1, 0, 160, 161, 162, 163, 164]
-
-# ── OTA_CHUNK 1 ──
-[[bus_inject]]
-at_ms = 700
-bus = "vcan0"
-sender = "ota_tool"
-id = 0x631
-data = [7, 1, 1, 165, 166, 167, 168, 169]
-
-# ── OTA_CHUNK 2 ──
-[[bus_inject]]
-at_ms = 800
-bus = "vcan0"
-sender = "ota_tool"
-id = 0x631
-data = [7, 1, 2, 170, 171, 172, 173, 174]
-
-# ── OTA_CHUNK 3 ──
-[[bus_inject]]
-at_ms = 900
-bus = "vcan0"
-sender = "ota_tool"
-id = 0x631
-data = [7, 1, 3, 175, 176, 177, 178, 179]
-
-# ── OTA_FINISH: req_id=1, total_chunks=4, crc32=0xDEADBEEF ──
-# payload: [7, 1, 4, 0xEF, 0xBE, 0xAD, 0xDE]
-[[bus_inject]]
-at_ms = 1000
-bus = "vcan0"
-sender = "ota_tool"
-id = 0x632
-data = [7, 1, 4, 239, 190, 173, 222]
-
-# ── Continued heartbeats while gateway verifies and commits ──
-[[bus_inject]]
-at_ms = 1100
-bus = "vcan0"
-sender = "gateway"
-id = 0x001
-data = [1, 0, 0, 0, 100]
-
-[[bus_inject]]
-at_ms = 1200
-bus = "vcan0"
-sender = "gateway"
-id = 0x001
-data = [1, 0, 0, 0, 200]
-
-[[bus_inject]]
-at_ms = 1300
-bus = "vcan0"
-sender = "powertrain"
-id = 0x001
-data = [2, 0, 0, 0, 200]
-
-[[bus_inject]]
-at_ms = 1400
-bus = "vcan0"
-sender = "bms"
-id = 0x001
-data = [3, 0, 0, 0, 200]
-
-# ── Gateway reboots into new slot (simulated by reboot fault) ──
-# After commit, the gateway reboots to activate slot B.
-[[fault]]
-at_ms = 1500
-target = "machine.gateway"
-type = "reboot"
-downtime_ms = 10
-
-# ── Post-reboot: gateway boots from slot B, runs health check ──
-[[bus_inject]]
-at_ms = 1600
-bus = "vcan0"
-sender = "gateway"
-id = 0x001
-data = [1, 0, 0, 0, 100]
-
-[[bus_inject]]
-at_ms = 1700
-bus = "vcan0"
-sender = "powertrain"
-id = 0x001
-data = [2, 0, 0, 0, 100]
-
-[[bus_inject]]
-at_ms = 1800
-bus = "vcan0"
-sender = "bms"
-id = 0x001
-data = [3, 0, 0, 0, 100]
-
-# ── Gateway publishes OTA_STATUS: healthy on slot B ──
-# 0x633: gateway → ota_tool status report
-[[bus_inject]]
-at_ms = 2000
-bus = "vcan0"
-sender = "gateway"
-id = 0x633
-data = [1, 1, 5, 1, 0, 0]  # source=1, req=1, state=Healthy(5), slot=B(1)
-
-# ── Assertions ──
-
-# Gateway must reboot after OTA commit.
-[[expect.event]]
-before_ms = 2500
-machine = "gateway"
-event = "machine_reset_begin"
-
-# Gateway must boot into the new slot.
-[[expect.event]]
-before_ms = 3000
-machine = "gateway"
-event = "machine_reset_boot"
-
-# OTA state must reach Healthy.
-[[expect.event]]
-before_ms = 5000
-machine = "gateway"
-event = "ota_state:Healthy"
+machine = "dashboard"
 
 [plant]
 type = "microcar"

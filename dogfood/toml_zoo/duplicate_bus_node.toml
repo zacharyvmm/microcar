@@ -1,0 +1,26 @@
+# expect-kind: duplicate-bus-node
+# 'gateway' is attached to vcan0 twice (microcar-semantic topology check).
+name = "duplicate_bus_node"
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"

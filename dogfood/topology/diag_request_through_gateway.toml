@@ -1,0 +1,85 @@
+# diag_request_through_gateway — three-bus vehicle network.
+#
+# Topology:
+#   vcan_drive: gateway(1), powertrain(2), bms(3)
+#   vcan_body : gateway(1), dashboard(4)
+#   vcan_diag : gateway(1), diagnostics_tool(5)
+#
+# The diagnostics tool sits on an isolated diag bus with only the gateway. A
+# diag-bus probe must reach the gateway and nobody else; a drive-bus probe must
+# never reach the diagnostics tool. (Gateway *forwarding* a diag request onto
+# the drive bus needs gateway bridging + Trace v2 correlation IDs — deferred to
+# those milestones; here we assert the isolation the forwarding would build on.)
+#
+# topology-probe: probe=0x07c0 expect=1
+# topology-probe: probe=0x07a0 expect=1,3
+name = "diag_request_through_gateway"
+duration_ms = 300
+
+[[machine]]
+id = 1
+name = "gateway"
+[[machine]]
+id = 2
+name = "powertrain"
+[[machine]]
+id = 3
+name = "bms"
+[[machine]]
+id = 4
+name = "dashboard"
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+
+[[bus]]
+name = "vcan_drive"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_drive"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_drive"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan_drive"
+machine = "bms"
+
+[[bus]]
+name = "vcan_body"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_body"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_body"
+machine = "dashboard"
+
+[[bus]]
+name = "vcan_diag"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_diag"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_diag"
+machine = "diagnostics_tool"
+
+# Diag probe: diagnostics_tool (id 5) injects 0x07c0 on vcan_diag -> gateway(1) only.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan_diag"
+sender = "diagnostics_tool"
+id = 0x07c0
+data = [1]
+
+# Drive probe: powertrain (id 2) injects 0x07a0 on vcan_drive -> gateway(1) + bms(3).
+[[bus_inject]]
+at_ms = 60
+bus = "vcan_drive"
+sender = "powertrain"
+id = 0x07a0
+data = [2, 2]

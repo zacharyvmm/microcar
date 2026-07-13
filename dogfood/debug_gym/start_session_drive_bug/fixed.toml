@@ -1,0 +1,70 @@
+# start_session_drive_bug — FIXED firmware for the debug_gym seeded-bug corpus
+# case "start_session_in_drive".
+#
+# Identical to failing.toml except the gateway runs the correct firmware
+# (firmware/gateway_diag_startdrive_ecu): the safety guard refuses to open a
+# diagnostic session while the vehicle is in DRIVE. The START_SESSION response
+# reports status=REJECTED with mode=DRIVE and no session opens, where the buggy
+# firmware reports status=OK / mode=SERVICE.
+
+name = "start_session_drive_bug_fixed"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_diag_startdrive_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diagnostics_tool"
+
+[plant]
+type = "microcar"
+tick_ms = 10

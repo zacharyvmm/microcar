@@ -40,9 +40,26 @@ pub mod validate;
 extern "C" {
     fn microcar_boot();
     fn microcar_boot_gateway();
+    fn microcar_boot_gateway_diag();
+    fn microcar_boot_gateway_diag_fault();
+    fn microcar_boot_gateway_diag_clear();
+    fn microcar_boot_gateway_diag_clearbug();
+    fn microcar_boot_gateway_diag_startdrive();
+    fn microcar_boot_gateway_diag_startdrivebug();
     fn microcar_boot_powertrain();
+    fn microcar_boot_powertrain_diag_service();
+    fn microcar_boot_powertrain_diag_service_bug();
+    fn microcar_boot_gateway_charging();
+    fn microcar_boot_gateway_ota();
+    fn microcar_boot_gateway_ota_badcrc();
+    fn microcar_boot_gateway_ota_intwrite();
+    fn microcar_boot_gateway_ota_badhealth();
+    fn microcar_boot_gateway_ota_powercut();
+    fn microcar_boot_gateway_ota_crcbug();
+    fn microcar_boot_powertrain_charging();
     fn microcar_boot_bms();
     fn microcar_boot_dashboard();
+    fn microcar_boot_diagnostics_tool();
     fn microcar_boot_priority_inversion();
     fn microcar_boot_lifecycle_stress();
     fn microcar_boot_net_demo();
@@ -168,11 +185,49 @@ impl MicrocarFirmware {
     /// dispatch and automotive-semantic validation resolve firmware the
     /// same way — preventing the two from drifting.
     fn ecu_type(&self) -> &str {
+        // Keep the detailed firmware variant for boot dispatch. Validation
+        // intentionally resolves these variants to their broad ECU category,
+        // but the firmware ABI exposes dedicated entry points for the
+        // dogfood lanes and seeded-bug variants.
+        if let Some(path) = self.firmware_path.as_deref() {
+            const VARIANTS: &[&str] = &[
+                "priority_inversion",
+                "lifecycle_stress",
+                "net_demo",
+                "storage_demo",
+                "bt_demo",
+                "ota_tool",
+                "telematics",
+                "gateway_diag_clearbug",
+                "gateway_diag_clear",
+                "gateway_diag_startdrivebug",
+                "gateway_diag_startdrive",
+                "gateway_diag_fault",
+                "gateway_diag",
+                "powertrain_diag_service_bug",
+                "powertrain_diag_service",
+                "gateway_ota_badcrc",
+                "gateway_ota_intwrite",
+                "gateway_ota_badhealth",
+                "gateway_ota_powercut",
+                "gateway_ota_crcbug",
+                "gateway_ota",
+                "gateway_charging",
+                "powertrain_charging",
+                "diagnostics",
+                "gateway",
+                "powertrain",
+                "bms",
+                "dashboard",
+            ];
+            if let Some(variant) = VARIANTS.iter().find(|variant| path.contains(*variant)) {
+                return *variant;
+            }
+        }
+
         if let Some(category) = resolve_ecu_category(self.firmware_path.as_deref(), &self.name) {
             category
         } else {
-            // Fallback for unknown firmware: use the machine name, which
-            // in practice is one of "gateway", "powertrain", "bms", …
             &self.name
         }
     }
@@ -194,6 +249,40 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_storage_demo();
             } else if ecu.starts_with("bt_demo") {
                 microcar_boot_bt_demo();
+            } else if ecu.starts_with("gateway_diag_clearbug") {
+                microcar_boot_gateway_diag_clearbug();
+            } else if ecu.starts_with("gateway_diag_clear") {
+                microcar_boot_gateway_diag_clear();
+            } else if ecu.starts_with("gateway_diag_startdrivebug") {
+                microcar_boot_gateway_diag_startdrivebug();
+            } else if ecu.starts_with("gateway_diag_startdrive") {
+                microcar_boot_gateway_diag_startdrive();
+            } else if ecu.starts_with("gateway_diag_fault") {
+                microcar_boot_gateway_diag_fault();
+            } else if ecu.starts_with("gateway_diag") {
+                microcar_boot_gateway_diag();
+            } else if ecu.starts_with("powertrain_diag_service_bug") {
+                microcar_boot_powertrain_diag_service_bug();
+            } else if ecu.starts_with("powertrain_diag_service") {
+                microcar_boot_powertrain_diag_service();
+            } else if ecu.starts_with("gateway_ota_badcrc") {
+                microcar_boot_gateway_ota_badcrc();
+            } else if ecu.starts_with("gateway_ota_intwrite") {
+                microcar_boot_gateway_ota_intwrite();
+            } else if ecu.starts_with("gateway_ota_badhealth") {
+                microcar_boot_gateway_ota_badhealth();
+            } else if ecu.starts_with("gateway_ota_powercut") {
+                microcar_boot_gateway_ota_powercut();
+            } else if ecu.starts_with("gateway_ota_crcbug") {
+                microcar_boot_gateway_ota_crcbug();
+            } else if ecu.starts_with("gateway_ota") {
+                microcar_boot_gateway_ota();
+            } else if ecu.starts_with("gateway_charging") {
+                microcar_boot_gateway_charging();
+            } else if ecu.starts_with("powertrain_charging") {
+                microcar_boot_powertrain_charging();
+            } else if ecu.starts_with("diagnostics") {
+                microcar_boot_diagnostics_tool();
             } else if ecu.starts_with("ota_tool") {
                 microcar_boot_ota_tool();
             } else if ecu.starts_with("telematics") {

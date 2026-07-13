@@ -1,0 +1,62 @@
+# ota_rollback_bug — FIXED firmware for the debug_gym seeded-bug corpus case
+# "ota_rollback".
+#
+# Identical to failing.toml except the gateway runs the correct firmware
+# (firmware/gateway_ota_badcrc): its CRC check correctly rejects the corrupt
+# image, so the slot model refuses to arm the inactive slot and rolls back to
+# the known-good slot A —
+#   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc BAD) → ROLLED_BACK(6, slot A).
+# ota_rollback=1, ota_active_slot=0, and ota_boot_result is never 1: the corrupt
+# image is never booted.
+
+name = "ota_rollback_bug_fixed"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ota_badcrc"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10

@@ -1,0 +1,13 @@
+# expect-kind: unknown-firmware
+# 'widget' names a firmware that resolves to no known ECU (microcar-semantic).
+name = "unknown_firmware"
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+
+[[machine]]
+id = 2
+name = "widget"
+firmware = "firmware/widget_ecu"

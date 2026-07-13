@@ -1,0 +1,13 @@
+# expect-kind: invalid
+# Two machines share id = 1. costar's structural validation rejects this.
+name = "duplicate_machine_id"
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+
+[[machine]]
+id = 1
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"

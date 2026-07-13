@@ -1,0 +1,81 @@
+# gateway_loop_prevention — a forwarded frame is forwarded at most once, so it
+# cannot propagate indefinitely across a chain (or loop) of bridges.
+#
+# Topology (chain of two bridges):
+#   vcan_a: gateway_a(1), sensor(2)
+#   vcan_b: gateway_a(1), gateway_b(3)
+#   vcan_c: gateway_b(3), actuator(4)
+#   [[bridge]] gateway_a   (vcan_a <-> vcan_b)
+#   [[bridge]] gateway_b   (vcan_b <-> vcan_c)
+#
+# A probe injected on vcan_a by the sensor is received by gateway_a (original)
+# and forwarded once onto vcan_b, where gateway_b receives it. Because that
+# delivery is already a forwarded (hop-1) frame, gateway_b does NOT forward it
+# again onto vcan_c — so the actuator never sees it. The probe's receivers are
+# therefore exactly {gateway_a, gateway_b}, each once: forwarding is single-hop
+# and cannot loop. (Multi-bridge de-duplication onto a shared bus is covered by
+# the costar test_gateway_forwarding_dedups_multiple_bridges engine test.)
+#
+# topology-probe: probe=0x07e0 expect=1,3
+name = "gateway_loop_prevention"
+duration_ms = 400
+
+[[machine]]
+id = 1
+name = "gateway_a"
+[[machine]]
+id = 2
+name = "sensor"
+[[machine]]
+id = 3
+name = "gateway_b"
+[[machine]]
+id = 4
+name = "actuator"
+
+[[bridge]]
+machine = "gateway_a"
+[[bridge]]
+machine = "gateway_b"
+
+[[bus]]
+name = "vcan_a"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_a"
+machine = "gateway_a"
+[[bus.node]]
+bus = "vcan_a"
+machine = "sensor"
+
+[[bus]]
+name = "vcan_b"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_b"
+machine = "gateway_a"
+[[bus.node]]
+bus = "vcan_b"
+machine = "gateway_b"
+
+[[bus]]
+name = "vcan_c"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_c"
+machine = "gateway_b"
+[[bus.node]]
+bus = "vcan_c"
+machine = "actuator"
+
+# Sensor injects a probe on vcan_a. It is forwarded once (a -> b) but not twice
+# (b -> c), so the actuator on vcan_c never receives it.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan_a"
+sender = "sensor"
+id = 0x07e0
+data = [1]

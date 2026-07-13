@@ -70,6 +70,17 @@ void fault_manager_clear_node(fault_manager_t *fm, uint8_t source_node)
     }
 }
 
+void fault_manager_clear_all(fault_manager_t *fm)
+{
+    for (uint8_t i = 0; i < fm->fault_count; i++) {
+        if (fm->faults[i].active) {
+            if (fm->faults[i].severity == 2) fm->critical_count--;
+            else if (fm->faults[i].severity == 1) fm->warning_count--;
+            fm->faults[i].active = 0;
+        }
+    }
+}
+
 uint8_t fault_manager_has_critical(const fault_manager_t *fm)
 {
     return fm->critical_count > 0 ? 1 : 0;

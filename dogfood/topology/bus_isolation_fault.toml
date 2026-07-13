@@ -1,0 +1,81 @@
+# bus_isolation_fault — a drop-frame fault on one bus isolates it: the gateway
+# still forwards the probe from vcan_a, but the fault on vcan_b drops the
+# forwarded copy, so the vcan_b node never sees it.
+#
+#   vcan_a: gateway(1), sensor(2), a_node(3)
+#   vcan_b: gateway(1), b_node(4)
+#   [[bridge]] gateway  (forwards vcan_a <-> vcan_b)
+#
+# A drop_frame fault on vcan_b for id 0x07f0 is applied at t=10ms. A warm-up
+# frame at t=20ms forces an early tick so the fault is in effect before the
+# probe. The probe (0x07f0, t=50ms) is delivered on vcan_a to the gateway and
+# a_node, but the gateway's forward onto vcan_b is dropped by the fault — so
+# b_node is isolated and never receives it.
+#
+# topology-probe: probe=0x07f0 expect=1,3
+name = "bus_isolation_fault"
+duration_ms = 300
+
+[[machine]]
+id = 1
+name = "gateway"
+[[machine]]
+id = 2
+name = "sensor"
+[[machine]]
+id = 3
+name = "a_node"
+[[machine]]
+id = 4
+name = "b_node"
+
+[[bridge]]
+machine = "gateway"
+
+[[bus]]
+name = "vcan_a"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_a"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_a"
+machine = "sensor"
+[[bus.node]]
+bus = "vcan_a"
+machine = "a_node"
+
+[[bus]]
+name = "vcan_b"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_b"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_b"
+machine = "b_node"
+
+# Drop the probe id on vcan_b, applied before the probe is forwarded there.
+[[fault]]
+at_ms = 10
+target = "bus.vcan_b"
+type = "drop_frame"
+id = 0x07f0
+
+# Warm-up frame: forces an early tick so the fault takes effect pre-probe.
+[[bus_inject]]
+at_ms = 20
+bus = "vcan_a"
+sender = "sensor"
+id = 0x07f1
+data = [9]
+
+# The probe: delivered on vcan_a (gateway + a_node); forward onto vcan_b dropped.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan_a"
+sender = "sensor"
+id = 0x07f0
+data = [1]

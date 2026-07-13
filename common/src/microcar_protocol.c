@@ -217,8 +217,8 @@ int8_t mc_safety_clamp_torque(int8_t requested_torque,
         return 0;
     }
 
-    // S2: FAULT mode → motor disabled
-    if (vehicle_mode == VEHICLE_FAULT) {
+    // S2/SERVICE/CHARGING/OTA: positive torque is only allowed in DRIVE/LIMP.
+    if (vehicle_mode != VEHICLE_DRIVE && vehicle_mode != VEHICLE_LIMP) {
         return 0;
     }
 
