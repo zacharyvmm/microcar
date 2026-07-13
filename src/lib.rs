@@ -31,6 +31,8 @@
 //! dashboard ECU firmware and advances the scheduler via
 //! `sim_zephyr_scheduler_tick()`.
 
+pub mod validate;
+
 use sim_core::Tick;
 use sim_world::firmware::Firmware;
 use sim_world::Machine;
@@ -39,9 +41,26 @@ use sim_world::Machine;
 extern "C" {
     fn microcar_boot();
     fn microcar_boot_gateway();
+    fn microcar_boot_gateway_diag();
+    fn microcar_boot_gateway_diag_fault();
+    fn microcar_boot_gateway_diag_clear();
+    fn microcar_boot_gateway_diag_clearbug();
+    fn microcar_boot_gateway_diag_startdrive();
+    fn microcar_boot_gateway_diag_startdrivebug();
     fn microcar_boot_powertrain();
+    fn microcar_boot_powertrain_diag_service();
+    fn microcar_boot_powertrain_diag_service_bug();
+    fn microcar_boot_gateway_charging();
+    fn microcar_boot_gateway_ota();
+    fn microcar_boot_gateway_ota_badcrc();
+    fn microcar_boot_gateway_ota_intwrite();
+    fn microcar_boot_gateway_ota_badhealth();
+    fn microcar_boot_gateway_ota_powercut();
+    fn microcar_boot_gateway_ota_crcbug();
+    fn microcar_boot_powertrain_charging();
     fn microcar_boot_bms();
     fn microcar_boot_dashboard();
+    fn microcar_boot_diagnostics_tool();
     fn microcar_boot_priority_inversion();
     fn microcar_boot_lifecycle_stress();
     fn microcar_boot_net_demo();
@@ -66,6 +85,75 @@ pub struct MicrocarFirmware {
     /// Firmware path from the scenario (e.g. "firmware/gateway_ecu").
     pub firmware_path: Option<String>,
     booted: bool,
+}
+
+// ── Shared ECU resolution (single source of truth) ────────────────────────
+//
+// Used by both `MicrocarFirmware::ecu_type()` (for boot dispatch) and
+// `validate::resolve_ecu()` (for automotive-semantic validation) so the two
+// never drift.  Patterns are ordered most-specific-first; `contains()`
+// returns the first match.
+//
+// Each entry is (firmware_path_substring, canonical_ecu_category).
+// The category is the broad ECU kind used by validation and boot dispatch.
+
+/// Shared ECU resolution patterns: (path substring, canonical category).
+/// Ordered most-specific-first — e.g. `gateway_diag_clearbug` before
+/// `gateway_diag` before `gateway`.
+pub const ECU_CATEGORY_PATTERNS: &[(&str, &str)] = &[
+    // Demo / test ECUs
+    ("priority_inversion", "priority_inversion"),
+    ("lifecycle_stress", "lifecycle_stress"),
+    ("net_demo", "net_demo"),
+    ("storage_demo", "storage_demo"),
+    ("bt_demo", "bt_demo"),
+    // Diagnostics variants (specific → broad)
+    ("gateway_diag_clearbug", "diagnostics"),
+    ("gateway_diag_clear", "diagnostics"),
+    ("gateway_diag_startdrivebug", "diagnostics"),
+    ("gateway_diag_startdrive", "diagnostics"),
+    ("gateway_diag_fault", "diagnostics"),
+    ("gateway_diag", "diagnostics"),
+    ("powertrain_diag_service_bug", "powertrain"),
+    ("powertrain_diag_service", "powertrain"),
+    // OTA variants
+    ("gateway_ota_badcrc", "gateway"),
+    ("gateway_ota_intwrite", "gateway"),
+    ("gateway_ota_badhealth", "gateway"),
+    ("gateway_ota_powercut", "gateway"),
+    ("gateway_ota_crcbug", "gateway"),
+    ("gateway_ota", "gateway"),
+    // Charging variants
+    ("gateway_charging", "gateway"),
+    ("powertrain_charging", "powertrain"),
+    // Broad base ECUs (checked LAST)
+    ("diagnostics", "diagnostics"),
+    ("gateway", "gateway"),
+    ("powertrain", "powertrain"),
+    ("bms", "bms"),
+    ("dashboard", "dashboard"),
+];
+
+/// Resolve a machine's firmware path to its canonical ECU category.
+///
+/// Matches the firmware path against [`ECU_CATEGORY_PATTERNS`] using
+/// substring `contains()`, most-specific-first.  Falls back to matching
+/// against the machine name prefix if firmware path yields no match.
+/// Returns `None` for unknown firmware.
+pub fn resolve_ecu_category(firmware: Option<&str>, name: &str) -> Option<&'static str> {
+    if let Some(path) = firmware {
+        for (pattern, category) in ECU_CATEGORY_PATTERNS {
+            if path.contains(pattern) {
+                return Some(category);
+            }
+        }
+    }
+    for (pattern, category) in ECU_CATEGORY_PATTERNS {
+        if name.starts_with(pattern) {
+            return Some(category);
+        }
+    }
+    None
 }
 
 impl MicrocarFirmware {
@@ -102,6 +190,57 @@ impl MicrocarFirmware {
             if path.contains("bt_demo") {
                 return "bt_demo";
             }
+            if path.contains("gateway_diag_clearbug") {
+                return "gateway_diag_clearbug";
+            }
+            if path.contains("gateway_diag_clear") {
+                return "gateway_diag_clear";
+            }
+            if path.contains("gateway_diag_startdrivebug") {
+                return "gateway_diag_startdrivebug";
+            }
+            if path.contains("gateway_diag_startdrive") {
+                return "gateway_diag_startdrive";
+            }
+            if path.contains("gateway_diag_fault") {
+                return "gateway_diag_fault";
+            }
+            if path.contains("gateway_diag") {
+                return "gateway_diag";
+            }
+            if path.contains("powertrain_diag_service_bug") {
+                return "powertrain_diag_service_bug";
+            }
+            if path.contains("powertrain_diag_service") {
+                return "powertrain_diag_service";
+            }
+            if path.contains("gateway_ota_badcrc") {
+                return "gateway_ota_badcrc";
+            }
+            if path.contains("gateway_ota_intwrite") {
+                return "gateway_ota_intwrite";
+            }
+            if path.contains("gateway_ota_badhealth") {
+                return "gateway_ota_badhealth";
+            }
+            if path.contains("gateway_ota_powercut") {
+                return "gateway_ota_powercut";
+            }
+            if path.contains("gateway_ota_crcbug") {
+                return "gateway_ota_crcbug";
+            }
+            if path.contains("gateway_ota") {
+                return "gateway_ota";
+            }
+            if path.contains("gateway_charging") {
+                return "gateway_charging";
+            }
+            if path.contains("powertrain_charging") {
+                return "powertrain_charging";
+            }
+            if path.contains("diagnostics") {
+                return "diagnostics";
+            }
             if path.contains("gateway") {
                 return "gateway";
             }
@@ -135,6 +274,40 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_storage_demo();
             } else if ecu.starts_with("bt_demo") {
                 microcar_boot_bt_demo();
+            } else if ecu.starts_with("gateway_diag_clearbug") {
+                microcar_boot_gateway_diag_clearbug();
+            } else if ecu.starts_with("gateway_diag_clear") {
+                microcar_boot_gateway_diag_clear();
+            } else if ecu.starts_with("gateway_diag_startdrivebug") {
+                microcar_boot_gateway_diag_startdrivebug();
+            } else if ecu.starts_with("gateway_diag_startdrive") {
+                microcar_boot_gateway_diag_startdrive();
+            } else if ecu.starts_with("gateway_diag_fault") {
+                microcar_boot_gateway_diag_fault();
+            } else if ecu.starts_with("gateway_diag") {
+                microcar_boot_gateway_diag();
+            } else if ecu.starts_with("powertrain_diag_service_bug") {
+                microcar_boot_powertrain_diag_service_bug();
+            } else if ecu.starts_with("powertrain_diag_service") {
+                microcar_boot_powertrain_diag_service();
+            } else if ecu.starts_with("gateway_ota_badcrc") {
+                microcar_boot_gateway_ota_badcrc();
+            } else if ecu.starts_with("gateway_ota_intwrite") {
+                microcar_boot_gateway_ota_intwrite();
+            } else if ecu.starts_with("gateway_ota_badhealth") {
+                microcar_boot_gateway_ota_badhealth();
+            } else if ecu.starts_with("gateway_ota_powercut") {
+                microcar_boot_gateway_ota_powercut();
+            } else if ecu.starts_with("gateway_ota_crcbug") {
+                microcar_boot_gateway_ota_crcbug();
+            } else if ecu.starts_with("gateway_ota") {
+                microcar_boot_gateway_ota();
+            } else if ecu.starts_with("gateway_charging") {
+                microcar_boot_gateway_charging();
+            } else if ecu.starts_with("powertrain_charging") {
+                microcar_boot_powertrain_charging();
+            } else if ecu.starts_with("diagnostics") {
+                microcar_boot_diagnostics_tool();
             } else if ecu.starts_with("gateway") {
                 microcar_boot_gateway();
             } else if ecu.starts_with("powertrain") {

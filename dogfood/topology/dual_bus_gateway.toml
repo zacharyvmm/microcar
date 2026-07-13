@@ -1,0 +1,75 @@
+# dual_bus_gateway — two CAN buses joined only by a shared gateway node.
+#
+# Topology:
+#   vcan_drive: gateway(1), powertrain(2), bms(3)
+#   vcan_body : gateway(1), dashboard(4)
+#
+# A frame injected on one bus must reach exactly the *other* nodes of that bus
+# and nothing on the other bus. The gateway sits on both buses, so it hears
+# both probes; powertrain/bms never hear the body probe and dashboard never
+# hears the drive probe. (Machines are firmware-less bus nodes; the bus_inject
+# probes are the traffic under test.)
+#
+# topology-probe: probe=0x07a0 expect=1,3
+# topology-probe: probe=0x07b0 expect=1
+name = "dual_bus_gateway"
+duration_ms = 300
+
+[[machine]]
+id = 1
+name = "gateway"
+
+[[machine]]
+id = 2
+name = "powertrain"
+
+[[machine]]
+id = 3
+name = "bms"
+
+[[machine]]
+id = 4
+name = "dashboard"
+
+[[bus]]
+name = "vcan_drive"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan_drive"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_drive"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan_drive"
+machine = "bms"
+
+[[bus]]
+name = "vcan_body"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan_body"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_body"
+machine = "dashboard"
+
+# Probe A: powertrain (id 2) injects 0x07a0 on vcan_drive -> gateway(1) + bms(3).
+[[bus_inject]]
+at_ms = 50
+bus = "vcan_drive"
+sender = "powertrain"
+id = 0x07a0
+data = [1, 2, 3]
+
+# Probe B: dashboard (id 4) injects 0x07b0 on vcan_body -> gateway(1) only.
+[[bus_inject]]
+at_ms = 60
+bus = "vcan_body"
+sender = "dashboard"
+id = 0x07b0
+data = [9]

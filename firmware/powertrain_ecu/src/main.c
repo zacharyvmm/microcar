@@ -38,6 +38,15 @@
 
 static torque_controller_t g_tc;
 static watchdog_task_t     g_wd;
+static uint8_t             g_diag_force_service_mode = 0;
+static uint8_t             g_charging_force_mode = 0;
+
+// SEEDED DEBUG-GYM BUG (service_torque corpus case). When set, the powertrain
+// skips the SERVICE-mode safety clamp and commands the raw requested torque with
+// the motor enabled — modeling firmware that forgot to apply the clamp on a
+// service-test path. Off by default; only powertrain_diag_service_bug sets it,
+// so the default firmware and every other lane stay byte-identical.
+static uint8_t             g_diag_service_clamp_bug = 0;
 
 // ── Counting semaphore (CAN TX mailbox) ───────────────────────────────────
 
@@ -99,6 +108,26 @@ void powertrain_init(void)
 {
     torque_controller_init(&g_tc);
     watchdog_init(&g_wd);
+}
+
+void powertrain_enable_dogfood_service_mode(void)
+{
+    g_diag_force_service_mode = 1;
+}
+
+void powertrain_enable_dogfood_charging(void)
+{
+    g_charging_force_mode = 1;
+}
+
+// SEEDED DEBUG-GYM BUG (service_torque): enable the buggy powertrain firmware
+// that runs a SERVICE-mode torque computation but skips the safety clamp. The
+// fixed reference is powertrain_enable_dogfood_service_mode
+// (powertrain_diag_service), which clamps torque to 0 and disables the motor.
+void powertrain_enable_dogfood_service_clamp_bug(void)
+{
+    g_diag_force_service_mode = 1; // run a SERVICE-mode torque computation
+    g_diag_service_clamp_bug  = 1; // BUG: skip the SERVICE clamp
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -281,6 +310,14 @@ void powertrain_main(void *pvParameters)
     powertrain_init();
     powertrain_primitives_init();
     g_powertrain_task_handle = xTaskGetCurrentTaskHandle();
+    if (g_diag_force_service_mode) {
+        torque_controller_set_mode(&g_tc, VEHICLE_SERVICE);
+        torque_controller_set_input(&g_tc, 80, 0, 0);
+    }
+    if (g_charging_force_mode) {
+        torque_controller_set_mode(&g_tc, VEHICLE_CHARGING);
+        torque_controller_set_input(&g_tc, 80, 0, 0);
+    }
 
     // Create subordinate tasks.
     xTaskCreate(sensor_poll, "sensor", 512, NULL, 3, NULL);
@@ -312,12 +349,39 @@ void powertrain_main(void *pvParameters)
             rx.len = (uint8_t)dlc;
             dispatch_frame(&rx);
         }
+        if (g_diag_force_service_mode) {
+            torque_controller_set_mode(&g_tc, VEHICLE_SERVICE);
+            torque_controller_set_input(&g_tc, 80, 0, 0);
+        }
+        if (g_charging_force_mode) {
+            torque_controller_set_mode(&g_tc, VEHICLE_CHARGING);
+            torque_controller_set_input(&g_tc, 80, 0, 0);
+        }
 
         // ── Compute torque ────────────────────────────────────
         int8_t torque = torque_controller_compute(&g_tc);
 
+        // SEEDED DEBUG-GYM BUG (service_torque): the SERVICE-mode safety clamp
+        // is skipped, so a service session still commands drive torque with the
+        // motor enabled. The fixed firmware (powertrain_diag_service) clamps
+        // torque to 0 and disables the motor. Off by default.
+        if (g_diag_service_clamp_bug && g_tc.vehicle_mode == VEHICLE_SERVICE) {
+            torque = (int8_t)g_tc.throttle_percent;
+            g_tc.motor_enable = 1;
+        }
+
         // ── Send motor command (with semaphore guard) ────────
         send_motor_command(torque, &tx);
+        if (g_tc.vehicle_mode == VEHICLE_SERVICE) {
+            sim_trace_u32("diag_motor_command",
+                          ((uint32_t)(uint8_t)torque << 8)
+                        | (uint32_t)g_tc.motor_enable);
+        }
+        if (g_tc.vehicle_mode == VEHICLE_CHARGING) {
+            sim_trace_u32("charging_motor_command",
+                          ((uint32_t)(uint8_t)torque << 8)
+                        | (uint32_t)g_tc.motor_enable);
+        }
         can_tx_with_semaphore(&tx);
 
         // ── Send heartbeat ────────────────────────────────────

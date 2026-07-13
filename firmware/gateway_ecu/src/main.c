@@ -28,6 +28,7 @@
 #include "heartbeat_monitor.h"
 #include "fault_manager.h"
 #include "microcar_protocol.h"
+#include "microcar_ota_slot.h"
 #include "microcar_safety.h"
 #include "microcar_trace.h"
 #include "microcar_can.h"
@@ -47,6 +48,59 @@ typedef struct {
 static gateway_state_t     g_gs;
 static heartbeat_monitor_t g_hm;
 static fault_manager_t     g_fm;
+static uint8_t             g_diag_session_active = 0;
+static uint8_t             g_diag_dogfood_script = 0;
+static uint8_t             g_diag_dogfood_inject_fault = 0;
+static uint8_t             g_charging_dogfood_script = 0;
+static uint8_t             g_ota_dogfood_script = 0;
+
+// OTA dogfood fault-injection selector (see run_dogfood_ota_script). 0 = the
+// happy-path campaign; non-zero values inject one fault-matrix case. Each fault
+// gets its own gateway_enable_dogfood_ota_fault_* wrapper so a scenario selects
+// it purely by firmware path (no CAN input needed).
+#define OTA_FAULT_NONE    0u
+#define OTA_FAULT_BAD_CRC 1u
+#define OTA_FAULT_INTERRUPTED_WRITE 2u
+#define OTA_FAULT_BAD_HEALTH        3u
+#define OTA_FAULT_POWERCUT_PRECOMMIT 4u
+static uint8_t             g_ota_fault_mode = OTA_FAULT_NONE;
+
+// SEEDED DEBUG-GYM BUG (ota_rollback corpus case). When set, the gateway's CRC
+// verification is *broken*: it reports a corrupt image as valid, so the slot
+// model arms and boots the bad slot instead of rolling back. This is the buggy
+// firmware paired against the correct gateway_ota_badcrc in the debug_gym
+// seeded-bug corpus. It is off by default and only reachable via the dedicated
+// gateway_ota_crcbug firmware path, so the default firmware and every other lane
+// stay byte-identical.
+static uint8_t             g_ota_crc_check_bug = 0;
+
+// diagnostics "clear DTCs" dogfood extension. The base diag script only injects
+// a single BMS DTC; these flags drive the debug_gym `clear_all_dtcs` seed, which
+// needs a *non-BMS* fault present when CLEAR_DTCS runs so the scoping matters.
+//
+//   g_diag_extra_pt_fault — also inject a powertrain (non-BMS) DTC, so a
+//     BMS-scoped clear must leave one DTC behind.
+//   g_diag_clear_all_bug  — SEEDED DEBUG-GYM BUG: a BMS-scoped CLEAR_DTCS wrongly
+//     clears EVERY node's DTCs (fault_manager_clear_all) instead of only the
+//     BMS node, silently dropping the unrelated powertrain fault. Off by
+//     default; only reachable via the dedicated gateway_diag_clearbug firmware
+//     path, so the default firmware and every other lane stay byte-identical.
+static uint8_t             g_diag_extra_pt_fault = 0;
+static uint8_t             g_diag_clear_all_bug = 0;
+
+// diagnostics "start session while driving" dogfood extension — drives the
+// debug_gym `start_session_in_drive` seed.
+//
+//   g_diag_startdrive_script       — run the start-session-in-DRIVE script: put
+//     the vehicle in DRIVE, then attempt to open a diagnostic session mid-drive.
+//   g_diag_startsession_drive_bug  — SEEDED DEBUG-GYM BUG: skip the safety guard
+//     that refuses START_SESSION while the vehicle is in DRIVE, so a service
+//     session wrongly opens mid-drive (commanding the vehicle out of DRIVE into
+//     SERVICE while moving). Off by default; only reachable via the dedicated
+//     gateway_diag_startdrivebug firmware path, so the default firmware and
+//     every other lane stay byte-identical.
+static uint8_t             g_diag_startdrive_script = 0;
+static uint8_t             g_diag_startsession_drive_bug = 0;
 
 // ── FreeRTOS primitives ───────────────────────────────────────────────────
 
@@ -104,6 +158,99 @@ void gateway_init(void)
                                MC_SAFETY_BMS_HEARTBEAT_TIMEOUT_MS);
 }
 
+void gateway_enable_dogfood_diag_script(uint8_t inject_fault)
+{
+    g_diag_dogfood_script = 1;
+    g_diag_dogfood_inject_fault = inject_fault ? 1 : 0;
+}
+
+// diagnostics "clear DTCs" dogfood lane / debug_gym `clear_all_dtcs` seed.
+// Runs the diag request script with BOTH a BMS DTC and a non-BMS (powertrain)
+// DTC present when CLEAR_DTCS runs. The correct firmware (buggy=0) clears only
+// the BMS-scoped DTCs, so the powertrain DTC survives (final READ_DTCS count 1).
+// The buggy firmware (buggy=1) wrongly clears every node's DTCs, so the
+// powertrain DTC is silently dropped (final READ_DTCS count 0).
+void gateway_enable_dogfood_diag_clear_dtcs(uint8_t buggy)
+{
+    g_diag_dogfood_script = 1;
+    g_diag_dogfood_inject_fault = 1; // BMS DTC at 300ms
+    g_diag_extra_pt_fault = 1;       // + powertrain DTC at 310ms
+    g_diag_clear_all_bug = buggy ? 1 : 0;
+}
+
+// diagnostics "start session while driving" dogfood lane / debug_gym
+// `start_session_in_drive` seed. Runs a script that puts the vehicle in DRIVE
+// then attempts to open a diagnostic session mid-drive. The correct firmware
+// (buggy=0) refuses (START_SESSION rejected, vehicle stays in DRIVE); the buggy
+// firmware (buggy=1) skips the guard and opens the session (vehicle drops to
+// SERVICE while moving).
+void gateway_enable_dogfood_diag_startdrive(uint8_t buggy)
+{
+    g_diag_startdrive_script = 1;
+    g_diag_startsession_drive_bug = buggy ? 1 : 0;
+}
+
+void gateway_enable_dogfood_charging_script(void)
+{
+    g_charging_dogfood_script = 1;
+}
+
+void gateway_enable_dogfood_ota_script(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_NONE;
+}
+
+// OTA fault-matrix variant: a corrupt image fails CRC verification, so the slot
+// model must refuse to arm slot B and roll back to the known-good slot A.
+void gateway_enable_dogfood_ota_fault_bad_crc(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_BAD_CRC;
+}
+
+// OTA fault-matrix variant: the image download is interrupted (power cut during
+// write), so the partial image is discarded and the update aborts to slot A
+// before it ever verifies.
+void gateway_enable_dogfood_ota_fault_interrupted_write(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_INTERRUPTED_WRITE;
+}
+
+// OTA fault-matrix variant: the new slot downloads, verifies and commits, but
+// the post-reboot self-test fails (bad boot), so the model rolls back to the
+// previous known-good slot A.
+void gateway_enable_dogfood_ota_fault_bad_health(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_BAD_HEALTH;
+}
+
+// OTA fault-matrix variant: a power cut strikes after the image has been written
+// and verified but before the atomic commit. The verified-but-uncommitted image
+// is discarded and the bootloader stays on the known-good slot A — proving the
+// commit is the point of no return (a valid image still reverts if it never
+// committed).
+void gateway_enable_dogfood_ota_fault_powercut_precommit(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_POWERCUT_PRECOMMIT;
+}
+
+// SEEDED DEBUG-GYM BUG (ota_rollback): enable the buggy CRC-check firmware. The
+// image really is corrupt (OTA_FAULT_BAD_CRC), but the broken CRC check reports
+// it valid (g_ota_crc_check_bug), so the update commits and boots the bad slot
+// instead of rolling back. The fixed reference firmware is
+// gateway_enable_dogfood_ota_fault_bad_crc (gateway_ota_badcrc), which reports
+// crc_ok=0 and rolls back to slot A.
+void gateway_enable_dogfood_ota_bug_bad_crc(void)
+{
+    g_ota_dogfood_script = 1;
+    g_ota_fault_mode = OTA_FAULT_BAD_CRC; // the image really is corrupt
+    g_ota_crc_check_bug = 1;              // BUG: the CRC check wrongly reports OK
+}
+
 // ── Message handlers ──────────────────────────────────────────────────────
 
 /// Process a heartbeat frame (0x001) from any node.
@@ -135,6 +282,408 @@ static void handle_bms_fault(const mc_can_frame_t *frame)
     }
 }
 
+static uint8_t first_active_dtc(uint8_t *source_node, uint8_t *fault_code)
+{
+    uint8_t count = 0;
+    *source_node = 0;
+    *fault_code = 0;
+
+    if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        for (uint8_t i = 0; i < g_fm.fault_count; i++) {
+            if (g_fm.faults[i].active) {
+                if (count == 0) {
+                    *source_node = g_fm.faults[i].source_node;
+                    *fault_code = g_fm.faults[i].fault_code;
+                }
+                count++;
+            }
+        }
+        xSemaphoreGive(g_fm_mutex);
+    }
+
+    return count;
+}
+
+static void send_diag_response(uint8_t service, uint8_t request_id,
+                               uint8_t status, uint8_t value0,
+                               uint8_t value1)
+{
+    mc_can_frame_t tx;
+    mc_frame_init(&tx, MC_MSG_DIAG_RESPONSE, MC_NODE_GATEWAY,
+                  MC_DIAG_RESPONSE_MSG_SIZE);
+    tx.data[0] = MC_NODE_GATEWAY;
+    tx.data[1] = service;
+    tx.data[2] = request_id;
+    tx.data[3] = status;
+    tx.data[4] = value0;
+    tx.data[5] = value1;
+    sim_trace_u32("gateway_diag_response",
+                  ((uint32_t)request_id << 24)
+                | ((uint32_t)service << 16)
+                | ((uint32_t)status << 8)
+                | (uint32_t)value0);
+    sim_trace_u32("gateway_diag_response_v1",
+                  ((uint32_t)request_id << 24)
+                | ((uint32_t)service << 16)
+                | (uint32_t)value1);
+    sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
+}
+
+static void handle_diag_request(const mc_can_frame_t *frame)
+{
+    if (frame->len < MC_DIAG_REQUEST_MSG_SIZE) return;
+
+    uint8_t service = frame->data[1];
+    uint8_t request_id = frame->data[2];
+    uint8_t status = MC_DIAG_OK;
+    uint8_t value0 = 0;
+    uint8_t value1 = 0;
+
+    switch (service) {
+    case MC_DIAG_START_SESSION:
+        if (g_gs.mode == VEHICLE_DRIVE && !g_diag_startsession_drive_bug) {
+            // Safety guard: refuse to open a diagnostic service session while
+            // the vehicle is driving. Report the current mode so the tool sees
+            // why it was rejected.
+            status = MC_DIAG_REJECTED;
+            value0 = (uint8_t)g_gs.mode;
+        } else {
+            // SEEDED DEBUG-GYM BUG (start_session_in_drive): when
+            // g_diag_startsession_drive_bug is set the DRIVE guard above is
+            // skipped, so a service session opens mid-drive — commanding the
+            // vehicle out of DRIVE into SERVICE while moving.
+            g_diag_session_active = 1;
+            g_gs.mode = VEHICLE_SERVICE;
+            value0 = (uint8_t)g_gs.mode;
+            sim_trace_u32("diag_session", 1);
+            sim_trace_u32("vehicle_mode", (uint32_t)g_gs.mode);
+            xEventGroupSetBits(g_mode_events, 0x01);
+        }
+        break;
+
+    case MC_DIAG_END_SESSION:
+        g_diag_session_active = 0;
+        value0 = (uint8_t)g_gs.mode;
+        sim_trace_u32("diag_session", 0);
+        break;
+
+    case MC_DIAG_READ_MODE:
+        value0 = (uint8_t)g_gs.mode;
+        break;
+
+    case MC_DIAG_READ_DTCS:
+        {
+            uint8_t source = 0;
+            value0 = first_active_dtc(&source, &value1);
+            (void)source;
+        }
+        status = MC_DIAG_OK;
+        break;
+
+    case MC_DIAG_CLEAR_DTCS:
+        if (!g_diag_session_active) {
+            status = MC_DIAG_REJECTED;
+        } else if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+            if (g_diag_clear_all_bug) {
+                // SEEDED DEBUG-GYM BUG (clear_all_dtcs): a BMS-scoped clear
+                // request wrongly clears EVERY node's DTCs, silently dropping
+                // an unrelated (e.g. powertrain) fault. Off by default.
+                fault_manager_clear_all(&g_fm);
+            } else {
+                fault_manager_clear_node(&g_fm, MC_NODE_BMS);
+            }
+            xSemaphoreGive(g_fm_mutex);
+            value0 = 0;
+        }
+        break;
+
+    case MC_DIAG_ACTUATOR_TEST:
+        status = g_diag_session_active && g_gs.mode != VEHICLE_DRIVE
+            ? MC_DIAG_OK
+            : MC_DIAG_REJECTED;
+        value0 = (uint8_t)g_gs.mode;
+        break;
+
+    case MC_DIAG_LIVE_BMS:
+    default:
+        status = MC_DIAG_UNSUPPORTED;
+        break;
+    }
+
+    send_diag_response(service, request_id, status, value0, value1);
+}
+
+static void synth_diag_request(uint8_t service, uint8_t request_id)
+{
+    mc_can_frame_t rx;
+    mc_frame_init(&rx, MC_MSG_DIAG_REQUEST, MC_NODE_DIAGNOSTICS,
+                  MC_DIAG_REQUEST_MSG_SIZE);
+    rx.data[0] = MC_NODE_DIAGNOSTICS;
+    rx.data[1] = service;
+    rx.data[2] = request_id;
+    rx.data[3] = 0;
+    handle_diag_request(&rx);
+}
+
+static void synth_bms_fault(uint8_t fault_code)
+{
+    mc_can_frame_t rx;
+    mc_frame_init(&rx, MC_MSG_BMS_FAULT, MC_NODE_BMS, 2);
+    rx.data[0] = fault_code;
+    rx.data[1] = 0;
+    handle_bms_fault(&rx);
+}
+
+// Report a fault from an arbitrary node directly into the fault manager (used to
+// seed a non-BMS DTC for the clear-DTCs dogfood lane). Mutex-protected like the
+// other g_fm writers.
+static void synth_report_fault(uint8_t node, uint8_t fault_code, uint8_t severity)
+{
+    if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        fault_manager_report(&g_fm, node, fault_code, severity);
+        xSemaphoreGive(g_fm_mutex);
+    }
+}
+
+static void run_dogfood_diag_script(uint32_t *script_ms, uint32_t *sent_mask)
+{
+    if (!g_diag_dogfood_script) return;
+
+    *script_ms += 10;
+
+    if (*script_ms >= 100 && !(*sent_mask & 0x01)) {
+        synth_diag_request(MC_DIAG_START_SESSION, 1);
+        *sent_mask |= 0x01;
+    }
+    if (*script_ms >= 200 && !(*sent_mask & 0x02)) {
+        synth_diag_request(MC_DIAG_READ_MODE, 2);
+        *sent_mask |= 0x02;
+    }
+    if (g_diag_dogfood_inject_fault
+        && *script_ms >= 300
+        && !(*sent_mask & 0x04)) {
+        synth_bms_fault(MC_BMS_FAULT_OVERTEMP);
+        *sent_mask |= 0x04;
+    }
+    if (g_diag_extra_pt_fault
+        && *script_ms >= 310
+        && !(*sent_mask & 0x80)) {
+        // A non-BMS (powertrain) DTC. A BMS-scoped CLEAR_DTCS must leave this
+        // one behind; the clear-all seeded bug wrongly drops it.
+        synth_report_fault(MC_NODE_POWERTRAIN, MC_WARN_POWERTRAIN_OFFLINE, 1);
+        *sent_mask |= 0x80;
+    }
+    if (*script_ms >= 350 && !(*sent_mask & 0x08)) {
+        synth_diag_request(MC_DIAG_ACTUATOR_TEST, 6);
+        *sent_mask |= 0x08;
+    }
+    if (*script_ms >= 450 && !(*sent_mask & 0x10)) {
+        synth_diag_request(MC_DIAG_READ_DTCS, 3);
+        *sent_mask |= 0x10;
+    }
+    if (*script_ms >= 650 && !(*sent_mask & 0x20)) {
+        synth_diag_request(MC_DIAG_CLEAR_DTCS, 4);
+        *sent_mask |= 0x20;
+    }
+    if (*script_ms >= 750 && !(*sent_mask & 0x40)) {
+        synth_diag_request(MC_DIAG_READ_DTCS, 5);
+        *sent_mask |= 0x40;
+    }
+}
+
+// Drive the "start diagnostic session while driving" dogfood lane / debug_gym
+// `start_session_in_drive` seed inside gateway firmware.
+//
+// At 100ms the vehicle is put in DRIVE (a dogfood trigger, like the charging
+// script's plug event) and a diagnostic tool attempts to open a service session
+// mid-drive (START_SESSION, req 1). The correct firmware refuses it
+// (gateway_diag_response status=REJECTED, value0=DRIVE); the seeded-bug firmware
+// skips the guard and accepts it (status=OK, value0=SERVICE). At 200ms a
+// READ_MODE (req 2) reads back the resulting mode. The mode is forced in the
+// same tick immediately before the request, so update_vehicle_mode (which runs
+// later in the loop) cannot perturb the mode the handler observes.
+static void run_dogfood_diag_startdrive_script(uint32_t *script_ms, uint32_t *sent_mask)
+{
+    if (!g_diag_startdrive_script) return;
+
+    *script_ms += 10;
+
+    if (*script_ms >= 100 && !(*sent_mask & 0x01)) {
+        g_gs.mode = VEHICLE_DRIVE;
+        sim_trace_u32("vehicle_mode", (uint32_t)g_gs.mode);
+        synth_diag_request(MC_DIAG_START_SESSION, 1);
+        *sent_mask |= 0x01;
+    }
+    if (*script_ms >= 200 && !(*sent_mask & 0x02)) {
+        synth_diag_request(MC_DIAG_READ_MODE, 2);
+        *sent_mask |= 0x02;
+    }
+}
+
+/// Drive the charging dogfood lane inside gateway firmware.
+///
+/// This exercises the charging safety contract without relying on the
+/// (still unreliable) firmware CAN RX path, mirroring the diagnostics script:
+///   * at 100ms a charger is "plugged in" → the gateway enters CHARGING and
+///     broadcasts the mode (mc_gateway_determine_mode keeps CHARGING sticky);
+///   * at 300ms a drive request arrives while plugged → gateway_state_enter_drive
+///     is a no-op outside READY, so the vehicle must remain in CHARGING
+///     (drive blocked while plugged).
+static void run_dogfood_charging_script(uint32_t *script_ms, uint32_t *sent_mask)
+{
+    if (!g_charging_dogfood_script) return;
+
+    *script_ms += 10;
+
+    // Plug inserted → enter CHARGING.
+    if (*script_ms >= 100 && !(*sent_mask & 0x01)) {
+        g_gs.mode = VEHICLE_CHARGING;
+        sim_trace_u32("charging_plug", 1);
+        sim_trace_u32("gateway_charging_state", (uint32_t)g_gs.mode);
+        sim_trace_u32("vehicle_mode", (uint32_t)g_gs.mode);
+        xEventGroupSetBits(g_mode_events, 0x01);
+        *sent_mask |= 0x01;
+    }
+
+    // Drive request while plugged → must stay in CHARGING.
+    if (*script_ms >= 300 && !(*sent_mask & 0x02)) {
+        gateway_state_enter_drive(&g_gs); // no-op unless mode == READY
+        uint8_t blocked = (g_gs.mode == VEHICLE_CHARGING) ? 1 : 0;
+        sim_trace_u32("charging_drive_blocked", blocked);
+        sim_trace_u32("gateway_charging_state", (uint32_t)g_gs.mode);
+        *sent_mask |= 0x02;
+    }
+}
+
+/// Emit the trace markers for an OTA rollback: the update aborted and the
+/// bootloader reverted to the previous known-good slot. Shared by every
+/// fault-matrix variant so each rolls back with an identical marker set.
+static void emit_ota_rollback(const mc_ota_slot_state_t *ota)
+{
+    sim_trace_u32("ota_state", ota->state); // MC_OTA_ROLLED_BACK
+    sim_trace_u32("ota_rollback", ota->rolled_back);
+    sim_trace_u32("ota_active_slot", ota->active_slot);
+    sim_trace_u32("ota_boot_result", 0);
+}
+
+/// Drive the OTA (over-the-air firmware update) dogfood lane inside gateway
+/// firmware.
+///
+/// Like the charging/diagnostics scripts this exercises the OTA state machine
+/// via compact trace events without depending on the (still unreliable)
+/// firmware CAN RX path. It drives the pure slot-metadata model
+/// (common/src/microcar_ota_slot.c) so the lane asserts the model's real
+/// commit/rollback behavior end-to-end.
+///
+/// Happy path (OTA_FAULT_NONE):
+///   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3, slot B)
+///   → REBOOTING(4) → HEALTHY(5, boot ok).
+/// Fault-matrix variants all roll back to the known-good slot A (state 6),
+/// each aborting at the step its fault strikes:
+///   * OTA_FAULT_BAD_CRC          — corrupt image fails verify:
+///       IDLE → DOWNLOADING → VERIFYING(crc BAD) → ROLLED_BACK.
+///   * OTA_FAULT_INTERRUPTED_WRITE — power cut during write (partial image):
+///       IDLE → DOWNLOADING → ROLLED_BACK (never verifies).
+///   * OTA_FAULT_BAD_HEALTH        — armed image boots but fails self-test:
+///       IDLE → DOWNLOADING → VERIFYING → COMMIT_PENDING → REBOOTING → ROLLED_BACK.
+///   * OTA_FAULT_POWERCUT_PRECOMMIT — power cut after verify, before the atomic
+///     commit; the verified-but-uncommitted image is discarded, revert to A:
+///       IDLE → DOWNLOADING → VERIFYING(crc ok) → ROLLED_BACK.
+/// States are traced as `ota_state` at successive scheduled times, with
+/// `ota_crc_ok`, `ota_slot`, `ota_boot_result`, `ota_rollback` and
+/// `ota_active_slot` marker events at the relevant steps.
+static void run_dogfood_ota_script(uint32_t *ota_ms, uint32_t *ota_sent)
+{
+    if (!g_ota_dogfood_script) return;
+
+    // Persistent slot-metadata model for this update campaign. One gateway runs
+    // per process, so a function-static instance is safe here.
+    static mc_ota_slot_state_t ota;
+    static uint8_t             ota_inited = 0;
+    if (!ota_inited) {
+        mc_ota_init(&ota);
+        ota_inited = 1;
+    }
+
+    // Fault selectors: each fault flips exactly one input to the model.
+    int download_complete = (g_ota_fault_mode != OTA_FAULT_INTERRUPTED_WRITE);
+    int crc_ok            = (g_ota_fault_mode != OTA_FAULT_BAD_CRC);
+    int boot_healthy      = (g_ota_fault_mode != OTA_FAULT_BAD_HEALTH);
+
+    // SEEDED DEBUG-GYM BUG (ota_rollback): a broken CRC check reports the corrupt
+    // image as valid. The model then commits and boots the bad slot instead of
+    // rolling back — the debug_gym `ota_rollback` seeded bug. Off by default;
+    // only gateway_ota_crcbug sets g_ota_crc_check_bug.
+    if (g_ota_crc_check_bug) crc_ok = 1;
+
+    *ota_ms += 10;
+
+    // 100ms — IDLE, update campaign accepted.
+    if (*ota_ms >= 100 && !(*ota_sent & 0x01)) {
+        sim_trace_u32("ota_state", ota.state); // MC_OTA_IDLE
+        *ota_sent |= 0x01;
+    }
+    // 200ms — DOWNLOADING. An interrupted write discards the partial image and
+    // rolls back here, before the image ever verifies.
+    if (*ota_ms >= 200 && !(*ota_sent & 0x02)) {
+        mc_ota_begin_download(&ota);
+        sim_trace_u32("ota_state", ota.state); // MC_OTA_DOWNLOADING
+        if (!mc_ota_finish_download(&ota, download_complete)) {
+            emit_ota_rollback(&ota);
+        }
+        *ota_sent |= 0x02;
+    }
+    // 300ms — VERIFYING. A corrupt image fails CRC and rolls back here.
+    if (*ota_ms >= 300 && !(*ota_sent & 0x04)) {
+        if (ota.state == MC_OTA_DOWNLOADING) {
+            sim_trace_u32("ota_state", MC_OTA_VERIFYING);
+            int verified = mc_ota_verify(&ota, crc_ok);
+            sim_trace_u32("ota_crc_ok", ota.crc_ok);
+            if (!verified) {
+                emit_ota_rollback(&ota);
+            }
+        }
+        *ota_sent |= 0x04;
+    }
+    // 400ms — COMMIT_PENDING: arm slot B as the boot target (only if verified).
+    // A power cut here (after verify, before the atomic commit) discards the
+    // verified-but-uncommitted image and reverts to slot A — the commit is the
+    // point of no return.
+    if (*ota_ms >= 400 && !(*ota_sent & 0x08)) {
+        if (ota.state == MC_OTA_VERIFYING) {
+            if (g_ota_fault_mode == OTA_FAULT_POWERCUT_PRECOMMIT) {
+                mc_ota_rollback(&ota);
+                emit_ota_rollback(&ota);
+            } else {
+                mc_ota_commit(&ota);
+                sim_trace_u32("ota_state", ota.state); // MC_OTA_COMMIT_PENDING
+                sim_trace_u32("ota_slot", ota.target_slot);
+            }
+        }
+        *ota_sent |= 0x08;
+    }
+    // 500ms — REBOOTING into the new slot (only if armed).
+    if (*ota_ms >= 500 && !(*ota_sent & 0x10)) {
+        if (ota.state == MC_OTA_COMMIT_PENDING) {
+            mc_ota_reboot(&ota);
+            sim_trace_u32("ota_state", ota.state); // MC_OTA_REBOOTING
+        }
+        *ota_sent |= 0x10;
+    }
+    // 600ms — HEALTHY on a good self-test, else roll back to slot A (bad boot).
+    if (*ota_ms >= 600 && !(*ota_sent & 0x20)) {
+        if (ota.state == MC_OTA_REBOOTING) {
+            if (mc_ota_health_check(&ota, boot_healthy)) {
+                sim_trace_u32("ota_state", ota.state); // MC_OTA_HEALTHY
+                sim_trace_u32("ota_boot_result", ota.boot_healthy);
+            } else {
+                emit_ota_rollback(&ota);
+            }
+        }
+        *ota_sent |= 0x20;
+    }
+}
+
 /// Dispatch a received CAN frame to the appropriate handler.
 /// Called from heartbeat_rx task (only processes heartbeat and BMS fault).
 static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
@@ -157,6 +706,9 @@ static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
         break;
     case MC_MSG_BMS_FAULT:
         handle_bms_fault(frame);
+        break;
+    case MC_MSG_DIAG_REQUEST:
+        handle_diag_request(frame);
         break;
     default:
         break;
@@ -181,6 +733,15 @@ static mc_vehicle_mode_t update_vehicle_mode(uint32_t now_ms)
         bms_fault   = fault_manager_has_critical(&g_fm);
         fault_count = fault_manager_active_count(&g_fm);
         xSemaphoreGive(g_fm_mutex);
+    }
+
+    if (!bms_fault && g_diag_session_active) {
+        g_gs.all_nodes_online = all_online;
+        g_gs.bms_fault_active = bms_fault;
+        g_gs.bms_limp_requested = bms_limp;
+        g_gs.active_fault_count = fault_count;
+        g_gs.mode = VEHICLE_SERVICE;
+        return g_gs.mode;
     }
 
     return gateway_state_update(&g_gs, all_online, bms_fault,
@@ -335,6 +896,14 @@ void gateway_main(void *pvParameters)
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
+    uint32_t diag_script_ms = 0;
+    uint32_t diag_script_sent = 0;
+    uint32_t charging_script_ms = 0;
+    uint32_t charging_script_sent = 0;
+    uint32_t ota_script_ms = 0;
+    uint32_t ota_script_sent = 0;
+    uint32_t startdrive_script_ms = 0;
+    uint32_t startdrive_script_sent = 0;
 
     // Send initial heartbeat at boot.
     send_heartbeat(0, &tx);
@@ -349,6 +918,11 @@ void gateway_main(void *pvParameters)
         while (xQueueReceive(g_hb_queue, &ev, 0) == pdTRUE) {
             handle_heartbeat(now_ms, &ev);
         }
+
+        run_dogfood_diag_script(&diag_script_ms, &diag_script_sent);
+        run_dogfood_diag_startdrive_script(&startdrive_script_ms, &startdrive_script_sent);
+        run_dogfood_charging_script(&charging_script_ms, &charging_script_sent);
+        run_dogfood_ota_script(&ota_script_ms, &ota_script_sent);
 
         // ── Check for urgent fault notifications ────────────────
         uint32_t notify_val = 0;
@@ -375,7 +949,6 @@ void gateway_main(void *pvParameters)
         mc_vehicle_mode_t new_mode = update_vehicle_mode(now_ms);
 
         if (new_mode != old_mode) {
-            const char *mode_str = gateway_mode_string(new_mode);
             sim_trace_u32("vehicle_mode", (uint32_t)new_mode);
             // Signal mode change to event group.
             xEventGroupSetBits(g_mode_events, 0x01);

@@ -1,0 +1,3 @@
+# expect-kind: invalid
+# A scenario with no machines is rejected ("at least one machine").
+name = "empty_scenario"

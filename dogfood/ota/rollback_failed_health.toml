@@ -1,0 +1,70 @@
+# rollback_failed_health — a bad post-update boot rolls back to the old slot.
+#
+# OTA fault-matrix case (the plan's "roll back on failed health"). Uses the
+# `gateway_ota_badhealth` dogfood firmware variant, which drives the OTA
+# slot-metadata model (common/src/microcar_ota_slot.c) all the way through a
+# valid download, verify and commit — then the post-reboot self-test fails, so
+# the model reverts to the previous known-good slot A:
+#   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3, slot B)
+#   → REBOOTING(4) → ROLLED_BACK(6, slot A).
+#
+# The lane asserts the image was valid (crc ok) yet the update still rolled back
+# on a failed boot, and the active/boot slot returned to slot A (0) — the update
+# did NOT stick.
+#
+# ota-expect: state-sequence 0,1,2,3,4,6
+# ota-expect: crc-ok
+# ota-expect: rolled-back
+# ota-expect: active-slot 0
+
+name = "ota_rollback_failed_health"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ota_badhealth"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10

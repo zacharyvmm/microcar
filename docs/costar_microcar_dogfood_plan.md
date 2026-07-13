@@ -4,6 +4,11 @@
 
 This plan turns `microcar` into the canonical dogfood project for `costar`: a compact passenger-EV embedded-system benchmark that exercises the simulator surfaces the product needs most.
 
+> **Implementation-status correction (2026-07-10):** M23-M27 landed staged
+> primitives, not accepted P0a/P0b/P1 infrastructure. The required repair order
+> and acceptance tests live in [`../UNBLOCKING.md`](../UNBLOCKING.md); do not
+> treat a trace-only CAN or reboot result as a completed dogfood lane.
+
 The work should be sequenced in two tracks:
 
 1. Stabilize `costar`'s simulator chassis: correctness, per-session isolation, trace identity, topology, breakpoints, replay, and control-plane reliability.
@@ -439,218 +444,1112 @@ Fault matrix:
 - Diagnostics session demo.
 - Telematics remote-command demo.
 
-## Task List
+## Milestone 1 status (this branch)
 
-### costar stabilization
+The first implementation milestone — costar stabilization + microcar harness
+foundation — is implemented on this branch:
 
-- [ ] Add `run_until` regression tests for cancelled tombstones.
-- [ ] Fix `run_until` so cancelled events cannot cause `unwrap()` panics.
-- [ ] Fix `run_until` so live events beyond the deadline are not dispatched.
-- [ ] Add multi-fiber resume/suspend regression coverage.
-- [ ] Refresh the active fiber yielder on every resume.
-- [ ] Clear or restore the active fiber yielder on scheduler return.
-- [ ] Add stepped-vs-continuous equivalence tests.
-- [ ] Guard FFI paths so guest-reachable panics do not cross `extern "C"` boundaries.
+- costar: `run_until` tombstone/overshoot fix (+ stepped-vs-continuous tests);
+  fiber yielder refresh/clear (+ multi-fiber tests); `sim_net_drain_tx` frame
+  conservation (`pop_tx`); host-poller re-arm; TCP partial-write framing
+  (`out_buf`/`out_pos`); zero-length SPI RX fault guard; `RtosBackend`
+  `zephyr` serde rename; FFI panic-boundary test.
+- microcar: reframed docs (README + vehicle model); `dogfood/` harness crate
+  (subprocess runner, FNV-1a trace hashing, invariant framework, wall-clock
+  timeout, JSON summary, solo-vs-repeat determinism, `harness` CLI).
 
-### costar per-session state
+The later lanes (simfarm, toml_zoo, topology, cockpit, debug_gym, diagnostics,
+telematics, charging, OTA) and the larger costar tracks (per-session state,
+Trace v2, control-plane unification) remain for subsequent milestones.
 
-- [ ] Inventory all process-global and thread-local simulator state.
-- [ ] Define the per-World/per-simulator state owner.
-- [ ] Move device registries into per-session/per-World state.
-- [ ] Move virtual clock and current task identity into active simulator state.
-- [ ] Move display/touch inspection state into the session-owned world.
-- [ ] Update gRPC `ConfigureBoard` to write session-owned device state.
-- [ ] Update gRPC `Run` to execute against the same device state.
-- [ ] Update `InspectDevices` to read session-owned device state.
-- [ ] Add concurrent-session determinism tests.
+## Milestone 2 status (this branch)
 
-### costar control planes
+The second milestone — the two cheapest high-yield dogfood lanes (`simfarm`,
+`toml_zoo`) plus the hostile-input handling they require — is implemented on
+this branch:
 
-- [ ] Define a shared world runner used by JSON-RPC and gRPC.
-- [ ] Avoid holding the global sessions lock during full simulation runs.
-- [ ] Return the world to the session on successful run completion.
-- [ ] Mark the session failed and recover cleanly after run panic.
-- [ ] Add deterministic session listing.
-- [ ] Bound session/keyframe/trace storage or add cleanup policies.
-- [ ] Add gRPC integration test for configure/run/display/touch/inspect.
-- [ ] Add JSON-RPC panic-isolation test.
-- [ ] Add gRPC panic-isolation test.
+- costar: Linux build fix so the workspace compiles off macOS
+  (`sim-net` TAP fd non-blocking via `fcntl(F_SETFL)` with the Linux
+  `O_NONBLOCK`; the old `File::set_nonblocking` is not a stable `std::fs::File`
+  method and never compiled on Linux). Host-TAP path only — no effect on
+  deterministic simulation.
+- microcar binary: never panics on malformed input. `src/main.rs` handles every
+  load/validate/build/run failure and prints a structured
+  `microcar: error [<kind>]: ...` line on stderr with stable exit codes
+  (`0` = pass, `1` = runtime fail, `2` = scenario error). New `src/validate.rs`
+  adds the automotive-semantic checks — `unknown-firmware`, `missing-gateway`,
+  `duplicate-bus-node`, `drive-without-powertrain` — while costar's
+  `Scenario::from_file` already covers the structural checks (duplicate IDs,
+  bad bus/link/fault references, TOML parse/range).
+- `toml_zoo` lane: `dogfood/toml_zoo/` corpus of 11 malformed scenarios (each
+  tagged `# expect-kind:`), `dogfood/src/toml_zoo.rs`, and `harness toml-zoo`.
+  Asserts every case returns the expected structured error kind with exit 2 and
+  no panic, plus sibling isolation (a malformed scenario run concurrently with a
+  healthy one does not disturb it). The `charging-while-drive` / `ota-while-drive`
+  cases are deferred to the charging/OTA lanes — they need vehicle modes not yet
+  in the scenario schema.
+- `simfarm` lane: `dogfood/src/simfarm.rs` and `harness simfarm`. Concurrent
+  determinism (N sessions produce the same normalized trace hash as a solo run),
+  churn (repeated create/run/destroy stays stable — no cross-launch state leak),
+  and panic isolation (a malformed sibling fails cleanly while the healthy run is
+  unaffected). Because the microcar binary hosts one `World` per process,
+  concurrency here is across processes; true in-process multi-session isolation
+  (shared `SIM_NOW`/`CURRENT_TASK_ID`/device registries) is a later costar-server
+  milestone (the "Move State to Per-World Ownership" track).
 
-### costar trace, topology, and debugging
+Both lanes emit JSON summaries for CI and exit non-zero on failure. The dogfood
+crate has 45 unit tests (determinism/invariants/trace-hash/summary + 8 simfarm +
+8 toml_zoo) and is clippy-clean. The remaining lanes (topology, cockpit,
+debug_gym, diagnostics, telematics, charging, OTA) and the larger costar tracks
+(per-session state, Trace v2, control-plane unification) remain for subsequent
+milestones.
 
-- [ ] Define trace v2 event structure.
-- [ ] Add machine/component/port identity to trace events.
-- [ ] Add tx-to-rx correlation IDs.
-- [ ] Add parent/child correlation for gateway forwarding.
-- [ ] Add compatibility adapter for legacy human/JSONL trace output.
-- [ ] Define topology graph model with nodes, ports, and typed edges.
-- [ ] Support multi-interface machines.
-- [ ] Add `step_event`.
-- [ ] Add `step_message`.
-- [ ] Add `step_task`.
-- [ ] Add `continue_until(predicate)`.
-- [ ] Add breakpoint predicates for messages, vehicle state, device state, dropped frames, DTC creation, and assertion failure.
-- [ ] Implement keyframe save/restore.
-- [ ] Add deterministic replay/scrub support.
+## Milestone 3 status (this branch)
 
-### costar networking and devices
+The third milestone — the `topology` lane plus the costar CAN bus-isolation fix
+it rests on — is implemented on this branch:
 
-- [ ] Fix `sim_net_drain_tx` to preserve all queued TX frames.
-- [ ] Add frame-conservation tests.
-- [ ] Re-arm host poller fds after readiness events.
-- [ ] Add repeated-host-I/O wakeup integration test.
-- [ ] Fix TCP bridge partial-write framing.
-- [ ] Add socket-pressure integration test.
-- [ ] Guard zero-length SPI RX fault-injection corruption.
-- [ ] Add FFI panic-boundary tests for device paths.
+- costar: **CAN TX bus isolation** (`sim-world/src/world.rs`). A firmware CAN
+  send was previously placed onto *every* World bus regardless of which bus the
+  sending machine was attached to, so multi-bus topology had no isolation. Now a
+  send is only placed on the buses the machine is actually a node of (a
+  multi-interface machine such as a gateway still sends on each of its buses).
+  Covered by the `test_firmware_can_tx_respects_bus_membership` sim-world engine
+  test. No existing scenario regresses: single-bus scenarios are unaffected, and
+  the multi-bus fleet scenarios carry no golden trace.
+- microcar: **topology lane** — `dogfood/topology/` scenarios
+  (`dual_bus_gateway`, `diag_request_through_gateway`, `fleet_16_nodes`),
+  `dogfood/src/topology.rs`, and `harness topology`. Each scenario declares
+  `# topology-probe: probe=0xNNNN expect=<machine ids>` directives; the harness
+  injects unique-id CAN probes (0x07xx, unused by the ECU protocol) on each bus
+  and asserts, from the `can-rx` trace, that every probe reaches exactly the
+  declared receivers — once each — and no node on any other bus. That covers the
+  plan's "expected receivers get each frame", "unexpected receivers do not", and
+  "no duplicate injection into a controller" assertions.
 
-### microcar foundation
+Deferred to the Trace-v2 / gateway-bridge milestone (they need correlation ids,
+per-event source/destination identity, and gateway frame *forwarding*, none of
+which exist yet): the `drive_body_bus_bridge`, `gateway_loop_prevention`, and
+`fleet_64_nodes` scenarios, and the "forwarded frame preserves correlation id" /
+"trace includes source and destination component identity" assertions. The
+dogfood crate now has 52 unit tests (+7 topology) and stays clippy-clean.
 
-- [ ] Update README language from go-kart to compact passenger EV.
-- [ ] Update architecture docs to describe compact-EV topology and modes.
-- [ ] Add vehicle model doc.
-- [ ] Add roadmap doc linking dogfood lanes to `costar` capabilities.
-- [ ] Keep current Gateway, Powertrain, BMS, and Dashboard ECUs as the base.
-- [ ] Define current and future vehicle modes in docs and scenarios.
-- [ ] Create `dogfood/harness`.
-- [ ] Add scenario runner wrapper.
-- [ ] Add trace hash normalizer.
-- [ ] Add invariant checker skeleton.
-- [ ] Add timeout wrapper.
-- [ ] Add JSON summary output.
-- [ ] Add solo-vs-repeat determinism check.
+## Milestone 4 status (this branch)
 
-### microcar simfarm
+The fourth milestone — the **Trace v2 foundation**, gated opt-in so existing
+golden traces stay byte-identical — is implemented on this branch:
 
-- [ ] Add concurrent-session runner.
-- [ ] Add solo-vs-concurrent trace hash comparison.
-- [ ] Add `N=2` smoke scenario.
-- [ ] Add `N=4` medium-lane scenario.
-- [ ] Add `N=8` and `N=16` nightly scenarios.
-- [ ] Add session churn test.
-- [ ] Add RSS plateau check.
-- [ ] Add intentionally bad scenario for panic isolation.
-- [ ] Assert healthy sibling sessions finish unchanged.
+- costar: `sim_core::TraceV2` (`trace_id`, `correlation_id`, `virtual_time`,
+  `event_type`, `direction`, `bus_or_link_id`, `message_id`, `source`,
+  `destination`, `len`), `serde::Serialize` with `to_json_line()` (JSONL) and
+  `to_human_line()` — the latter regenerates the legacy `can-rx`/`can-tx` text,
+  satisfying the plan's "old human/JSONL trace output can be generated from
+  trace v2". `World` gains an opt-in v2 sink (`enable_trace_v2` /
+  `drain_trace_v2` / `trace_v2_jsonl`). When enabled, `deliver_buses` emits, per
+  CAN send, one `tx` edge plus one `rx` edge per receiver, all sharing a
+  correlation id derived from the per-send bus sequence (`CanBus::drain_arrived`
+  now surfaces `seq`). Default off ⇒ the human/golden trace is byte-identical
+  (verified: a scenario's stdout is identical with and without the flag).
+  Covered by `test_trace_v2_correlation_and_identity` and
+  `test_trace_v2_disabled_by_default`; sim-world now has 104 tests.
+- microcar: `microcar <scenario> --trace-v2 <path>` enables the sink and writes
+  the v2 records as JSONL after the run. It never changes the default stdout
+  output or the exit codes (0/1/2); the JSONL write is best-effort.
 
-### microcar toml_zoo
+This delivers the plan's "every transmit-to-receive path carries a correlation
+id" and "trace includes source and destination component identity". The
+topology lane now **consumes** the v2 JSONL: `harness topology` runs each
+scenario with `--trace-v2` and, per probe, asserts every delivery shares one
+correlation id and one source and that the destinations equal the expected
+receivers (the plan's "forwarded frame preserves correlation id" for direct
+sends). The dogfood crate now has 56 unit tests (+4 trace-v2). Remaining Trace
+v2 fields (`parent_id`, component/port ids, `task_id`, `rtos`,
+`payload_summary`) and gateway parent/child *forwarding* causality (which the
+`drive_body_bus_bridge` / `gateway_loop_prevention` scenarios need) are additive
+follow-ups.
 
-- [ ] Add duplicate machine ID case.
-- [ ] Add missing gateway case.
-- [ ] Add bad bus reference case.
-- [ ] Add unknown ECU firmware case.
-- [ ] Add invalid fault target case.
-- [ ] Add negative duration case.
-- [ ] Add huge duration case.
-- [ ] Add duplicate bus node case.
-- [ ] Add drive mode without powertrain case.
-- [ ] Add charging while drive case.
-- [ ] Add OTA while drive case.
-- [ ] Assert all cases return structured errors.
-- [ ] Assert malformed cases do not poison server sessions.
+## Milestone 5 status (this branch)
 
-### microcar topology
+The fifth milestone — **gateway bus forwarding** with parent/child causality,
+completing the topology lane's bridge scenario — is implemented on this branch:
 
-- [ ] Add `vcan_drive`, `vcan_body`, and `vcan_diag` scenarios.
-- [ ] Add body-control ECU stub only as needed for body-bus coverage.
-- [ ] Add diagnostic-tool ECU or host diagnostic client.
-- [ ] Add gateway bridge rules.
-- [ ] Add gateway loop-prevention behavior.
-- [ ] Add topology invariant checker.
-- [ ] Add 16-node fleet scenario.
-- [ ] Add 64-node fleet scenario.
+- costar: opt-in multi-interface **bridging**. A machine declared a bridge
+  (`[[bridge]] machine = "…"`) forwards a frame it receives on one bus onto its
+  other buses, exactly once (hop-based loop prevention). Gated behind the
+  declaration, so scenarios without a `[[bridge]]` are byte-identical (zero
+  regression). `CanBus` carries `hop` + `parent_correlation` and gains
+  `forward()`; `World::deliver_buses` collects forward actions for bridge
+  receivers of original (hop-0) frames and re-transmits them after the drain
+  pass. `sim_core::TraceV2` gains `parent_id`: a forwarded frame's records carry
+  the correlation id of the frame that caused the forward. Correlation ids are
+  1-based (0 = "no parent"). Covered by
+  `test_gateway_forwarding_parent_causality`; sim-world has 105 tests.
+- microcar: `dogfood/topology/drive_body_bus_bridge.toml` (the gateway bridges
+  `vcan_drive` ↔ `vcan_body`); the topology harness is now forwarding-aware — it
+  parses `parent_id` from the v2 JSONL and, per probe, accepts exactly one root
+  correlation plus forwarded edges whose `parent_id` links back to it, with the
+  full receiver set delivered once each.
 
-### microcar cockpit
+This realizes the plan's topology assertions "gateway bridge emits exactly one
+forwarded frame", "forwarded frame preserves correlation id", and "trace
+includes source and destination component identity". The topology lane now
+covers 5 scenarios (`dual_bus_gateway`, `diag_request_through_gateway`,
+`fleet_16_nodes`, `drive_body_bus_bridge`, `gateway_loop_prevention`), all green.
+`gateway_loop_prevention` demonstrates single-hop forwarding — a forwarded frame
+is never re-forwarded, so it cannot chain or loop across a bridge chain; the
+complementary multi-bridge de-duplication (several bridge paths inject a
+controller on a shared bus only once, keyed on `(source_bus, seq, target_bus)`)
+is covered by the costar `test_gateway_forwarding_dedups_multiple_bridges` engine
+test (sim-world now has 106 tests). Only `fleet_64_nodes` (a nightly-scale
+variant of `fleet_16_nodes`) remains deferred.
 
-- [ ] Define dashboard framebuffer contract.
-- [ ] Add boot screen state.
-- [ ] Add ready screen state.
-- [ ] Add drive screen state.
-- [ ] Add limited-power warning screen state.
-- [ ] Add fault screen state.
-- [ ] Add charging screen state later.
-- [ ] Add OTA progress screen state later.
-- [ ] Add gRPC cockpit harness.
-- [ ] Add framebuffer hash checkpoints.
-- [ ] Assert display state matches trace-derived vehicle state.
-- [ ] Assert touch injection causes expected UI transition.
+## Milestone 6 status (this branch)
 
-### microcar debug_gym
+The sixth milestone completes the **Trace v2 product data model** field set. In
+addition to the identity/causality fields from M4–M5 (`trace_id`,
+`correlation_id`, `parent_id`, `virtual_time`, `event_type`, `direction`,
+`bus_or_link_id`, `message_id`, `source`, `destination`, `len`),
+`sim_core::TraceV2` now carries `machine_id`, `machine_name`, `component_id`,
+`component_type`, `port_id`, `payload_summary`, `task_id`, and `rtos` — the full
+list from the plan's "Make Trace v2 the Product Data Model".
 
-- [ ] Add seeded gateway race bug.
-- [ ] Add seeded powertrain timeout/cancel bug.
-- [ ] Add seeded BMS stale sensor bug.
-- [ ] Add seeded dashboard missed warning bug.
-- [ ] Add seeded gateway bridge loop bug.
-- [ ] Add bug metadata format.
-- [ ] Add failing trace fixtures.
-- [ ] Add fixed trace fixtures.
-- [ ] Add stepped-vs-continuous checks.
-- [ ] Add keyframe restore checks.
-- [ ] Add breakpoint acceptance checks.
+For CAN delivery edges these are populated as: `machine_id`/`machine_name` = the
+primary machine (receiver for `rx`, sender for `tx`, name resolved from the
+World); `component_id` = 0 / `component_type` = `"can_controller"`;
+`payload_summary` = a compact lowercase-hex of the first 8 payload bytes (handy
+for GUI packet animation / AI debugging). `port_id`, `task_id`, and `rtos` are
+reserved (empty / 0) for the typed-port-topology and task/device event types
+that will populate them. Still opt-in: a scenario's default stdout is
+byte-identical with and without `--trace-v2` (re-verified). sim-world has 106
+tests; the topology lane's JSONL parser is unaffected by the added fields.
 
-### microcar diagnostics
+## Milestone 7 status (this branch)
 
-- [ ] Add DTC state model.
-- [ ] Add diagnostic session start.
-- [ ] Add read vehicle mode flow.
-- [ ] Add read DTC flow.
-- [ ] Add clear DTC flow.
-- [ ] Add live BMS data flow.
-- [ ] Add actuator self-test flow.
-- [ ] Add service mode disables drive scenario.
-- [ ] Assert DTC persists after transient fault.
-- [ ] Assert clear DTC succeeds only when fault inactive.
+The seventh milestone adds the first **debugging primitives** from the plan's
+"Add Topology and Debugging Primitives" costar section:
 
-### microcar telematics
+- `World::step()` advances the simulation by exactly one virtual-time event,
+  returning `StepOutcome::Advanced(now)` or `StepOutcome::Done`. `run()` and
+  `run_until()` are refactored to `while running { step()? }`, so a stepped
+  replay is **trace-identical to a continuous run by construction** — the
+  debug_gym "run-to-completion trace equals stepped trace" invariant. Verified
+  by `test_stepped_equals_continuous` and by re-running all 29 non-soak
+  scenarios (golden traces unchanged).
+- `World::continue_until(predicate, deadline)` steps until a `FnMut(&World)`
+  predicate holds (returning whether it matched, or `false` at the deadline / on
+  completion) — the `continue_until(predicate)` primitive and the basis for
+  breakpoints. Verified by `test_continue_until_stops_at_predicate`.
 
-- [ ] Add telematics ECU or host-connected telematics path.
-- [ ] Add periodic status upload.
-- [ ] Add remote diagnostic query.
-- [ ] Add remote lock/unlock mock.
-- [ ] Add remote precondition request.
-- [ ] Add fault upload.
-- [ ] Add host TCP test harness.
-- [ ] Force small socket buffers in harness.
-- [ ] Assert repeated wakeups work.
-- [ ] Assert partial writes do not corrupt framing.
-- [ ] Assert remote command is rejected in unsafe state.
+These build directly on the existing deterministic run loop with no new firmware
+or external dependencies. sim-world now has 108 tests; the run-loop refactor is
+byte-identical for every existing scenario (golden traces intact) and
+clippy/fmt-clean. The remaining debug_gym pieces (keyframe-restore replay
+wiring, the seeded-bug corpus with golden failing/fixed traces, and a microcar
+`--step` harness mode) build on these primitives.
 
-### microcar charging
+## Milestone 8 status (this branch)
 
-- [ ] Add charger ECU or charger environment model.
-- [ ] Add plug inserted event.
-- [ ] Add charging handshake.
-- [ ] Add charging active state.
-- [ ] Add BMS reduced-current request.
-- [ ] Add charge complete state.
-- [ ] Add drive rejected while plugged scenario.
-- [ ] Add charger fault stops charging scenario.
-- [ ] Add unplug mid-charge scenario.
+The eighth milestone wires the M7 debugging primitives into an observable
+**debug_gym** dogfood lane (no new firmware or external deps):
 
-### microcar OTA
+- microcar: `microcar <scenario> --step` drives the run one event at a time via
+  `World::step()`; its output is byte-identical to a continuous run (verified).
+  `sim_world` re-exports `StepOutcome`.
+- microcar dogfood: `dogfood/src/debug_gym.rs` + `harness debug-gym`. Per
+  scenario it runs continuous and `--step` and asserts, end-to-end through the
+  product binary: **run-to-completion trace equals stepped trace** (trace-hash
+  compare), **`run_until` never overshoots** (max trace virtual time ≤ the
+  `duration_ms` deadline), and **clock never moves backward** (the segment-aware
+  monotonic check). `run_scenario_args` was added to the harness runner to pass
+  extra CLI flags such as `--step`.
 
-- [ ] Add OTA slot model.
-- [ ] Add image download state.
-- [ ] Add slot B write state.
-- [ ] Add CRC verification.
-- [ ] Add boot flag commit.
-- [ ] Add reboot and health check.
-- [ ] Add rollback behavior.
-- [ ] Add power-cut-before-write scenario.
-- [ ] Add power-cut-during-write scenario.
-- [ ] Add power-cut-after-write-before-commit scenario.
-- [ ] Add corrupt image scenario.
-- [ ] Add OTA rejected in DRIVE scenario.
-- [ ] Add OTA rejected while charging scenario.
+`harness debug-gym` runs a built-in set of short vehicle scenarios by default
+(override with `--scenario-dir`) and is 4/4 green. The dogfood crate has 59 unit
+tests, is clippy/fmt-clean, and the other lanes (topology 5/5, toml_zoo 11/11,
+simfarm) are unregressed. The remaining debug_gym pieces — the seeded-bug corpus
+(golden failing/fixed traces per bug) and keyframe-restore replay (on the
+existing `save_keyframe`/`load_keyframe` scaffolding) — build on this.
 
-### CI
+## Milestone 9 status (this branch)
 
-- [ ] Add PR-fast dogfood lane.
-- [ ] Add medium/main dogfood lane.
-- [ ] Add nightly dogfood lane.
-- [ ] Add manual/demo checklist.
-- [ ] Emit JSON summaries suitable for CI artifacts.
-- [ ] Document expected runtime budget for each lane.
+The ninth milestone completes the **topology** lane — all seven plan scenarios
+now pass (`harness topology` → 7/7). microcar-only (two new scenario files, no
+costar change, no regression to the other lanes):
+
+- `fleet_64_nodes.toml`: bus isolation at scale — 64 machines across 8 CAN
+  buses, the gateway the only shared hub node; three probes (8- and 7-node
+  fanout) each reach exactly their own bus and no node on any other, with v2
+  correlation/identity intact.
+- `bus_isolation_fault.toml`: a `drop_frame` fault isolates one bus. The gateway
+  bridges `vcan_a` ↔ `vcan_b`; a fault drops the probe id on `vcan_b` (applied
+  before the probe via an early warm-up tick), so the gateway's *forwarded* copy
+  is dropped and the `vcan_b` node is isolated while the `vcan_a` receivers
+  still get it. This combines M5 gateway forwarding with the existing
+  `drop_frame` bus fault: the forwarded frame is enqueued *during* the run, so
+  (unlike a pre-queued `bus_inject`) a mid-run drop fault can actually affect it
+  — which is exactly why this scenario was deferred until forwarding existed.
+
+The topology lane now covers every scenario listed in the plan
+(`dual_bus_gateway`, `drive_body_bus_bridge`, `diag_request_through_gateway`,
+`bus_isolation_fault`, `gateway_loop_prevention`, `fleet_16_nodes`,
+`fleet_64_nodes`), all green.
+
+## Milestone 10 status (this branch)
+
+The tenth milestone adds **keyframe save/restore + deterministic replay** — the
+costar "keyframe save/restore and deterministic replay" primitive and the
+debug_gym "keyframe restore reproduces the same future" invariant:
+
+- `World::replay_from_keyframe(kf)` reconstructs the World at a keyframe by a
+  **replay checkpoint** (the plan's explicitly preferred approach over
+  coroutine-stack snapshots): it rebuilds a fresh World from the keyframe's
+  stored `scenario_toml` and deterministically runs forward to `kf.now`. Because
+  the engine is deterministic, replaying to the checkpoint reproduces the exact
+  state, and continuing reproduces the exact future.
+- Covered by `test_keyframe_replay_reproduces_future`: a single continuous run's
+  trace is byte-identical to (replay to a mid-run keyframe) + (continue to
+  completion) from a freshly-rebuilt World. sim-world now has 109 tests;
+  clippy/fmt-clean; `run`/`run_until` unchanged (no scenario regression).
+
+Firmware-driven replay (reconstructing guest firmware state, not just bus/link
+delivery) remains a later milestone — costar's `build_world` produces bare
+machines, so this replay path is exact today for scenarios whose observable
+trace is driven by bus/link delivery (e.g. `bus_inject`).
+
+## Milestone 11 status (this branch)
+
+The eleventh milestone adds a **message breakpoint** on top of `continue_until`
+(the plan's "breakpoint predicates for message …"):
+
+- `World::run_to_frame(frame_id, deadline)` runs until a CAN frame with
+  `frame_id` is delivered (a `can-rx` for it appears in any machine's trace),
+  returning whether the breakpoint was hit. Covered by
+  `test_run_to_frame_breakpoint`.
+- Fixed a correctness bug in `continue_until` that this test surfaced: when the
+  matching event was delivered in the same step that drained the last pending
+  event (so the World went idle and `step()` returned `StepOutcome::Done`), the
+  loop broke *without* evaluating the predicate, missing a breakpoint on the
+  final event. The predicate is now checked on the `Done` step too.
+
+sim-world has 110 tests; clippy/fmt-clean; `run`/`run_until` unchanged (no
+scenario regression). Remaining breakpoint predicates (machine, vehicle state,
+device state, DTC creation, assertion failure) are thin wrappers on the same
+`continue_until` mechanism but mostly become meaningful once firmware emits
+those events.
+
+## Milestone 12 status (this branch)
+
+The twelfth milestone added the first **diagnostics** dogfood lane
+(recorded in detail in `docs/BLOCKERS.md`): protocol support for `SERVICE`,
+`OTA_UPDATE`, `TRANSPORT_MODE`, diagnostic request/response IDs
+(`0x600`/`0x601`), gateway DTC/session handling, a diagnostics-tool ECU,
+service-mode torque blocking, and a `harness diagnostics` lane. Like the later
+EV lanes it is **trace-backed** — it asserts compact firmware `user-u32` trace
+events emitted by explicit dogfood firmware variants (`gateway_diag`,
+`gateway_diag_fault`, `powertrain_diag_service`) rather than depending on the
+still-unreliable firmware-originated CAN RX/TX path. `harness diagnostics` is
+2/2 green (`read_clear_dtcs_after_bms_fault`, `service_mode_disables_drive`),
+covering SERVICE-mode entry, read-mode, read/clear DTCs, actuator self-test, and
+the SERVICE torque clamp.
+
+## Milestone 13 status (this branch)
+
+The thirteenth milestone adds the first **charging** dogfood lane — the plan's
+`charging` EV lane, "drive blocked while plugged". It is **microcar-only** (no
+costar change), gated behind opt-in dogfood firmware variants so every existing
+golden trace stays byte-identical (verified: the `debug_gym` trace hashes for
+`bms_overtemp_limp_mode` and `brake_overrides_throttle` are unchanged, and all
+29 non-soak vehicle scenarios still pass).
+
+Key realization: the vehicle-mode state machine and the safety clamp **already**
+model charging. `mc_gateway_determine_mode` keeps `VEHICLE_CHARGING` sticky
+(only a critical fault overrides it), and `mc_safety_clamp_torque` /
+`safety_mode_blocks_torque` already zero positive torque and disable the motor
+outside `DRIVE`/`LIMP`. What was missing was (a) any way to *enter* CHARGING
+(no plug trigger) and (b) a lane to exercise the safety property end-to-end.
+
+Following the M12 diagnostics dogfood-script pattern (trace-backed, no reliance
+on firmware CAN RX):
+
+- firmware: `gateway_enable_dogfood_charging_script()` + `run_dogfood_charging_script()`
+  in the gateway ECU — at 100 ms a charger is "plugged in" (gateway enters
+  CHARGING, traces `gateway_charging_state`); at 300 ms a drive request arrives
+  while plugged and `gateway_state_enter_drive` is a no-op outside READY, so the
+  vehicle stays in CHARGING (traces `charging_drive_blocked=1`).
+  `powertrain_enable_dogfood_charging()` forces a CHARGING-mode torque
+  computation with an 80% throttle demand and traces `charging_motor_command`
+  (torque + motor_enable), so the clamp is exercised. Two new boot functions
+  (`microcar_boot_gateway_charging`, `microcar_boot_powertrain_charging`) wire
+  the flags; `src/lib.rs` resolves `firmware/gateway_charging_ecu` /
+  `firmware/powertrain_charging_ecu`. All charging behavior is behind flags that
+  default to `0`, so the default gateway/powertrain firmware is unchanged.
+- microcar dogfood: `dogfood/charging/plug_blocks_drive.toml` (with
+  `# charging-expect:` directives), `dogfood/src/charging.rs`, and
+  `harness charging`. The lane asserts `charging-mode` (gateway entered
+  CHARGING), `drive-blocked` (a drive request while plugged left the vehicle in
+  CHARGING), and `motor-torque max=0` (every CHARGING motor command clamped
+  torque ≤ 0 with the motor disabled). `harness charging` is 1/1 green.
+
+The dogfood crate now has 68 unit tests (+6 charging); state_tests 92; all other
+lanes unregressed (`topology` 7/7, `toml_zoo` 11/11, `simfarm` PASS,
+`debug-gym` 4/4, `diagnostics` 2/2); clippy/fmt-clean. The deferred
+`toml_zoo` `charging-while-drive` case still needs charging represented in the
+scenario *schema* (a plug input / mode field), which this firmware-side lane
+does not yet add; OTA and the charging plant physics (temperature-rise /
+reduced-current / charge-complete) remain follow-ups.
+
+## Milestone 14 status (this branch)
+
+The fourteenth milestone delivers the first **cockpit** lane increment — proving
+the `sim-grpc` GUI-facing gRPC control plane end-to-end (UNBLOCKING.md §5
+Strategy A "prove the existing gRPC surface" + Strategy C interaction/inspection).
+It is **costar-only** and **additive test-only**: a new integration test at
+`crates/sim-grpc/tests/cockpit_test.rs` (376 lines, one `#[tokio::test]`
+`cockpit_grpc_surface_and_determinism`) with no change to server/session logic,
+so golden traces are unaffected.
+
+The old `protoc` blocker (§2.3) is cleared via the workspace compiler; the lane
+is built/tested with `PROTOC=/home/zmm/projects/.tools/protoc-27.3/bin/protoc
+cargo test -p sim-grpc`.
+
+The test exercises the full cockpit flow against the real gRPC product surface:
+`CreateSession → LoadScenario → ConfigureBoard(display + touch + timer + ADC ⇒
+n_peripherals=4) → Run(stream_display=true, stream_trace=true)` with an injected
+touch press + release then `Stop`, collecting the `RunEvent` stream (Tick /
+Trace / Display / End, asserting a `SimulationEnd` with no `SimulationError`),
+then `InspectDevices` reconciliation against `ConfigureBoard` (the display's
+width/height/color_mode, plus touch/timer/adc presence). Determinism is asserted
+by running the **entire flow twice, sequentially**, and comparing an aggregated
+`CockpitRunResult`: the FNV-1a framebuffer-byte hash, the DisplayFrame count, the
+tick-boundary timestamp sequence, and the `SimulationEnd` totals must all be
+identical.
+
+**Honesty note (no fabricated pixels):** none of these scenarios contain firmware
+that draws to the display, so the Run stream emits **zero DisplayFrame events**
+and the framebuffer-byte set is empty — the determinism check is `empty == empty`
+(a valid determinism assertion) alongside the tick/end-totals determinism. Rich
+framebuffer-content assertions (Strategy B) depend on display-driving dashboard
+firmware and are a deliberate follow-up. The two runs are **sequential** (not
+concurrent) because the `sim-devices` device registries are process-global;
+true in-process multi-session isolation is the deferred "Move State to Per-World
+Ownership" track (BLOCKERS §2.4).
+
+Verified locally: `PROTOC=… cargo test -p sim-grpc` → the 14 existing sim-grpc
+integration tests **plus** the new cockpit test all pass (15 total). Remaining
+cockpit follow-ups: a microcar `harness cockpit` wrapper (deferred to keep the
+dogfood harness std-only — it would need a gRPC client or a shell-out),
+display-driving dashboard firmware for real framebuffer-hash content, and the
+dashboard-state↔trace reconciliation.
+
+## Milestone 15 status (this branch)
+
+The fifteenth milestone adds the first **ota** lane increment — the OTA
+happy-path (UNBLOCKING.md §2 Strategy A "happy path first"), following the exact
+M12 diagnostics / M13 charging trace-backed dogfood-script pattern. It is
+**microcar-only** and gated behind an opt-in flag that defaults off, so every
+existing golden trace stays **byte-identical** (verified: the `debug_gym` trace
+hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` / `fa7f03709681` for the
+four scenarios are unchanged).
+
+- firmware: `gateway_enable_dogfood_ota_script()` + `run_dogfood_ota_script()` in
+  the gateway ECU, gated by `g_ota_dogfood_script` (default `0`). Called from the
+  gateway main task loop next to the diag/charging scripts, it steps the minimal
+  OTA state machine and traces compact `user-u32` events: `ota_state`
+  `IDLE(0)→DOWNLOADING(1)→VERIFYING(2)→COMMIT_PENDING(3)→REBOOTING(4)→HEALTHY(5)`
+  at 100–600 ms, plus `ota_crc_ok=1` (VERIFYING), `ota_slot=1` (COMMIT_PENDING,
+  slot B), and `ota_boot_result=1` (HEALTHY). `microcar_boot_gateway_ota()`
+  (in `microcar_coordinator.c`) enables the flag then boots the gateway;
+  `src/lib.rs` resolves `firmware/gateway_ota` (ordered before the generic
+  `gateway`). Because the flag defaults to `0`, the default gateway firmware is
+  unchanged.
+- microcar dogfood: `dogfood/ota/happy_path.toml` (with `# ota-expect:
+  state-sequence 0,1,2,3,4,5`, `crc-ok`, `healthy`), `dogfood/src/ota.rs`
+  (mirrors `charging.rs`: parses the directives into a `StateSequence`/`CrcOk`/
+  `Healthy` expectation set, decodes the `user-u32` traces, asserts the expected
+  monotonic `ota_state` subsequence occurred, `ota_crc_ok=1`, and
+  `ota_boot_result=1`, with a JSON report), and a `harness ota` subcommand.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**75 unit tests** (68 → 75, +7 OTA), all passing; `harness ota` is **1/1** green
+(state-sequence, crc-ok, healthy); and every other lane is unregressed
+(`charging` 1/1, `diagnostics` 2/2, `debug-gym` 4/4 with unchanged hashes,
+`topology` 7/7, `toml-zoo` 11/11). Remaining OTA follow-ups: the 8-case
+power-cut/corruption/reset **fault matrix** and rollback (UNBLOCKING §2
+Strategy C), a pure slot-metadata model with commit/rollback unit tests
+(Strategy B), the OTA-rollback `debug_gym` seed, and flipping the deferred
+`toml_zoo` `ota-while-drive` case (needs OTA represented in the scenario
+*schema*).
+
+## Milestone 16 status (this branch)
+
+The sixteenth milestone starts the **OTA fault matrix** with a pure
+**slot-metadata model + rollback** (UNBLOCKING.md §2 Strategy B "storage/slot
+model first" + the first Strategy C fault case). It is **microcar-only** and
+gated behind opt-in dogfood firmware, so every existing golden trace stays
+**byte-identical** (verified: the `debug_gym` trace hashes `c371b96e253e` /
+`68806f23c980` / `16684074b01c` / `fa7f03709681` are unchanged, and the OTA
+happy path emits the exact same `ota_*` events as M15).
+
+- **Slot-metadata model (canonical C + Rust mirror).**
+  `common/src/microcar_ota_slot.c` + `common/include/microcar_ota_slot.h`: a
+  pure, deterministic A/B-slot state machine — `active_slot`, `target_slot`,
+  `crc_ok`, `image_written`, `committed`, `boot_healthy`, `rolled_back` — with
+  `mc_ota_{init,begin_download,finish_download,verify,commit,reboot,
+  health_check,rollback,boot_slot}`. The rules never arm a bad slot: a failed
+  CRC (corrupt image), an interrupted write, or a failed post-reboot self-test
+  all roll back to the previous known-good slot, and a committed HEALTHY update
+  is never undone. Registered in `build.rs`. `state_tests/src/ota_slot.rs`
+  mirrors it in pure Rust with **7 unit tests** covering the Strategy B success
+  criteria — commit, corrupt-CRC rollback, failed-health rollback,
+  interrupted-write rollback, plus healthy-is-permanent, commit-requires-written,
+  and state-guarded transitions (`state_tests` 92 → **99**).
+- **Firmware drives the model.** `run_dogfood_ota_script` in the gateway ECU now
+  steps the C model through the campaign and traces each transition, so the lane
+  asserts the model's real behavior end-to-end. The happy path
+  (`g_ota_fault_mode == OTA_FAULT_NONE`) is byte-identical to M15. A new
+  `gateway_ota_badcrc` variant (`gateway_enable_dogfood_ota_fault_bad_crc()`,
+  `OTA_FAULT_BAD_CRC`) injects a corrupt image: verification fails, so the model
+  refuses to commit and rolls back —
+  `IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc BAD) → ROLLED_BACK(6, slot A)`,
+  emitting `ota_crc_ok=0`, `ota_rollback=1`, `ota_active_slot=0`,
+  `ota_boot_result=0`. Wired via `microcar_boot_gateway_ota_badcrc()`
+  (coordinator) and the `src/lib.rs` resolver (the more-specific
+  `gateway_ota_badcrc` key is matched **before** `gateway_ota` in both
+  `ecu_type()` and `init()`).
+- **Harness.** `dogfood/src/ota.rs` gains three expectations — `crc-bad`,
+  `rolled-back`, and `active-slot N` (plus a `last_value` helper) — and 5 new
+  unit tests (dogfood 75 → **80**). New scenario
+  `dogfood/ota/rollback_bad_crc.toml` asserts the rollback state sequence
+  `0,1,2,6`, a bad CRC (and never a good one), a rollback occurred, and the
+  bootloader active slot stayed at slot A (0).
+
+Verified locally: `cargo build --bin microcar` OK; `state_tests` **99** and the
+dogfood crate **80** unit tests pass; `harness ota` is **2/2** green
+(`happy_path` + `rollback_bad_crc`); every other lane is unregressed
+(`charging` 1/1, `diagnostics` 2/2, `debug-gym` 4/4 with unchanged hashes,
+`topology` 7/7, `toml-zoo` 11/11); and the new Rust files are clippy-clean.
+Remaining OTA follow-ups: the rest of the 8-case power-cut/corruption/reset
+**fault matrix** (interrupted write, power-cut-before-commit, failed boot →
+rollback, gateway/BMS reset during update) reusing this model, the OTA-rollback
+`debug_gym` seed, and flipping the deferred `toml_zoo` `ota-while-drive` case
+(needs OTA in the scenario *schema*).
+
+## Milestone 17 status (this branch)
+
+The seventeenth milestone extends the **OTA fault matrix** with two more cases,
+both reusing the M16 slot-metadata model (UNBLOCKING.md §2 Strategy C,
+"fault-matrix driven" — each case is a firmware fault variant + scenario wired
+exactly like `gateway_ota_badcrc`). It is **microcar-only** and gated behind
+opt-in dogfood firmware, so every existing golden trace stays **byte-identical**
+(verified: the `debug_gym` trace hashes `c371b96e253e` / `68806f23c980` /
+`16684074b01c` / `fa7f03709681` are unchanged, and the OTA happy path + bad-CRC
+rollback emit the exact same `ota_*` events as M15/M16).
+
+- **Firmware.** `run_dogfood_ota_script` is refactored around a shared
+  `emit_ota_rollback()` helper so every fault aborts with an identical marker set
+  (`ota_state=6`, `ota_rollback=1`, `ota_active_slot`, `ota_boot_result=0`),
+  rolling back at whichever step its fault strikes. Two new fault selectors +
+  boot variants:
+  - `OTA_FAULT_INTERRUPTED_WRITE` (`gateway_ota_intwrite`): a power cut during the
+    image write — `mc_ota_finish_download(complete=0)` discards the partial image
+    and rolls back *before verifying*: `IDLE(0) → DOWNLOADING(1) → ROLLED_BACK(6,
+    slot A)`.
+  - `OTA_FAULT_BAD_HEALTH` (`gateway_ota_badhealth`): a valid image downloads,
+    verifies (crc ok) and commits, but the post-reboot self-test fails —
+    `mc_ota_health_check(healthy=0)` reverts to slot A:
+    `IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) → COMMIT_PENDING(3, slot B)
+    → REBOOTING(4) → ROLLED_BACK(6, slot A)`.
+  Wired via `microcar_boot_gateway_ota_intwrite()` /
+  `microcar_boot_gateway_ota_badhealth()` (coordinator) and the `src/lib.rs`
+  resolver (both new keys matched **before** `gateway_ota`). The happy path and
+  the M16 bad-CRC path are byte-for-byte unchanged (the download-complete and
+  boot-healthy selectors default true for those modes).
+- **Harness / scenarios.** No new expectation types were needed — the M16
+  `state-sequence` / `crc-ok` / `crc-bad` / `rolled-back` / `active-slot`
+  expectations already express both cases. New scenarios
+  `dogfood/ota/rollback_interrupted_write.toml` (asserts `0,1,6` + rolled-back +
+  active-slot 0) and `dogfood/ota/rollback_failed_health.toml` (asserts
+  `0,1,2,3,4,6` + crc-ok + rolled-back + active-slot 0). Added 2 dogfood unit
+  tests over synthetic traces (dogfood 80 → **82**).
+
+Verified locally: `cargo build --bin microcar` OK; `state_tests` **99** and the
+dogfood crate **82** unit tests pass; `harness ota` is **4/4** green
+(`happy_path`, `rollback_bad_crc`, `rollback_failed_health`,
+`rollback_interrupted_write`); every other lane is unregressed (`charging` 1/1,
+`diagnostics` 2/2, `debug-gym` 4/4 with unchanged hashes, `topology` 7/7,
+`toml-zoo` 11/11); and the touched Rust file is clippy-clean. The OTA fault
+matrix now covers 3 of the plan's 8 cases (corrupt image, interrupted write,
+failed-boot rollback). Remaining OTA follow-ups: power-cut-after-write-before-
+commit, gateway/BMS reset during update, and the two mode-gated cases
+(OTA-while-driving / OTA-while-charging — these need OTA in the scenario
+*schema*, shared with the deferred `toml_zoo` `ota-while-drive` case), plus the
+OTA-rollback `debug_gym` seed (now trivially seedable from `gateway_ota_badcrc` /
+`gateway_ota_badhealth`).
+
+## Milestone 18 status (this branch)
+
+The eighteenth milestone adds the OTA fault-matrix "power cut after write before
+commit" case (the plan's fault-matrix item 3) — arguably the most important OTA
+safety property: **commit atomicity**. It is **microcar-only**, opt-in, and
+reuses the M16 slot model + M17 rollback machinery, so every existing golden
+trace stays **byte-identical** (verified: the `debug_gym` hashes `c371b96e253e` /
+`68806f23c980` / `16684074b01c` / `fa7f03709681` are unchanged, and the happy
+path + the M16/M17 fault paths emit the exact same `ota_*` events).
+
+- **Firmware.** New fault selector `OTA_FAULT_POWERCUT_PRECOMMIT`
+  (`gateway_ota_powercut`): a valid image downloads and verifies (crc ok), but a
+  power cut strikes at the commit step — instead of `mc_ota_commit()`, the model
+  does `mc_ota_rollback()`, discarding the verified-but-uncommitted image and
+  reverting to slot A: `IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc ok) →
+  ROLLED_BACK(6, slot A)`. This proves the commit is the point of no return — a
+  perfectly valid image still does NOT take effect if power is lost before it
+  commits, so the vehicle keeps running its previous firmware. Wired via
+  `microcar_boot_gateway_ota_powercut()` (coordinator) and the `src/lib.rs`
+  resolver (`gateway_ota_powercut` matched before `gateway_ota`).
+- **Harness / scenario.** No new expectation types — `dogfood/ota/
+  rollback_powercut_precommit.toml` asserts `state-sequence 0,1,2,6` + **crc-ok**
+  (the distinguishing marker vs the bad-CRC case, whose `0,1,2,6` carries
+  crc-bad) + rolled-back + active-slot 0. Added 1 dogfood unit test (dogfood
+  82 → **83**).
+
+Verified locally: `cargo build --bin microcar` OK; `state_tests` **99** and the
+dogfood crate **83** unit tests pass; `harness ota` is **5/5** green
+(`happy_path`, `rollback_bad_crc`, `rollback_failed_health`,
+`rollback_interrupted_write`, `rollback_powercut_precommit`); every other lane is
+unregressed (`charging` 1/1, `diagnostics` 2/2, `debug-gym` 4/4 with unchanged
+hashes, `topology` 7/7, `toml-zoo` 11/11); the touched Rust file is clippy-clean.
+The OTA fault matrix now covers **4 of the plan's 8 cases** (corrupt image,
+interrupted write, failed-boot rollback, power-cut-before-commit).
+
+The remaining 4 fault-matrix cases are **decision-gated** and were intentionally
+NOT done autonomously (to avoid guessing a modeling approach that could
+compromise the goal): **gateway reset during update** and **BMS critical fault
+during update** need a reliable cross-ECU / reset mechanism to model honestly
+(the current CAN-RX path is still unreliable — a trace-only stub would be
+fabricated rather than genuinely exercised); and **OTA-while-driving** /
+**OTA-while-charging** are mode-gated — they need OTA represented in the scenario
+*schema* (a design decision shared with the deferred `toml_zoo` `ota-while-drive`
+case). The OTA-rollback `debug_gym` seed is now trivially seedable from any of
+the four fault variants once the seeded-bug corpus format is agreed.
+
+## Milestone 19 status (this branch)
+
+The nineteenth milestone delivers the **first debug_gym seeded-bug corpus case**
+— the plan's `debug_gym` "OTA rollback bug" seed (UNBLOCKING.md §4 Strategy C,
+now satisfiable because the OTA firmware exists after M15–M18). It flips
+BLOCKERS §2.2 from fully BLOCKED to "first case delivered". It is
+**microcar-only**, gated behind opt-in buggy firmware, so every existing golden
+trace stays **byte-identical** (verified: the `debug_gym` hashes `c371b96e253e` /
+`68806f23c980` / `16684074b01c` / `fa7f03709681` are unchanged, and the OTA lane
+still emits the exact same `ota_*` events — `ota` stays 5/5).
+
+The seed is **genuinely exercised, not fabricated**: it pairs a real buggy
+firmware variant with the real correct firmware and produces both traces through
+the product binary.
+
+- **Buggy firmware.** A new opt-in variant `gateway_ota_crcbug`
+  (`gateway_enable_dogfood_ota_bug_bad_crc()` → `g_ota_crc_check_bug`, default
+  `0`): the same corrupt-image campaign as `gateway_ota_badcrc`, but the
+  gateway's CRC check is **broken** — it reports the corrupt image as valid, so
+  the slot model commits and boots the bad slot instead of rolling back:
+  `IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc wrongly OK) → COMMIT_PENDING(3) →
+  REBOOTING(4) → HEALTHY(5)`, `ota_boot_result=1`. Wired via
+  `microcar_boot_gateway_ota_crcbug()` (coordinator) and the `src/lib.rs`
+  resolver (`gateway_ota_crcbug` matched **before** `gateway_ota`). The single
+  seeded-bug line (`if (g_ota_crc_check_bug) crc_ok = 1;`) is off by default, so
+  the default gateway firmware and every other lane are byte-identical. The fixed
+  reference is the M16 `gateway_ota_badcrc`, which reports `ota_crc_ok=0` and
+  rolls back to slot A (`… → ROLLED_BACK(6)`, `ota_active_slot=0`).
+- **Corpus harness.** `dogfood/src/debug_gym_corpus.rs` +
+  `harness debug-gym-corpus`. Each seed carries the plan's required metadata
+  (description, symptom, minimal failing scenario, golden failing trace, required
+  debugging primitive, fixed trace) and runs its **failing** (buggy) and
+  **fixed** scenarios through the product binary
+  (`dogfood/debug_gym/ota_rollback_bug/{failing,fixed}.toml`), asserting three
+  things: **bug-reproduced** (the buggy firmware boots the corrupt image with no
+  rollback), **bug-fixed** (the correct firmware rolls back to slot A and never
+  boots it), and **traces-diverge** (the runs split at the VERIFYING step —
+  `ota_crc_ok` 1 vs 0, ending `HEALTHY(5)` vs `ROLLED_BACK(6)`), which is exactly
+  what the documented primitive (`continue_until(ota_state)` + inspect
+  `ota_crc_ok`) localizes.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**88 unit tests** (83 → 88, +5 corpus) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **1/1** green; every other lane is unregressed
+(`debug-gym` 4/4 with unchanged hashes, `ota` 5/5, `diagnostics` 2/2,
+`charging` 1/1, `topology` 7/7, `toml-zoo` 11/11); and the new Rust module is
+clippy/fmt-clean. Remaining debug_gym corpus seeds (gateway race, powertrain
+timeout/cancel, BMS stale sensor, dashboard missed warning, telematics
+partial-write, gateway bridge loop) reuse this harness — the diagnostics-seeded
+ones (UNBLOCKING §4 Strategy A) are the natural next additions; telematics is
+still firmware-gated (Strategy C).
+
+## Milestone 20 status (this branch)
+
+The twentieth milestone adds the **second debug_gym seeded-bug corpus case** —
+the diagnostics-seeded **SERVICE-mode torque-clamp bug** (UNBLOCKING.md §4
+Strategy A, "start with diagnostics bugs"), reusing the M19 `debug-gym-corpus`
+harness. **microcar-only**, gated behind opt-in buggy firmware, so every existing
+golden trace stays **byte-identical** (verified: `debug_gym` hashes
+`c371b96e253e` / `68806f23c980` / `16684074b01c` / `fa7f03709681` unchanged, and
+`diagnostics` stays 2/2 — the default powertrain SERVICE firmware is untouched).
+
+Genuinely exercised, not fabricated — a real buggy firmware variant paired with
+the real correct firmware:
+
+- **Buggy firmware.** A new opt-in powertrain variant
+  `powertrain_diag_service_bug` (`powertrain_enable_dogfood_service_clamp_bug()`
+  → `g_diag_service_clamp_bug`, default `0`): it runs a SERVICE-mode torque
+  computation but **skips the safety clamp**, so an 80% throttle demand during a
+  service session still commands drive torque with the motor enabled
+  (`diag_motor_command` = torque 80 / motor_enable 1). The single seeded-bug
+  branch is gated and off by default; the trace guard keeps `vehicle_mode ==
+  SERVICE`, so the fix's own trace path is reused. The fixed reference is the M12
+  `powertrain_diag_service`, whose `mc_safety_clamp_torque` forces torque to 0
+  and `safety_mode_blocks_torque` disables the motor (`diag_motor_command` = 0).
+  Wired via `microcar_boot_powertrain_diag_service_bug()` (coordinator) and the
+  `src/lib.rs` resolver (`powertrain_diag_service_bug` matched **before**
+  `powertrain_diag_service`).
+- **Corpus.** `dogfood/debug_gym/service_torque_bug/{failing,fixed}.toml` (based
+  on the diagnostics `service_mode_disables_drive` scenario, swapping only the
+  powertrain firmware) + a new `SeedKind::ServiceTorqueClamp` in
+  `debug_gym_corpus.rs` that decodes the packed `diag_motor_command` trace
+  (`(torque<<8)|motor_enable`) and asserts **bug-reproduced** (SERVICE motor
+  command with torque>0 / motor enabled), **bug-fixed** (every SERVICE command
+  clamped to torque 0 / motor disabled), and **traces-diverge** (buggy max torque
+  80 vs fixed 0) — localizable by breakpointing on the `diag_motor_command`
+  trace.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**92 unit tests** (88 → 92, +4) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **2/2** green (`ota_rollback`, `service_torque`);
+every other lane is unregressed (`debug-gym` 4/4 with unchanged hashes,
+`diagnostics` 2/2, `ota` 5/5, `charging` 1/1, `topology` 7/7, `toml-zoo` 11/11);
+the new Rust is clippy/fmt-clean. The debug_gym corpus now covers 2 of the
+plan's 7 seeds (OTA rollback, SERVICE torque clamp); the remaining
+diagnostics-seeded cases (clears-all-DTCs, START_SESSION-succeeds-in-DRIVE) reuse
+this same harness, and telematics/OTA-network seeds stay firmware-gated.
+
+## Milestone 21 status (this branch)
+
+The twenty-first milestone adds the **third debug_gym seeded-bug corpus case** —
+the diagnostics-seeded **clear-all-DTCs bug** (UNBLOCKING.md §4 Strategy A,
+"start with diagnostics bugs" — the `clears-all-DTCs` candidate), reusing the
+M19 `debug-gym-corpus` harness. **microcar-only**, gated behind opt-in buggy
+firmware, so every existing golden trace stays **byte-identical** (verified:
+`debug_gym` hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` /
+`fa7f03709681` unchanged, and `diagnostics` stays 2/2 — the default diag/clear
+firmware path is untouched).
+
+Genuinely exercised, not fabricated — a real buggy firmware variant paired with
+the real correct firmware, both run through the product binary:
+
+- **Slot for the bug.** `common`-adjacent gateway fault manager gained a genuine
+  `fault_manager_clear_all()` API (distinct from the scoped
+  `fault_manager_clear_node()`), with a header note that a subsystem-scoped
+  "clear DTCs" must NOT call it. This is the exact function the buggy firmware
+  wrongly reaches.
+- **Shared setup.** A new `gateway_enable_dogfood_diag_clear_dtcs(buggy)` runs
+  the existing diag request script but injects **two** DTCs before CLEAR_DTCS: a
+  BMS overtemp fault (at 300 ms, via `synth_bms_fault`) *and* an unrelated
+  powertrain fault (at 310 ms, via a new mutex-guarded `synth_report_fault`
+  helper writing `MC_NODE_POWERTRAIN` / `MC_WARN_POWERTRAIN_OFFLINE`). So when
+  CLEAR_DTCS runs, the scoping actually matters — a BMS-scoped clear must leave
+  the powertrain DTC behind.
+- **Buggy firmware** (`gateway_diag_clearbug`,
+  `g_diag_clear_all_bug`, default `0`): the CLEAR_DTCS handler calls
+  `fault_manager_clear_all(&g_fm)` instead of
+  `fault_manager_clear_node(&g_fm, MC_NODE_BMS)`, so a BMS-scoped clear wrongly
+  drops the powertrain DTC too. The follow-up READ_DTCS reports 0. The single
+  seeded-bug branch is gated and off by default. The **fixed** reference
+  (`gateway_diag_clear`) clears only the BMS node, so the follow-up READ_DTCS
+  reports 1 (the powertrain fault survives). Both wired via
+  `microcar_boot_gateway_diag_clear{,bug}()` (coordinator) and the `src/lib.rs`
+  resolver (`gateway_diag_clearbug` matched **before** `gateway_diag_clear`,
+  both **before** `gateway_diag_fault` / `gateway_diag`).
+- **Corpus.** `dogfood/debug_gym/clear_dtcs_bug/{failing,fixed}.toml` (based on
+  the diagnostics `read_clear_dtcs_after_bms_fault` scenario, swapping only the
+  gateway firmware) + a new `SeedKind::ClearAllDtcs` in `debug_gym_corpus.rs`
+  that decodes the packed `gateway_diag_response` head
+  (`(req<<24)|(service<<16)|(status<<8)|value0`) to read the DTC count of the
+  pre-clear (req 3) and post-clear (req 5) READ_DTCS responses. It asserts
+  **bug-reproduced** (buggy: 2 DTCs before, 0 after — the powertrain fault
+  silently dropped), **bug-fixed** (fixed: 2 before, 1 after — only BMS cleared),
+  and **traces-diverge** (post-clear count 0 vs 1) — localizable by
+  breakpointing on the post-clear `gateway_diag_response` trace.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**96 unit tests** (92 → 96, +4) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **3/3** green (`ota_rollback`, `service_torque`,
+`clear_all_dtcs`); every other lane is unregressed (`debug-gym` 4/4 with
+unchanged hashes, `diagnostics` 2/2, `ota` 5/5, `charging` 1/1, `topology` 7/7,
+`toml-zoo` 11/11, `simfarm` PASS); the new Rust is clippy/fmt-clean. The
+debug_gym corpus now covers 3 of the plan's 7 seeds (OTA rollback, SERVICE
+torque clamp, clear-all-DTCs); the remaining diagnostics-seeded case
+(START_SESSION-succeeds-in-DRIVE) reuses this same harness, and the
+telematics/OTA-network/BMS-stale-sensor/dashboard-missed-warning seeds stay
+firmware-gated.
+
+## Milestone 22 status (this branch)
+
+The twenty-second milestone adds the **fourth debug_gym seeded-bug corpus case**
+— the diagnostics-seeded **START_SESSION-in-DRIVE bug** (UNBLOCKING.md §4
+Strategy A, "start with diagnostics bugs" — the last named candidate), reusing
+the M19 `debug-gym-corpus` harness. **microcar-only**, gated behind opt-in buggy
+firmware, so every existing golden trace stays **byte-identical** (verified:
+`debug_gym` hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` /
+`fa7f03709681` unchanged, and `diagnostics` stays 2/2 — the default diag firmware
+path is untouched).
+
+Genuinely exercised, not fabricated — a real buggy firmware variant paired with
+the real correct firmware, both run through the product binary:
+
+- **The guard under test.** The gateway's `handle_diag_request` START_SESSION
+  case already refuses a session while `g_gs.mode == VEHICLE_DRIVE` (safety: no
+  service session mid-drive). The reject branch now also reports the current
+  mode in `value0` (previously left 0) so a rejected response carries DRIVE —
+  this only affects a response that is *never emitted* by existing scenarios (they
+  send START_SESSION at a non-DRIVE mode), so all existing lanes stay
+  byte-identical.
+- **Script.** A new `gateway_enable_dogfood_diag_startdrive(buggy)` +
+  `run_dogfood_diag_startdrive_script`: at 100 ms the vehicle is put in DRIVE (a
+  dogfood trigger, exactly like the M13 charging script's plug event) and a
+  diagnostic tool attempts START_SESSION mid-drive; at 200 ms a READ_MODE reads
+  back the mode. The mode is forced in the *same tick* immediately before the
+  request, so `update_vehicle_mode` (which runs later in the loop) cannot perturb
+  the mode the handler observes.
+- **Buggy firmware** (`gateway_diag_startdrivebug`, `g_diag_startsession_drive_bug`,
+  default `0`): the DRIVE guard is skipped, so the mid-drive START_SESSION is
+  *accepted* (`gateway_diag_response` status=OK, mode=SERVICE) — the vehicle
+  drops out of DRIVE into SERVICE while moving. The **fixed** reference
+  (`gateway_diag_startdrive`) rejects it (status=REJECTED, mode=DRIVE). Both wired
+  via `microcar_boot_gateway_diag_startdrive{,bug}()` (coordinator) and the
+  `src/lib.rs` resolver (`gateway_diag_startdrivebug` matched **before**
+  `gateway_diag_startdrive`, both **before** `gateway_diag_fault` /
+  `gateway_diag`).
+- **Corpus.** `dogfood/debug_gym/start_session_drive_bug/{failing,fixed}.toml` +
+  a new `SeedKind::StartSessionInDrive` in `debug_gym_corpus.rs` that decodes the
+  START_SESSION `gateway_diag_response` `(status, value0=mode)` and asserts
+  **bug-reproduced** (buggy: status=OK, mode=SERVICE — accepted mid-drive),
+  **bug-fixed** (fixed: status=REJECTED, mode=DRIVE — refused, still driving), and
+  **traces-diverge** (status OK vs REJECTED) — localizable by breakpointing on the
+  START_SESSION `gateway_diag_response`.
+
+Verified locally: `cargo build --bin microcar` OK; the dogfood crate now has
+**100 unit tests** (96 → 100, +4) and `state_tests` **99**, all passing;
+`harness debug-gym-corpus` is **4/4** green (`ota_rollback`, `service_torque`,
+`clear_all_dtcs`, `start_session_in_drive`); every other lane is unregressed
+(`debug-gym` 4/4 with unchanged hashes, `diagnostics` 2/2, `ota` 5/5,
+`charging` 1/1, `topology` 7/7, `toml-zoo` 11/11); the new Rust is
+clippy/fmt-clean. The debug_gym corpus now covers **4 of the plan's 7 seeds** (OTA
+rollback, SERVICE torque clamp, clear-all-DTCs, START_SESSION-in-DRIVE) — all four
+diagnostics/OTA-seeded cases reachable without new firmware are done. The
+remaining 3 seeds (BMS stale sensor, dashboard missed warning, telematics
+partial-write) stay firmware-gated (Strategy C); the gateway-bridge-loop bug is
+already exercised structurally by the topology `gateway_loop_prevention` scenario.
+
+## Milestone 23 status (this branch)
+
+The twenty-third milestone starts the **P0a "Per-Machine Execution And Device
+Ownership"** track from `UNBLOCKING.md` — the *root-cause* unblocker that every
+remaining product-grade lane (real CAN RX/TX, gRPC session isolation, gateway
+reset, telematics) ultimately depends on. It is the first, deliberately narrow
+slice of that refactor (migration-sequence step 2: "Add `DeviceBank` and
+explicit accessors in sim-devices … add two-world leakage tests"), **not** a
+speculative rewrite. It is **costar-only** and, because nothing activates a bank
+yet, every existing golden trace stays **byte-identical** (verified: the
+`debug_gym` hashes `c371b96e253e` / `68806f23c980` / `16684074b01c` /
+`fa7f03709681` are unchanged).
+
+**Root cause addressed.** Every virtual-device type stored its instances in a
+*per-type* thread-local `BTreeMap<u32, T>` keyed only by device id
+(`crates/sim-devices/src/lib.rs`). Two in-process `World`s each using CAN
+controller id `0` (a fleet run, or two concurrent gRPC sessions) collide on that
+map — the documented reason firmware CAN RX is unreliable and the M14 cockpit
+test must run sequentially.
+
+**What was built (`crates/sim-devices/src/bank.rs`, new).** A `DeviceBank` owns
+one `RefCell<BTreeMap<u32, T>>` per device type (UART, timer, GPIO, I2C, SPI,
+CAN, BT, ADC, temp-sensor, entropy, EEPROM, flash, block, display, touch) **plus
+the `FaultInjector` singleton**, so fault injection is per-World too. Borrow
+granularity is per-field, identical to the legacy per-type thread-locals, so no
+new re-entrancy/double-borrow hazard is introduced. An RAII active-context guard
+(`DeviceBank::activate` / `activate_bank` → `BankGuard`, resolved by `with_bank`)
+sets a thread-local *pointer* to the owning bank while its code runs and restores
+the previous context on every exit path including panic unwind — the pointer is a
+**dispatch mechanism only, never the storage**. This deliberately mirrors the
+proven `with_sim_global` / `activate_sim_global` / `SimGlobalGuard` pattern
+already used in `sim-ffi` for `SimGlobal`.
+
+**Wiring.** The `device_registry!` macro (all 15 map-backed device classes),
+`drain_expired_timers`, and `with_fault_injector_mut` now route through
+`bank::with_bank(...)`. When no bank is active the accessors fall back to a
+thread-local `DEFAULT_BANK`, preserving the legacy single-store-per-thread
+behavior exactly — which is why the whole existing FFI/World path (which does not
+yet activate a bank) is byte-identical. The public `sim_devices::with_*` API is
+unchanged, so `sim-ffi`/`sim-world`/`sim-grpc` need no edits.
+
+**Genuinely exercised, not a parallel stub.** All device storage now flows
+through `DeviceBank` (via the default bank), and true per-World isolation is
+proven by five new tests: **two banks each using CAN controller id 0 do not
+cross-observe** their frames (the P0a exit test), a fresh bank is isolated from
+the default store, **device inspection (`DeviceSnapshot::collect_all`) is
+bank-scoped**, **nested activation restores the outer bank**, and a **panic while
+a bank is active restores the previous context** so a sibling world still runs.
+
+**Deliberately staged (not batched).** Per `UNBLOCKING.md` ("Do not batch clock,
+device, and C-state moves"), this slice moves *device state only*. `SIM_NOW` /
+`CURRENT_TASK_ID` (sim-ffi atomics), the IRQ controller (`sim-devices/irq.rs`),
+`sim-net`/host-poller state, and the FreeRTOS C mutable globals are **not** touched
+here — they are later steps (extend the activation into a unified execution-context
+guard, then port CAN delivery to receiver-owned, then net, then C-instance state).
+Crucially, `sim-world` does **not** yet activate a per-machine bank, so behavior —
+and every golden trace — is unchanged; wiring the World to own and activate a bank
+per machine is the next increment (P0a step 3), and only *then* does P0b
+receiver-correct CAN become creditable.
+
+Verified locally: `cargo test -p sim-devices` **131** tests (126 → 131, +5 bank),
+clippy/fmt-clean; `cargo test -p sim-ffi` 17 and `cargo test -p sim-world` 110 all
+pass; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with **unchanged
+hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo` 11/11,
+`simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5, `debug-gym-corpus`
+4/4); microcar `dogfood` 100 and `state_tests` 99 unit tests pass. This flips
+`BLOCKERS.md` §2.4 / track F from "fully blocked, needs sign-off" to "first
+verified slice landed" and is the prerequisite the CAN-RX-gated tracks (real
+diagnostics-over-bus, OTA gateway/BMS-reset faults, telematics) were waiting on.
+
+## Milestone 24 status (this branch)
+
+The twenty-fourth milestone is the **second P0a slice** — UNBLOCKING.md P0a
+migration-sequence **step 3**: "Extend `SimulatorActivation` into an
+execution-context guard that activates `SimGlobal`, `DeviceBank` … together.
+Test nested activation and panic/unwind restoration." It builds directly on the
+M23 `DeviceBank`. It is **costar-only** (`crates/sim-ffi/src/simulator.rs`),
+**opt-in**, and **byte-identical by construction** (verified: `debug_gym` hashes
+`c371b96e253e` / `68806f23c980` / `16684074b01c` / `fa7f03709681` unchanged).
+
+**What changed.** `sim_ffi::Simulator` may now own a `DeviceBank`
+(`owned_devices: Option<DeviceBank>`, opt-in via `enable_owned_devices()` /
+queried by `owns_devices()`). When a simulator owns one, `Simulator::activate()`
+scopes that bank alongside `SimGlobal`: the returned `SimulatorActivation` now
+also holds an `Option<sim_devices::BankGuard>`, so device C-ABI accessors
+(`with_can` / `with_uart` / …) called while the simulator is active resolve into
+*its* devices, and the guard restores **both** the prior `SimGlobal` and the
+prior device bank on drop — including on panic unwind. This is the execution-
+context-guard mechanism the later per-World / per-session isolation (cockpit
+concurrency, product-grade diagnostics-over-bus) will activate.
+
+**Byte-identical by construction.** `owned_devices` defaults to `None`, so every
+existing `Simulator` — including every microcar `Machine`, which constructs its
+simulator via `Simulator::new` and never opts in — activates `SimGlobal` only,
+exactly as before. Nothing in the production path sets it `Some`; only the new
+tests do. Hence all golden traces and every lane are unchanged.
+
+**Deliberately staged (not batched).** Per UNBLOCKING.md ("Do not batch clock,
+device, and C-state moves"), this slice scopes *device state only*. `SIM_NOW` /
+`CURRENT_TASK_ID` and the FreeRTOS C mutable globals are **not** moved here — and,
+importantly, the World's CAN delivery still uses the shared global controller 0
+mailbox (`deliver_buses` / `step_firmware` inject/drain `with_can_mut(0)` outside
+any per-machine activation). Making the *World/session* own and activate a bank
+per execution context — and the receiver-correct CAN routing (P0b) that per-
+machine isolation then requires to stay byte-identical — is the next, larger
+slice; wiring it into `sim-grpc` sessions is additionally gated in this
+environment on `protoc` (absent here).
+
+**Genuinely exercised.** Four new tests drive the real guard: two owned-device
+simulators each using **CAN controller id 0 do not cross-observe** their frames
+(the literal P0a exit test, now at execution-context granularity through
+`activate()`), **nested activation restores the outer context**, a **panic while
+active restores the previous device context** (probed with a test-unique
+controller id so the assertion is independent of any shared-default-bank state),
+and a default simulator owns no devices.
+
+Verified locally: `cargo test -p sim-ffi` **21** tests (17 → 21, +4),
+clippy/fmt-clean; `cargo test -p sim-world` 110 and `cargo test -p sim-devices`
+131 unchanged; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with
+**unchanged hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo`
+11/11, `simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5,
+`debug-gym-corpus` 4/4); microcar `dogfood` 100 and `state_tests` 99 pass. P0a
+now has both a per-World `DeviceBank` (M23) and the execution-context guard that
+scopes it (M24); the remaining P0a/P0b work is World/session ownership + receiver-
+correct CAN.
+
+## Milestone 25 status (this branch)
+
+The twenty-fifth milestone continues the P0a device-ownership migration
+(UNBLOCKING.md migration-sequence **step 4**, the IRQ slice: "Port CAN next, then
+timers/IRQ …"). The interrupt controller was the **last device-class singleton
+still living in its own process/thread-local** (`IRQ_CTRL` in
+`crates/sim-devices/src/irq.rs`), outside the M23 `DeviceBank`. This milestone
+moves it into the bank. It is **costar-only** and **byte-identical by
+construction** (verified: `debug_gym` hashes `c371b96e253e` / `68806f23c980` /
+`16684074b01c` / `fa7f03709681` unchanged — a meaningful check here because
+timers raise IRQs on the firmware execution path).
+
+**What changed.** `DeviceBank` gains an `irq_ctrl: RefCell<IrqController>` field
+(alongside the M23 `fault_injector` singleton). `sim_devices::irq::with_irq` /
+`with_irq_mut` now route through `bank::with_bank(...)` instead of the removed
+`IRQ_CTRL` thread-local — exactly mirroring the M23 `FaultInjector` migration. So
+interrupt state is per-World when a bank is active, and falls back to the
+thread-local default bank otherwise (the whole production path today), which is
+why every golden trace is unchanged. The public
+`sim_devices::irq::with_irq[_mut]` API is unchanged; all consumers (`sim-ffi`
+`device_ffi` IRQ delivery, `timer.fire()`, and tests) are unaffected.
+
+**Re-entrancy checked.** `drain_expired_timers` holds the `timers` RefCell borrow
+(via `with_bank`) and `timer.fire()` raises an IRQ through `with_irq_mut` →
+nested `with_bank` → the `irq_ctrl` RefCell — a *different* bank field, so no
+double-borrow, and a nested `.with()` on the same thread-local is safe. Confirmed
+green by `test_drain_expired_timers` after the migration.
+
+**Genuinely exercised.** A new `irq_controller_is_bank_scoped` test raises IRQ 7
+under bank A, shows bank B does not observe it (and raises its own IRQ 9), then
+re-activates A and confirms A still has IRQ 7 and never saw B's IRQ 9 — the same
+two-world isolation shape as the M23 CAN leakage test, now for interrupts.
+
+Verified locally: `cargo test -p sim-devices` **132** tests (131 → 132, +1),
+clippy/fmt-clean; `cargo test -p sim-ffi` 21 and `cargo test -p sim-world` 110
+unchanged; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with
+**unchanged hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo`
+11/11, `simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5,
+`debug-gym-corpus` 4/4); microcar `dogfood` 100 and `state_tests` 99 pass. With
+this, **every device-class store in `sim-devices` (all 15 maps + the fault
+injector + the IRQ controller) now lives in the `DeviceBank`** — the process/
+thread-global device registries are gone. The remaining P0a/P0b work is the
+higher-risk part: making the *World/session* own and activate a bank per
+execution context, plus receiver-correct CAN routing (P0b) in
+`deliver_buses`/`step_firmware`, which touches the shared-controller-0 delivery
+path all 29 golden scenarios depend on (and, for `sim-grpc` session wiring, is
+additionally gated on `protoc`, absent in this environment).
+
+## Milestone 26 status (this branch)
+
+The twenty-sixth milestone delivers **P0b — receiver-correct CAN delivery**, the
+linchpin the CAN-gated product lanes were waiting on, plus confirmation that the
+`protoc` track is live. It is **costar-only** (`crates/sim-world/src/world.rs`)
+and **byte-identical** (verified: `debug_gym` hashes `c371b96e253e` /
+`68806f23c980` / `16684074b01c` / `fa7f03709681` unchanged).
+
+**Root cause fixed.** All firmware ECUs shared a single CAN controller-0 RX
+queue: `deliver_buses` injected every delivery into it and each ECU drained the
+same queue, so an ECU scheduled earlier could consume a frame copy meant for
+another receiver — the documented reason "firmware CAN RX is unreliable" and why
+the diagnostics/charging/OTA lanes are trace-backed rather than bus-backed.
+
+**Decisive byte-identical evidence.** Before changing anything, an experiment
+disabled RX injection entirely and re-ran `debug-gym`: **all four golden hashes
+were unchanged**, proving the default firmware's CAN *consumption* does not
+affect the golden traces. So making RX receiver-correct is safe for the golden
+scenarios while fixing the delivery for new bus-backed lanes.
+
+**What changed.** `World` now owns a per-machine receiver inbox
+(`can_rx_inbox: BTreeMap<machine_id, Vec<CanFrame>>`). `deliver_buses` queues
+each delivery into the *receiver's* inbox — bus deliveries were already
+receiver-correct (`drain_arrived` returns every attached node except the sender),
+so only the firmware-facing injection needed fixing. `step_firmware` stages a
+machine's inbox into controller 0 immediately before that machine's firmware
+runs (clearing first so it never sees another machine's frames) and reads back
+any unconsumed frames afterward, giving each ECU a persistent per-machine FIFO.
+This is World-owned per-machine ownership, not a session-keyed global map (the
+shortcut UNBLOCKING.md forbids).
+
+**Genuinely exercised.** New `test_receiver_correct_can_no_cross_consumption`
+(the UNBLOCKING §2 regression matrix): one sender + two receivers on one bus;
+each receiver gets exactly one frame, the sender none, with no cross-consumption.
+
+**`protoc` track live.** The workspace compiler at
+`/home/zmm/projects/.tools/protoc-27.3/bin/protoc` (libprotoc 27.3) is present
+and working; `PROTOC=… cargo test -p sim-grpc` builds and passes all **15**
+tests (14 integration + the M14 cockpit test). So the cockpit / gRPC control-
+plane track is buildable here after all.
+
+Verified locally: `cargo test -p sim-world` **111** tests (110 → 111, +1),
+clippy/fmt-clean; `cargo build --bin microcar` OK; `harness debug-gym` 4/4 with
+**unchanged hashes**; every other lane unregressed (`topology` 7/7, `toml-zoo`
+11/11, `simfarm` PASS, `diagnostics` 2/2, `charging` 1/1, `ota` 5/5,
+`debug-gym-corpus` 4/4); microcar `dogfood` 100 and `state_tests` 99 pass;
+`sim-grpc` 15 pass. With P0a (M23–M25) + P0b (M26), firmware CAN RX is now a
+reliable, receiver-correct assertion path — the gate for product-grade
+diagnostics-over-bus, the BMS/dashboard debug-gym seeds, and the real
+charging/OTA CAN control flows. The remaining plan work (P1 restartable
+machines, P2 protocol-backed scenario stimuli, and the P3/P4 real firmware
+vertical slices + telematics) builds on this foundation.
+
+## Milestone 27 status (this branch)
+
+The twenty-seventh milestone delivers **P1 — restartable machines**
+(UNBLOCKING.md §3), the generic reset primitive the OTA gateway-reset fault
+needs. It is **costar-only** (`sim-world`) and **byte-identical** (verified: the
+`gateway_reboot` / `dashboard_reboot` / `ecu_reboot` golden scenarios still PASS
+and all four `debug_gym` hashes are unchanged).
+
+**Root cause fixed.** `FaultAction::Reboot` replaced a machine with a bare
+`Machine::with_defaults` — losing its firmware entirely, so it was a cold-wipe,
+not a restart.
+
+**What changed.**
+- `Machine` gains an optional cloneable `FirmwareFactory`
+  (`Arc<dyn Fn() -> Box<dyn Firmware>>`), set via `load_firmware_from_factory` /
+  `set_firmware_factory`. On restart the factory recreates the *original*
+  firmware and runs its boot path (`Firmware::init`).
+- `FaultAction::Reboot` gains an optional `downtime_ms`. With a factory and/or a
+  downtime it takes the **restart path**: a fresh `Machine` preserving identity,
+  name, and factory (bus attachments are World-owned/keyed by machine id, so they
+  survive automatically); guest RAM/task state discarded (fresh `Simulator`); the
+  P0b CAN RX inbox cleared (the pre-reset receive queue is dropped); and
+  structured `machine_reset_begin` / `machine_reset_boot` markers emitted. A
+  nonzero downtime marks the machine stopped and queues its boot in
+  `World.pending_boots`, processed when virtual time reaches `boot_time` (added
+  to `next_global_event_time` and to the `step` Done condition so the sim stays
+  alive across the downtime).
+- Scenario schema: `FaultDef` gains an optional `downtime_ms` (`deny_unknown_fields`
+  + `#[serde(default)]`, so existing scenarios are unaffected).
+
+**Byte-identical by construction.** With **no** factory and **no** downtime the
+legacy immediate bare cold-boot path (the `fault:reboot` marker) is preserved
+exactly — which is the path all existing reboot golden scenarios take (microcar
+does not yet set factories, and none set `downtime_ms`). `pending_boots` is only
+ever non-empty on the new path, so the `step` Done-condition change is inert for
+existing scenarios.
+
+**Genuinely exercised.** New `test_restart_recreates_firmware_from_factory`: a
+restart with a 1 ms downtime recreates and re-boots the firmware (boot count
+1 → 2) and emits the `machine_reset_begin` / `machine_reset_boot` markers.
+
+Verified locally: `cargo test -p sim-world` **112** tests (111 → 112, +1),
+clippy/fmt-clean; `cargo build --bin microcar` OK; the three reboot golden
+scenarios PASS; `harness debug-gym` 4/4 unchanged hashes; every other lane
+unregressed (`topology` 7/7, `toml-zoo` 11/11, `diagnostics` 2/2, `charging`
+1/1, `ota` 5/5, `debug-gym-corpus` 4/4); microcar `dogfood` 100 and
+`state_tests` 99 pass; `sim-grpc` builds. The microcar consumer (setting ECU
+firmware factories, and a real OTA gateway-reset scenario using `downtime_ms`)
+is the follow-up that exercises this end-to-end.
+
+## M23-M27 Implementation Review Correction
+
+The milestone notes above record the staged implementation and its local tests;
+they do not clear the plan's isolation, CAN, or restart gates. Before advancing
+to real diagnostics, charging, OTA reset, cockpit multi-session, or fleet
+claims, implement the remediation gate in `../UNBLOCKING.md`:
+
+1. Replace the public raw-pointer `DeviceBank` activation guard with a
+   lifetime-safe scoped context, and audit the matching `SimGlobal` mechanism.
+2. Give every production `Machine` an owned/provisioned device bank and bind all
+   gRPC board, touch, display, and inspection calls to an explicit session World
+   and machine.
+3. Centralize all firmware stepping, receiver inbox staging, and sender TX
+   draining in that active machine context; no `advance_to` path may bypass it.
+4. Preserve immutable machine configuration and persistent storage across
+   restart, wire factories in the microcar binary, and drop frames sent while a
+   machine is down.
+5. Prove the result with actual two-World, concurrent-gRPC, CAN-boundary, and
+   microcar gateway-reboot tests, then retain existing byte-identical lanes as
+   regressions.
+
+The later migration of clock/task identity, network state, and C firmware
+instance state remains separate. It is required before claiming concurrent
+duplicate-ECU or fleet isolation, but it must not be used as a reason to defer
+the B0-B3 remediation above.
 
 ## Assumptions
 

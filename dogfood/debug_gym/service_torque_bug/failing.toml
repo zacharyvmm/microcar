@@ -1,0 +1,83 @@
+# service_torque_bug — FAILING (buggy) firmware for the debug_gym seeded-bug
+# corpus case "service_torque".
+#
+# The vehicle is in a diagnostic SERVICE session. The powertrain runs the *buggy*
+# firmware (firmware/powertrain_diag_service_bug): it skips the SERVICE-mode
+# safety clamp, so an 80% throttle demand during the service session still
+# commands drive torque with the motor enabled.
+# The bug's symptom: a SERVICE-mode diag_motor_command reports torque>0 and
+# motor_enable=1 — the drivetrain is live during a service session.
+#
+# The paired fixed scenario (fixed.toml) runs firmware/powertrain_diag_service
+# on the same session and clamps torque to 0 with the motor disabled. The
+# debug_gym corpus harness asserts the bug reproduces here and is resolved there,
+# and that the two motor commands diverge (torque>0/enabled vs 0/disabled) —
+# localizable by breakpointing on the diag_motor_command trace.
+
+name = "service_torque_bug_failing"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_diag_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_diag_service_bug_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diagnostics_tool"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[input]]
+at_ms = 250
+type = "driver_input"
+throttle_percent = 80
+brake_pressed = false

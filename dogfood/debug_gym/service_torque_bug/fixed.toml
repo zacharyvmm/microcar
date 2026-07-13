@@ -1,0 +1,76 @@
+# service_torque_bug — FIXED firmware for the debug_gym seeded-bug corpus case
+# "service_torque".
+#
+# Identical to failing.toml except the powertrain runs the correct firmware
+# (firmware/powertrain_diag_service): in a SERVICE session the safety clamp
+# forces torque to 0 and disables the motor, so an 80% throttle demand produces
+# no drive torque. Every SERVICE-mode diag_motor_command reports torque=0,
+# motor_enable=0 — the drivetrain is inert during service.
+
+name = "service_torque_bug_fixed"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_diag_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_diag_service_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diagnostics_tool"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+[[input]]
+at_ms = 250
+type = "driver_input"
+throttle_percent = 80
+brake_pressed = false
