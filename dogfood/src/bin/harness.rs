@@ -24,8 +24,8 @@ use std::time::Duration;
 use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::invariants::CheckStatus;
 use microcar_dogfood::summary::{build_summary, ScenarioSummary};
-use std::process::Command as StdCommand;
 use microcar_dogfood::{check_solo_vs_repeat, write_summary};
+use std::process::Command as StdCommand;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 const DEFAULT_REPEATS: usize = 2;

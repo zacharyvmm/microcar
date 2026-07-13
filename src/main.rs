@@ -10,10 +10,10 @@
 
 use std::process::ExitCode;
 
+use microcar::validate;
 use microcar::MicrocarFirmware;
 #[cfg(feature = "zephyr")]
 use microcar::ZephyrDashboardFirmware;
-use microcar::validate;
 use microcar_plant::MicrocarPlant;
 use sim_world::scenario::Scenario;
 

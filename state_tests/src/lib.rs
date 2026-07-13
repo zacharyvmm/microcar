@@ -8,8 +8,8 @@ pub mod bms;
 pub mod charging;
 pub mod dashboard;
 pub mod gateway;
-pub mod powertrain;
 pub mod ota_slot;
+pub mod powertrain;
 
 pub mod protocol;
 pub mod telematics;

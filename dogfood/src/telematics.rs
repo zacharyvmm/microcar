@@ -236,7 +236,11 @@ fn check_send_record_size(traces: &[TelemTrace]) -> TelematicsCheck {
         };
     }
     let all_11 = sent.iter().all(|&s| s == STATUS_RECORD_BYTES);
-    let bad: Vec<u32> = sent.iter().filter(|&&s| s != STATUS_RECORD_BYTES).copied().collect();
+    let bad: Vec<u32> = sent
+        .iter()
+        .filter(|&&s| s != STATUS_RECORD_BYTES)
+        .copied()
+        .collect();
     TelematicsCheck {
         name: "send_record_size".into(),
         passed: all_11,
@@ -261,10 +265,7 @@ fn check_minimum_record_count(traces: &[TelemTrace]) -> TelematicsCheck {
     TelematicsCheck {
         name: "minimum_records".into(),
         passed: count >= MIN_EXPECTED_RECORDS,
-        detail: format!(
-            "{} records sent (minimum {})",
-            count, MIN_EXPECTED_RECORDS,
-        ),
+        detail: format!("{} records sent (minimum {})", count, MIN_EXPECTED_RECORDS,),
     }
 }
 
@@ -367,9 +368,7 @@ pub fn run_telematics(bin: &Path, dir: &Path, timeout: Duration) -> io::Result<T
         .iter()
         .map(|s| run_telematics_scenario(bin, s, timeout))
         .collect();
-    Ok(TelematicsReport {
-        scenarios: results,
-    })
+    Ok(TelematicsReport { scenarios: results })
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -410,9 +409,18 @@ mod tests {
     #[test]
     fn label_values_filters_by_label() {
         let traces = vec![
-            TelemTrace { label: "telem_hb".into(), value: 0 },
-            TelemTrace { label: "telem_hb".into(), value: 1 },
-            TelemTrace { label: "telem_net_sent".into(), value: 11 },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 0,
+            },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 1,
+            },
+            TelemTrace {
+                label: "telem_net_sent".into(),
+                value: 11,
+            },
         ];
         let hb = label_values(&traces, "telem_hb");
         assert_eq!(hb, vec![0, 1]);
@@ -421,10 +429,22 @@ mod tests {
     #[test]
     fn heartbeat_monotonic_passes_ordered() {
         let traces = vec![
-            TelemTrace { label: "telem_hb".into(), value: 0 },
-            TelemTrace { label: "telem_hb".into(), value: 1 },
-            TelemTrace { label: "telem_hb".into(), value: 2 },
-            TelemTrace { label: "telem_hb".into(), value: 3 },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 0,
+            },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 1,
+            },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 2,
+            },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 3,
+            },
         ];
         let c = check_heartbeat_monotonic(&traces);
         assert!(c.passed);
@@ -433,10 +453,22 @@ mod tests {
     #[test]
     fn heartbeat_monotonic_fails_regression() {
         let traces = vec![
-            TelemTrace { label: "telem_hb".into(), value: 0 },
-            TelemTrace { label: "telem_hb".into(), value: 1 },
-            TelemTrace { label: "telem_hb".into(), value: 2 },
-            TelemTrace { label: "telem_hb".into(), value: 1 },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 0,
+            },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 1,
+            },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 2,
+            },
+            TelemTrace {
+                label: "telem_hb".into(),
+                value: 1,
+            },
         ];
         let c = check_heartbeat_monotonic(&traces);
         assert!(!c.passed);
@@ -444,8 +476,14 @@ mod tests {
     #[test]
     fn send_record_size_passes_all_11() {
         let traces = vec![
-            TelemTrace { label: "telem_net_sent".into(), value: 11 },
-            TelemTrace { label: "telem_net_sent".into(), value: 11 },
+            TelemTrace {
+                label: "telem_net_sent".into(),
+                value: 11,
+            },
+            TelemTrace {
+                label: "telem_net_sent".into(),
+                value: 11,
+            },
         ];
         let c = check_send_record_size(&traces);
         assert!(c.passed);
@@ -454,8 +492,14 @@ mod tests {
     #[test]
     fn send_record_size_fails_bad_size() {
         let traces = vec![
-            TelemTrace { label: "telem_net_sent".into(), value: 11 },
-            TelemTrace { label: "telem_net_sent".into(), value: 7 },
+            TelemTrace {
+                label: "telem_net_sent".into(),
+                value: 11,
+            },
+            TelemTrace {
+                label: "telem_net_sent".into(),
+                value: 7,
+            },
         ];
         let c = check_send_record_size(&traces);
         assert!(!c.passed);
@@ -463,9 +507,10 @@ mod tests {
 
     #[test]
     fn check_booted_passes_with_boot_event() {
-        let traces = vec![
-            TelemTrace { label: "telematics_boot".into(), value: 1 },
-        ];
+        let traces = vec![TelemTrace {
+            label: "telematics_boot".into(),
+            value: 1,
+        }];
         let c = check_booted(&traces);
         assert!(c.passed);
     }

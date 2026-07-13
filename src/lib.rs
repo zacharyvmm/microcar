@@ -35,7 +35,6 @@ use sim_core::Tick;
 use sim_world::firmware::Firmware;
 use sim_world::Machine;
 
-
 pub mod validate;
 // C ABI functions from the compiled firmware / sim-ffi.
 extern "C" {
@@ -169,10 +168,7 @@ impl MicrocarFirmware {
     /// dispatch and automotive-semantic validation resolve firmware the
     /// same way — preventing the two from drifting.
     fn ecu_type(&self) -> &str {
-        if let Some(category) = resolve_ecu_category(
-            self.firmware_path.as_deref(),
-            &self.name,
-        ) {
+        if let Some(category) = resolve_ecu_category(self.firmware_path.as_deref(), &self.name) {
             category
         } else {
             // Fallback for unknown firmware: use the machine name, which
