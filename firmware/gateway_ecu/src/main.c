@@ -14,6 +14,10 @@
 // Queues (all created via xSemaphoreCreateMutex, xEventGroupCreate, etc.)
 //
 // Compiles as FreeRTOS tasks running on the costar simulator.
+//
+// B2: All mutable state migrated to sim_instance_state(0x4D430001, ...) so
+// the gateway can run concurrently in multiple in-process World instances
+// with independent device banks (UNBLOCKING.md §B2).
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -33,6 +37,11 @@
 #include "microcar_can.h"
 #include "sim_abi.h"
 #include <string.h>
+#include <stdalign.h>
+
+// ── Instance key — allocated once per machine via sim_instance_state ──────
+
+#define GW_KEY 0x4D430001
 
 // ── Heartbeat queue item ───────────────────────────────────────────────────
 
@@ -42,65 +51,62 @@ typedef struct {
     uint32_t uptime_ms;
 } hb_event_t;
 
-// ── Global state ──────────────────────────────────────────────────────────
+// ── Per-instance context (replaces all file-scope statics) ────────────────
 
-static gateway_state_t     g_gs;
-static heartbeat_monitor_t g_hm;
-static fault_manager_t     g_fm;
+typedef struct {
+    // Core state
+    gateway_state_t     gs;
+    heartbeat_monitor_t hm;
+    fault_manager_t     fm;
 
-// ── FreeRTOS primitives ───────────────────────────────────────────────────
+    // FreeRTOS primitives
+    SemaphoreHandle_t   fm_mutex;
+    EventGroupHandle_t  mode_events;
+    QueueHandle_t       hb_queue;
+    SemaphoreHandle_t   can_frame_sem;
 
-/// Mutex protecting fault_manager_t (guards concurrent access from
-/// gateway_main and fault_aggregator).
-static SemaphoreHandle_t g_fm_mutex = NULL;
+    // Task handle for gateway_main (receives task notifications)
+    TaskHandle_t        gateway_task_handle;
+} gateway_ctx_t;
 
-/// Event group for mode transition signalling.
-/// Bits:
-///   0x01 – mode changed (set by gateway_main)
-///   0x02 – critical fault raised
-static EventGroupHandle_t g_mode_events = NULL;
-
-/// Queue carrying heartbeat events from heartbeat_rx → gateway_main.
-/// Depth: 16 items, each sizeof(hb_event_t).
-static QueueHandle_t g_hb_queue = NULL;
-
-/// Counting semaphore for CAN frame preemption.
-/// heartbeat_rx (prio 4) gives → can_frame_processor (prio 5) takes.
-/// Max count 64, initial 0.
-static SemaphoreHandle_t g_can_frame_sem = NULL;
-
-/// Task handle for gateway_main (receives task notifications for
-/// urgent fault alerts).
-static TaskHandle_t g_gateway_task_handle = NULL;
+/// Return the per-machine gateway context, allocating it on first call.
+static gateway_ctx_t *gateway_ctx(void)
+{
+    gateway_ctx_t *ctx = (gateway_ctx_t *)sim_instance_state(
+        GW_KEY, sizeof(gateway_ctx_t), alignof(gateway_ctx_t));
+    return ctx;
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 
 /// Allocate FreeRTOS primitives. Called once from gateway_main.
-static void gateway_primitives_init(void)
+static void gateway_primitives_init(gateway_ctx_t *ctx)
 {
-    g_fm_mutex     = xSemaphoreCreateMutex();
-    g_mode_events  = xEventGroupCreate();
-    g_hb_queue     = xQueueCreate(16, sizeof(hb_event_t));
-    g_can_frame_sem = xSemaphoreCreateCounting(64, 0);
+    ctx->fm_mutex       = xSemaphoreCreateMutex();
+    ctx->mode_events    = xEventGroupCreate();
+    ctx->hb_queue       = xQueueCreate(16, sizeof(hb_event_t));
+    ctx->can_frame_sem  = xSemaphoreCreateCounting(64, 0);
 
-    sim_trace_u32("gateway_mutex", g_fm_mutex != NULL ? 1 : 0);
-    sim_trace_u32("gateway_event_group", g_mode_events != NULL ? 1 : 0);
-    sim_trace_u32("gateway_queue", g_hb_queue != NULL ? 1 : 0);
-    sim_trace_u32("gateway_can_sem", g_can_frame_sem != NULL ? 1 : 0);
+    sim_trace_u32("gateway_mutex", ctx->fm_mutex != NULL ? 1 : 0);
+    sim_trace_u32("gateway_event_group", ctx->mode_events != NULL ? 1 : 0);
+    sim_trace_u32("gateway_queue", ctx->hb_queue != NULL ? 1 : 0);
+    sim_trace_u32("gateway_can_sem", ctx->can_frame_sem != NULL ? 1 : 0);
 }
 
 void gateway_init(void)
 {
-    gateway_state_init(&g_gs);
-    heartbeat_monitor_init(&g_hm, MC_SAFETY_BMS_HEARTBEAT_TIMEOUT_MS);
-    fault_manager_init(&g_fm);
+    gateway_ctx_t *ctx = gateway_ctx();
+
+    gateway_state_init(&ctx->gs);
+    heartbeat_monitor_init(&ctx->hm, MC_SAFETY_BMS_HEARTBEAT_TIMEOUT_MS);
+    fault_manager_init(&ctx->fm);
 
     // Register nodes to monitor with their heartbeat timeouts.
-    heartbeat_monitor_register(&g_hm, MC_NODE_POWERTRAIN,
+    heartbeat_monitor_register(&ctx->hm, MC_NODE_POWERTRAIN,
                                MC_SAFETY_BMS_HEARTBEAT_TIMEOUT_MS);
-    heartbeat_monitor_register(&g_hm, MC_NODE_BMS,
+    heartbeat_monitor_register(&ctx->hm, MC_NODE_BMS,
                                MC_SAFETY_BMS_HEARTBEAT_TIMEOUT_MS);
-    heartbeat_monitor_register(&g_hm, MC_NODE_DASHBOARD,
+    heartbeat_monitor_register(&ctx->hm, MC_NODE_DASHBOARD,
                                MC_SAFETY_BMS_HEARTBEAT_TIMEOUT_MS);
 }
 
@@ -108,36 +114,38 @@ void gateway_init(void)
 
 /// Process a heartbeat frame (0x001) from any node.
 /// Called from gateway_main after dequeuing an hb_event_t.
-static void handle_heartbeat(uint32_t now_ms, const hb_event_t *ev)
+static void handle_heartbeat(gateway_ctx_t *ctx, uint32_t now_ms,
+                             const hb_event_t *ev)
 {
-    heartbeat_monitor_beat(&g_hm, ev->sender, now_ms);
+    heartbeat_monitor_beat(&ctx->hm, ev->sender, now_ms);
     (void)ev->uptime_ms;
 }
 
 /// Process a BMS fault frame (0x202).
 /// Protected by mutex.
-static void handle_bms_fault(const mc_can_frame_t *frame)
+static void handle_bms_fault(gateway_ctx_t *ctx, const mc_can_frame_t *frame)
 {
     uint8_t fault_code = frame->data[0];
     uint8_t severity   = fault_manager_bms_severity(fault_code);
 
-    if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-        fault_manager_report(&g_fm, MC_NODE_BMS, fault_code, severity);
+    if (xSemaphoreTake(ctx->fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        fault_manager_report(&ctx->fm, MC_NODE_BMS, fault_code, severity);
 
         // If critical fault, notify gateway_main immediately.
-        if (severity == 2 && g_gateway_task_handle != NULL) {
-            xTaskNotify(g_gateway_task_handle,
+        if (severity == 2 && ctx->gateway_task_handle != NULL) {
+            xTaskNotify(ctx->gateway_task_handle,
                         (uint32_t)fault_code,
                         eSetValueWithoutOverwrite);
         }
 
-        xSemaphoreGive(g_fm_mutex);
+        xSemaphoreGive(ctx->fm_mutex);
     }
 }
 
 /// Dispatch a received CAN frame to the appropriate handler.
 /// Called from heartbeat_rx task (only processes heartbeat and BMS fault).
-static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
+static void dispatch_frame_in_rx(gateway_ctx_t *ctx,
+                                 const mc_can_frame_t *frame)
 {
     switch (frame->id) {
     case MC_MSG_HEARTBEAT:
@@ -152,11 +160,11 @@ static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
                              | ((uint32_t)frame->data[3] << 8)
                              |  (uint32_t)frame->data[4];
             }
-            xQueueSend(g_hb_queue, &ev, 0);
+            xQueueSend(ctx->hb_queue, &ev, 0);
         }
         break;
     case MC_MSG_BMS_FAULT:
-        handle_bms_fault(frame);
+        handle_bms_fault(ctx, frame);
         break;
     default:
         break;
@@ -167,23 +175,24 @@ static void dispatch_frame_in_rx(const mc_can_frame_t *frame)
 
 /// Re-evaluate vehicle mode based on current state.
 /// Protected by mutex for fault_manager access.
-static mc_vehicle_mode_t update_vehicle_mode(uint32_t now_ms)
+static mc_vehicle_mode_t update_vehicle_mode(gateway_ctx_t *ctx,
+                                             uint32_t now_ms)
 {
     // Check timeouts → update online/offline status.
-    heartbeat_monitor_check(&g_hm, now_ms);
+    heartbeat_monitor_check(&ctx->hm, now_ms);
 
-    uint8_t all_online      = heartbeat_monitor_all_online(&g_hm);
+    uint8_t all_online      = heartbeat_monitor_all_online(&ctx->hm);
     uint8_t bms_fault       = 0;
     uint8_t bms_limp        = 0;
     uint8_t fault_count     = 0;
 
-    if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-        bms_fault   = fault_manager_has_critical(&g_fm);
-        fault_count = fault_manager_active_count(&g_fm);
-        xSemaphoreGive(g_fm_mutex);
+    if (xSemaphoreTake(ctx->fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        bms_fault   = fault_manager_has_critical(&ctx->fm);
+        fault_count = fault_manager_active_count(&ctx->fm);
+        xSemaphoreGive(ctx->fm_mutex);
     }
 
-    return gateway_state_update(&g_gs, all_online, bms_fault,
+    return gateway_state_update(&ctx->gs, all_online, bms_fault,
                                 bms_limp, fault_count);
 }
 
@@ -202,14 +211,14 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
 }
 
 /// Build and send the vehicle mode frame.
-static void send_vehicle_mode(mc_can_frame_t *tx)
+static void send_vehicle_mode(gateway_ctx_t *ctx, mc_can_frame_t *tx)
 {
-    mc_vehicle_mode_t mode     = g_gs.mode;
+    mc_vehicle_mode_t mode     = ctx->gs.mode;
     uint8_t           fault_cd = 0;
 
-    if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-        fault_cd = g_fm.critical_count > 0 ? 1 : 0;
-        xSemaphoreGive(g_fm_mutex);
+    if (xSemaphoreTake(ctx->fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        fault_cd = ctx->fm.critical_count > 0 ? 1 : 0;
+        xSemaphoreGive(ctx->fm_mutex);
     }
 
     mc_frame_init(tx, MC_MSG_VEHICLE_MODE, MC_NODE_GATEWAY,
@@ -221,10 +230,11 @@ static void send_vehicle_mode(mc_can_frame_t *tx)
 // ── Heartbeat RX task ─────────────────────────────────────────────────────
 
 /// High-priority task that drains CAN RX and pushes heartbeat events
-/// onto g_hb_queue.  Also handles BMS fault frames inline.
+/// onto the heartbeat queue.  Also handles BMS fault frames inline.
+/// Receives gateway_ctx_t * as pvParameters.
 void heartbeat_rx(void *pvParameters)
 {
-    (void)pvParameters;
+    gateway_ctx_t *ctx = (gateway_ctx_t *)pvParameters;
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -243,11 +253,11 @@ void heartbeat_rx(void *pvParameters)
             rx.id = can_id;
             rx.sender = rx.data[0];
             rx.len = (uint8_t)dlc;
-            dispatch_frame_in_rx(&rx);
+            dispatch_frame_in_rx(ctx, &rx);
 
             // Give semaphore to preempt: can_frame_processor (prio 5)
             // will wake and process this frame.
-            xSemaphoreGive(g_can_frame_sem);
+            xSemaphoreGive(ctx->can_frame_sem);
         }
     }
 }
@@ -256,9 +266,10 @@ void heartbeat_rx(void *pvParameters)
 
 /// Low-rate task that aggregates fault statistics and traces them.
 /// Accesses fault_manager under mutex protection.
+/// Receives gateway_ctx_t * as pvParameters.
 void fault_aggregator(void *pvParameters)
 {
-    (void)pvParameters;
+    gateway_ctx_t *ctx = (gateway_ctx_t *)pvParameters;
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -269,11 +280,11 @@ void fault_aggregator(void *pvParameters)
         uint8_t active   = 0;
         uint8_t warning  = 0;
 
-        if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            critical = g_fm.critical_count;
-            warning  = g_fm.warning_count;
-            active   = fault_manager_active_count(&g_fm);
-            xSemaphoreGive(g_fm_mutex);
+        if (xSemaphoreTake(ctx->fm_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            critical = ctx->fm.critical_count;
+            warning  = ctx->fm.warning_count;
+            active   = fault_manager_active_count(&ctx->fm);
+            xSemaphoreGive(ctx->fm_mutex);
         }
 
         // Trace aggregated fault stats.
@@ -282,7 +293,7 @@ void fault_aggregator(void *pvParameters)
 
         // If critical fault exists, set event group bit.
         if (critical > 0) {
-            xEventGroupSetBits(g_mode_events, 0x02);
+            xEventGroupSetBits(ctx->mode_events, 0x02);
         }
     }
 }
@@ -294,15 +305,16 @@ void fault_aggregator(void *pvParameters)
 /// received frame, which preempts lower-priority tasks so this
 /// processor runs immediately.
 /// Each activation traces a counter showing preemption count.
+/// Receives gateway_ctx_t * as pvParameters.
 void can_frame_processor(void *pvParameters)
 {
-    (void)pvParameters;
+    gateway_ctx_t *ctx = (gateway_ctx_t *)pvParameters;
 
     uint32_t proc_count = 0;
 
     while (1) {
         // Block until heartbeat_rx gives the semaphore.
-        xSemaphoreTake(g_can_frame_sem, portMAX_DELAY);
+        xSemaphoreTake(ctx->can_frame_sem, portMAX_DELAY);
 
         proc_count++;
 
@@ -324,14 +336,16 @@ void can_frame_processor(void *pvParameters)
 void gateway_main(void *pvParameters)
 {
     (void)pvParameters;
-    gateway_init();
-    gateway_primitives_init();
-    g_gateway_task_handle = xTaskGetCurrentTaskHandle();
 
-    // Create subordinate tasks.
-    xTaskCreate(heartbeat_rx, "hb_rx", 768, NULL, 4, NULL);
-    xTaskCreate(fault_aggregator, "fault_agg", 512, NULL, 2, NULL);
-    xTaskCreate(can_frame_processor, "can_proc", 768, NULL, 5, NULL);
+    gateway_ctx_t *ctx = gateway_ctx();
+    gateway_init();
+    gateway_primitives_init(ctx);
+    ctx->gateway_task_handle = xTaskGetCurrentTaskHandle();
+
+    // Create subordinate tasks, passing the context pointer.
+    xTaskCreate(heartbeat_rx, "hb_rx", 768, ctx, 4, NULL);
+    xTaskCreate(fault_aggregator, "fault_agg", 512, ctx, 2, NULL);
+    xTaskCreate(can_frame_processor, "can_proc", 768, ctx, 5, NULL);
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
@@ -346,8 +360,8 @@ void gateway_main(void *pvParameters)
 
         // ── Dequeue heartbeat events ────────────────────────────
         hb_event_t ev;
-        while (xQueueReceive(g_hb_queue, &ev, 0) == pdTRUE) {
-            handle_heartbeat(now_ms, &ev);
+        while (xQueueReceive(ctx->hb_queue, &ev, 0) == pdTRUE) {
+            handle_heartbeat(ctx, now_ms, &ev);
         }
 
         // ── Check for urgent fault notifications ────────────────
@@ -357,36 +371,35 @@ void gateway_main(void *pvParameters)
         }
 
         // ── Process phase: check heartbeats for timeouts ────────
-        int transitions = heartbeat_monitor_check(&g_hm, now_ms);
+        int transitions = heartbeat_monitor_check(&ctx->hm, now_ms);
         if (transitions > 0) {
-            uint8_t lost_node = heartbeat_monitor_last_transition_node(&g_hm);
+            uint8_t lost_node = heartbeat_monitor_last_transition_node(&ctx->hm);
             if (lost_node == MC_NODE_BMS) {
                 // BMS lost → report fault.
-                if (xSemaphoreTake(g_fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-                    fault_manager_report(&g_fm, MC_NODE_BMS,
+                if (xSemaphoreTake(ctx->fm_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+                    fault_manager_report(&ctx->fm, MC_NODE_BMS,
                                          MC_BMS_FAULT_COMM_ERROR, 2);
-                    xSemaphoreGive(g_fm_mutex);
+                    xSemaphoreGive(ctx->fm_mutex);
                 }
             }
         }
 
         // ── Mode update ─────────────────────────────────────────
-        mc_vehicle_mode_t old_mode = g_gs.mode;
-        mc_vehicle_mode_t new_mode = update_vehicle_mode(now_ms);
+        mc_vehicle_mode_t old_mode = ctx->gs.mode;
+        mc_vehicle_mode_t new_mode = update_vehicle_mode(ctx, now_ms);
 
         if (new_mode != old_mode) {
-            const char *mode_str = gateway_mode_string(new_mode);
             sim_trace_u32("vehicle_mode", (uint32_t)new_mode);
             // Signal mode change to event group.
-            xEventGroupSetBits(g_mode_events, 0x01);
+            xEventGroupSetBits(ctx->mode_events, 0x01);
         }
 
         // ── Check event group for mode transitions ──────────────
         // (this lets other tasks or tests wait for mode changes)
-        EventBits_t mode_bits = xEventGroupGetBits(g_mode_events);
+        EventBits_t mode_bits = xEventGroupGetBits(ctx->mode_events);
         if (mode_bits & 0x01) {
             sim_trace_u32("mode_event_group", mode_bits);
-            xEventGroupClearBits(g_mode_events, 0x01);
+            xEventGroupClearBits(ctx->mode_events, 0x01);
         }
 
         // ── Broadcast phase ─────────────────────────────────────
@@ -398,7 +411,7 @@ void gateway_main(void *pvParameters)
 
         // Send vehicle mode on change or every 50ms.
         if (new_mode != old_mode || now_ms % 50 == 0) {
-            send_vehicle_mode(&tx);
+            send_vehicle_mode(ctx, &tx);
             sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
         }
     }

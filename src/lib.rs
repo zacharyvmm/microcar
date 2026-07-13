@@ -47,6 +47,8 @@ extern "C" {
     fn microcar_boot_net_demo();
     fn microcar_boot_storage_demo();
     fn microcar_boot_bt_demo();
+    fn microcar_boot_ota_tool();
+    fn microcar_boot_telematics();
     fn sim_scheduler_tick() -> u32;
 }
 
@@ -88,6 +90,8 @@ pub const ECU_CATEGORY_PATTERNS: &[(&str, &str)] = &[
     ("net_demo", "net_demo"),
     ("storage_demo", "storage_demo"),
     ("bt_demo", "bt_demo"),
+    ("ota_tool", "ota_tool"),
+    ("telematics", "telematics"),
     // Diagnostics variants (specific → broad)
     ("gateway_diag_clearbug", "diagnostics"),
     ("gateway_diag_clear", "diagnostics"),
@@ -171,6 +175,12 @@ impl MicrocarFirmware {
             if path.contains("bt_demo") {
                 return "bt_demo";
             }
+            if path.contains("ota_tool") {
+                return "ota_tool";
+            }
+            if path.contains("telematics") {
+                return "telematics";
+            }
             if path.contains("gateway") {
                 return "gateway";
             }
@@ -204,6 +214,10 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_storage_demo();
             } else if ecu.starts_with("bt_demo") {
                 microcar_boot_bt_demo();
+            } else if ecu.starts_with("ota_tool") {
+                microcar_boot_ota_tool();
+            } else if ecu.starts_with("telematics") {
+                microcar_boot_telematics();
             } else if ecu.starts_with("gateway") {
                 microcar_boot_gateway();
             } else if ecu.starts_with("powertrain") {

@@ -21,6 +21,8 @@ extern void dashboard_main(void *pvParameters);
 extern void net_demo_main(void *pvParameters);
 extern void storage_demo_main(void *pvParameters);
 extern void bt_demo_main(void *pvParameters);
+extern void ota_tool_main(void *pvParameters);
+extern void telematics_main(void *pvParameters);
 
 // ── Stack sizes and priorities ────────────────────────────────────────────
 
@@ -119,5 +121,21 @@ void microcar_boot_bt_demo(void)
 {
     sim_trace_u32("microcar_boot_bt_demo", 1);
     microcar_create_task("bt_demo", bt_demo_main, DEMO_STACK_WORDS, DEMO_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot the OTA Tool ECU on this machine.
+void microcar_boot_ota_tool(void)
+{
+    sim_trace_u32("microcar_boot_ota_tool", 1);
+    microcar_create_task("ota_tool", ota_tool_main, DEMO_STACK_WORDS, DEMO_PRIORITY);
+    sim_trace_u32("microcar_tasks_created", 1);
+}
+
+/// Boot the Telematics ECU on this machine.
+void microcar_boot_telematics(void)
+{
+    sim_trace_u32("microcar_boot_telematics", 1);
+    microcar_create_task("telematics", telematics_main, DEMO_STACK_WORDS, DEMO_PRIORITY);
     sim_trace_u32("microcar_tasks_created", 1);
 }

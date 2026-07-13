@@ -25,44 +25,60 @@
 #include "microcar_trace.h"
 #include "microcar_can.h"
 #include <string.h>
+#include <stdalign.h>
 
-// ── Global state ──────────────────────────────────────────────────────────
+// ── Instance key — allocated once per machine via sim_instance_state ──────
 
-static dashboard_state_t g_ds;
-static warning_display_t g_wd;
+#define DASH_KEY 0x4D430004
 
-// ── Task notification ─────────────────────────────────────────────────────
+// ── Per-instance context (replaces all file-scope statics) ────────────────
 
-/// Task handle for display_update (needed for xTaskNotify).
-static TaskHandle_t g_display_task_handle = NULL;
+typedef struct {
+    dashboard_state_t   ds;
+    warning_display_t   wd;
+
+    // Task handle for display_update (needed for xTaskNotify).
+    TaskHandle_t        display_task_handle;
+} dashboard_ctx_t;
+
+/// Return the per-machine dashboard context, allocating it on first call.
+static dashboard_ctx_t *dashboard_ctx(void)
+{
+    dashboard_ctx_t *ctx = (dashboard_ctx_t *)sim_instance_state(
+        DASH_KEY, sizeof(dashboard_ctx_t), alignof(dashboard_ctx_t));
+    return ctx;
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 
-void dashboard_init(void)
+void dashboard_init(dashboard_ctx_t *ctx)
 {
-    dashboard_state_init(&g_ds);
-    warning_display_init(&g_wd);
+    dashboard_state_init(&ctx->ds);
+    warning_display_init(&ctx->wd);
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
 
 /// Process vehicle mode frame (0x010) from gateway.
-static void handle_vehicle_mode(const mc_can_frame_t *frame)
+static void handle_vehicle_mode(dashboard_ctx_t *ctx,
+                                const mc_can_frame_t *frame)
 {
     uint8_t mode = frame->data[0];
-    dashboard_state_set_mode(&g_ds, (mc_vehicle_mode_t)mode);
+    dashboard_state_set_mode(&ctx->ds, (mc_vehicle_mode_t)mode);
 }
 
 /// Process wheel speed frame (0x102) from plant.
-static void handle_wheel_speed(const mc_can_frame_t *frame)
+static void handle_wheel_speed(dashboard_ctx_t *ctx,
+                               const mc_can_frame_t *frame)
 {
     uint16_t speed_kph_x10 = ((uint16_t)frame->data[0] << 8) | frame->data[1];
-    dashboard_state_set_speed(&g_ds, speed_kph_x10);
+    dashboard_state_set_speed(&ctx->ds, speed_kph_x10);
 }
 
 /// Process plant sensor data frame (0x500).
 /// Format: [soc, volt_hi, volt_lo, temp_hi, temp_lo, current_hi, current_lo]
-static void handle_plant_sensors(const mc_can_frame_t *frame)
+static void handle_plant_sensors(dashboard_ctx_t *ctx,
+                                 const mc_can_frame_t *frame)
 {
     if (frame->len < 7) return;
 
@@ -70,43 +86,44 @@ static void handle_plant_sensors(const mc_can_frame_t *frame)
     uint16_t voltage_mv  = ((uint16_t)frame->data[1] << 8) | frame->data[2];
     int16_t  temp_c_x10  = (int16_t)(((uint16_t)frame->data[3] << 8) | frame->data[4]);
 
-    dashboard_state_set_battery(&g_ds, soc_percent, temp_c_x10, voltage_mv);
+    dashboard_state_set_battery(&ctx->ds, soc_percent, temp_c_x10, voltage_mv);
 }
 
 /// Process warning frame (0x400).
-static void handle_warning(const mc_can_frame_t *frame)
+static void handle_warning(dashboard_ctx_t *ctx, const mc_can_frame_t *frame)
 {
     uint8_t source_node  = frame->data[0];
     uint8_t warning_code = frame->data[1];
 
-    dashboard_state_add_warning(&g_ds, warning_code, source_node);
+    dashboard_state_add_warning(&ctx->ds, warning_code, source_node);
 
     uint8_t severity = warning_display_severity_for(warning_code);
-    warning_display_update(&g_wd, warning_code, severity);
+    warning_display_update(&ctx->wd, warning_code, severity);
 
     // Notify the display_update task of a new/updated warning.
     // The notification value carries the warning code + severity.
-    if (g_display_task_handle != NULL) {
+    if (ctx->display_task_handle != NULL) {
         uint32_t notify_val = ((uint32_t)severity << 8) | warning_code;
-        xTaskNotify(g_display_task_handle, notify_val, eSetValueWithoutOverwrite);
+        xTaskNotify(ctx->display_task_handle, notify_val, eSetValueWithoutOverwrite);
     }
 }
 
 /// Dispatch a received CAN frame to the appropriate handler.
-static void dispatch_frame(const mc_can_frame_t *frame)
+static void dispatch_frame(dashboard_ctx_t *ctx,
+                           const mc_can_frame_t *frame)
 {
     switch (frame->id) {
     case MC_MSG_VEHICLE_MODE:
-        handle_vehicle_mode(frame);
+        handle_vehicle_mode(ctx, frame);
         break;
     case MC_MSG_WHEEL_SPEED:
-        handle_wheel_speed(frame);
+        handle_wheel_speed(ctx, frame);
         break;
     case MC_MSG_PLANT_SENSORS:
-        handle_plant_sensors(frame);
+        handle_plant_sensors(ctx, frame);
         break;
     case MC_MSG_WARNING:
-        handle_warning(frame);
+        handle_warning(ctx, frame);
         break;
     default:
         break;
@@ -132,7 +149,7 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
 /// Runs at lower frequency (50ms) and updates the display.
 void display_update(void *pvParameters)
 {
-    (void)pvParameters;
+    dashboard_ctx_t *ctx = (dashboard_ctx_t *)pvParameters;
 
     uint32_t prev_notify_val = 0;
 
@@ -157,7 +174,7 @@ void display_update(void *pvParameters)
         // Periodic refresh: emit display_update trace every 500ms.
         uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
         if (now_ms % 500 == 0) {
-            uint8_t top = dashboard_state_top_warning(&g_ds);
+            uint8_t top = dashboard_state_top_warning(&ctx->ds);
             sim_trace_u32("display_update", top);
         }
     }
@@ -168,11 +185,14 @@ void display_update(void *pvParameters)
 void dashboard_main(void *pvParameters)
 {
     (void)pvParameters;
-    dashboard_init();
+
+    dashboard_ctx_t *ctx = dashboard_ctx();
+    dashboard_init(ctx);
 
     // Create the display_update task (prio 2, lower freq).
+    // Pass the context pointer so display_update can access state.
     xTaskCreate(display_update, "display", 512,
-                NULL, 2, &g_display_task_handle);
+                ctx, 2, &ctx->display_task_handle);
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
@@ -197,11 +217,11 @@ void dashboard_main(void *pvParameters)
             rx.id = can_id;
             rx.sender = rx.data[0];
             rx.len = (uint8_t)dlc;
-            dispatch_frame(&rx);
+            dispatch_frame(ctx, &rx);
         }
 
         // ── Check for top warning ──────────────────────────────
-        uint8_t top_warning = dashboard_state_top_warning(&g_ds);
+        uint8_t top_warning = dashboard_state_top_warning(&ctx->ds);
         (void)top_warning;
 
         // ── Send heartbeat ────────────────────────────────────

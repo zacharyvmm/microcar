@@ -23,6 +23,8 @@ fn main() {
     println!("cargo:rerun-if-changed=firmware/gateway_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/powertrain_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/priority_inversion_demo/src/");
+    println!("cargo:rerun-if-changed=firmware/ota_tool_ecu/src/");
+    println!("cargo:rerun-if-changed=firmware/telematics_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/lifecycle_stress_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/net_demo_ecu/src/");
     println!("cargo:rerun-if-changed=firmware/storage_demo_ecu/src/");
@@ -107,6 +109,12 @@ fn main() {
     // ── Bluetooth demo ECU ───────────────────────────────────────────
     build.file("firmware/bt_demo_ecu/src/main.c");
 
+    // ── OTA Tool ECU (Stage C) ────────────────────────────────────────
+    build.file("firmware/ota_tool_ecu/src/main.c");
+
+    // ── Telematics ECU (Stage H) ──────────────────────────────────────
+    build.file("firmware/telematics_ecu/src/main.c");
+
     // ── Coordinator (boot entry) ─────────────────────────────────────
     build.file("firmware/microcar_coordinator.c");
 
@@ -169,7 +177,9 @@ fn main() {
         .include("firmware/lifecycle_stress_ecu/src")
         .include("firmware/net_demo_ecu/src")
         .include("firmware/storage_demo_ecu/src")
-        .include("firmware/bt_demo_ecu/src");
+        .include("firmware/bt_demo_ecu/src")
+        .include("firmware/ota_tool_ecu/src")
+        .include("firmware/telematics_ecu/src");
 
     // ── Defines ──────────────────────────────────────────────────────
     build
