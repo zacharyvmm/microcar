@@ -35,6 +35,8 @@ use sim_core::Tick;
 use sim_world::firmware::Firmware;
 use sim_world::Machine;
 
+
+pub mod validate;
 // C ABI functions from the compiled firmware / sim-ffi.
 extern "C" {
     fn microcar_boot();
@@ -132,10 +134,13 @@ pub fn resolve_ecu_category(firmware: Option<&str>, name: &str) -> Option<&'stat
                 return Some(category);
             }
         }
-    }
-    for (pattern, category) in ECU_CATEGORY_PATTERNS {
-        if name.starts_with(pattern) {
-            return Some(category);
+        // Name-based fallback: only when firmware IS provided but its path
+        // didn't match any pattern.  Machines without firmware (external
+        // actors like evse/ota_tool) must not resolve to a known ECU.
+        for (pattern, category) in ECU_CATEGORY_PATTERNS {
+            if name.starts_with(pattern) {
+                return Some(category);
+            }
         }
     }
     None
@@ -158,43 +163,22 @@ impl MicrocarFirmware {
         }
     }
 
+    /// Resolve this firmware instance to its canonical ECU category.
+    ///
+    /// Uses the shared [`ECU_CATEGORY_PATTERNS`] table so that both boot
+    /// dispatch and automotive-semantic validation resolve firmware the
+    /// same way — preventing the two from drifting.
     fn ecu_type(&self) -> &str {
-        if let Some(ref path) = self.firmware_path {
-            if path.contains("priority_inversion") {
-                return "priority_inversion";
-            }
-            if path.contains("lifecycle_stress") {
-                return "lifecycle_stress";
-            }
-            if path.contains("net_demo") {
-                return "net_demo";
-            }
-            if path.contains("storage_demo") {
-                return "storage_demo";
-            }
-            if path.contains("bt_demo") {
-                return "bt_demo";
-            }
-            if path.contains("ota_tool") {
-                return "ota_tool";
-            }
-            if path.contains("telematics") {
-                return "telematics";
-            }
-            if path.contains("gateway") {
-                return "gateway";
-            }
-            if path.contains("powertrain") {
-                return "powertrain";
-            }
-            if path.contains("bms") {
-                return "bms";
-            }
-            if path.contains("dashboard") {
-                return "dashboard";
-            }
+        if let Some(category) = resolve_ecu_category(
+            self.firmware_path.as_deref(),
+            &self.name,
+        ) {
+            category
+        } else {
+            // Fallback for unknown firmware: use the machine name, which
+            // in practice is one of "gateway", "powertrain", "bms", …
+            &self.name
         }
-        &self.name
     }
 }
 
