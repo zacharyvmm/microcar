@@ -17,6 +17,8 @@ The microcar uses a fixed-size CAN-like message protocol. All payloads are packe
 | 0x202| BMS_FAULT            | bms           | 1 bytes      |
 | 0x300| DASHBOARD_STATUS     | dashboard     | 4 bytes      |
 | 0x400| WARNING              | any           | 2 bytes      |
+| 0x600| DIAG_REQUEST         | diagnostics   | 4 bytes      |
+| 0x601| DIAG_RESPONSE        | gateway       | 6 bytes      |
 
 ## Node IDs
 
@@ -26,6 +28,7 @@ The microcar uses a fixed-size CAN-like message protocol. All payloads are packe
 | 2   | Powertrain ECU    |
 | 3   | BMS ECU           |
 | 4   | Dashboard ECU     |
+| 5   | Diagnostics tool  |
 | 100 | Plant model       |
 | 200 | Test harness      |
 
@@ -43,7 +46,7 @@ Offset  Size  Field
 
 ```
 Offset  Size  Field
-0       1     mode (uint8: 0=OFF,1=READY,2=DRIVE,3=LIMP,4=FAULT,5=CHARGING)
+0       1     mode (uint8: 0=OFF,1=READY,2=DRIVE,3=LIMP,4=FAULT,5=CHARGING,6=SERVICE,7=OTA_UPDATE,8=TRANSPORT_MODE)
 1       1     fault_code (uint8)
 ```
 
@@ -102,6 +105,28 @@ Offset  Size  Field
 Offset  Size  Field
 0       1     source_node (uint8)
 1       1     warning_code (uint8)
+```
+
+### DIAG_REQUEST (0x600)
+
+```
+Offset  Size  Field
+0       1     source_node (uint8: 5=diagnostics tool)
+1       1     service (uint8: 1=START_SESSION,2=READ_MODE,3=READ_DTCS,4=CLEAR_DTCS,5=LIVE_BMS,6=ACTUATOR_TEST,7=END_SESSION)
+2       1     request_id (uint8)
+3       1     param (uint8)
+```
+
+### DIAG_RESPONSE (0x601)
+
+```
+Offset  Size  Field
+0       1     source_node (uint8: 1=gateway)
+1       1     service (uint8)
+2       1     request_id (uint8)
+3       1     status (uint8: 0=OK,1=REJECTED,2=UNSUPPORTED)
+4       1     value0 (uint8; mode or DTC count depending on service)
+5       1     value1 (uint8; first DTC code for READ_DTCS)
 ```
 
 ## CAN Frame Encoding

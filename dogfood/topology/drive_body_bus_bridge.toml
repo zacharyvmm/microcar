@@ -1,0 +1,65 @@
+# drive_body_bus_bridge — the gateway bridges the drive and body buses.
+#
+# Topology:
+#   vcan_drive: gateway(1), powertrain(2), bms(3)
+#   vcan_body : gateway(1), dashboard(4)
+#   [[bridge]] machine = "gateway"
+#
+# A probe injected on vcan_drive by the powertrain reaches the drive-bus nodes
+# (gateway, bms) AND is forwarded by the gateway onto vcan_body, where the
+# dashboard receives it. So the probe's receivers are {gateway, bms, dashboard}
+# — the forwarded delivery to the dashboard preserves the original frame's
+# correlation via parent_id (checked by the harness against --trace-v2).
+#
+# topology-probe: probe=0x07a0 expect=1,3,4
+name = "drive_body_bus_bridge"
+duration_ms = 300
+
+[[machine]]
+id = 1
+name = "gateway"
+[[machine]]
+id = 2
+name = "powertrain"
+[[machine]]
+id = 3
+name = "bms"
+[[machine]]
+id = 4
+name = "dashboard"
+
+[[bridge]]
+machine = "gateway"
+
+[[bus]]
+name = "vcan_drive"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_drive"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_drive"
+machine = "powertrain"
+[[bus.node]]
+bus = "vcan_drive"
+machine = "bms"
+
+[[bus]]
+name = "vcan_body"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan_body"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan_body"
+machine = "dashboard"
+
+# Powertrain injects a probe on the drive bus; the gateway forwards it to body.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan_drive"
+sender = "powertrain"
+id = 0x07a0
+data = [1, 2, 3]

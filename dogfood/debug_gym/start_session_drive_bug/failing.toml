@@ -1,0 +1,79 @@
+# start_session_drive_bug — FAILING (buggy) firmware for the debug_gym
+# seeded-bug corpus case "start_session_in_drive".
+#
+# The vehicle is put in DRIVE, then a diagnostic tool attempts to open a service
+# session mid-drive. The gateway runs the *buggy* firmware
+# (firmware/gateway_diag_startdrivebug_ecu): it skips the safety guard that
+# refuses START_SESSION while driving, so the session opens and the vehicle is
+# commanded out of DRIVE into SERVICE while moving.
+# The bug's symptom: the START_SESSION diagnostic response reports status=OK
+# (accepted) with mode=SERVICE — a service session was opened mid-drive.
+#
+# The paired fixed scenario (fixed.toml) runs firmware/gateway_diag_startdrive_ecu
+# on the same script: the guard rejects START_SESSION (status=REJECTED, mode
+# stays DRIVE). The debug_gym corpus harness asserts the bug reproduces here and
+# is resolved there, and that the two START_SESSION responses diverge
+# (accepted/SERVICE vs rejected/DRIVE) — localizable by breakpointing on the
+# gateway_diag_response for the START_SESSION request.
+
+name = "start_session_drive_bug_failing"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_diag_startdrivebug_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diagnostics_tool"
+
+[plant]
+type = "microcar"
+tick_ms = 10

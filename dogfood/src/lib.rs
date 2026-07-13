@@ -25,18 +25,52 @@
 //! * [`determinism`] — run N times, assert all trace hashes match.
 //! * [`summary`] / [`json`] — hand-rolled JSON summary emitter.
 
+pub mod charging;
+pub mod debug_gym;
+pub mod debug_gym_corpus;
 pub mod determinism;
+pub mod diagnostics;
 pub mod invariants;
 pub mod json;
+pub mod ota;
 pub mod runner;
+pub mod simfarm;
 pub mod summary;
+pub mod toml_zoo;
+pub mod topology;
 pub mod trace_hash;
 
+pub use charging::{
+    run_charging, run_charging_scenario, ChargingCheck, ChargingReport, ChargingScenarioResult,
+    DEFAULT_CHARGING_DIR,
+};
+pub use debug_gym::{run_debug_gym, DebugGymReport, DebugGymScenarioResult, DEFAULT_SCENARIOS};
+pub use debug_gym_corpus::{
+    builtin_seeds, run_corpus, run_seed, CorpusCheck, CorpusReport, Seed, SeedKind, SeedResult,
+    DEFAULT_CORPUS_DIR as DEFAULT_DEBUG_GYM_CORPUS_DIR,
+};
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
+pub use diagnostics::{
+    run_diagnostics, run_diagnostics_scenario, DiagnosticsCheck, DiagnosticsReport,
+    DiagnosticsScenarioResult, DEFAULT_DIAGNOSTICS_DIR,
+};
 pub use invariants::{
     any_failed, check_all, check_default, default_invariants, CheckStatus, Invariant,
     InvariantResult,
 };
+pub use ota::{run_ota, run_ota_scenario, OtaCheck, OtaReport, OtaScenarioResult, DEFAULT_OTA_DIR};
 pub use runner::{run_scenario, RunStatus, ScenarioRun};
+pub use simfarm::{
+    run_churn, run_panic_isolation, run_simfarm, ChurnReport, PanicIsolationReport, RunHash,
+    SimfarmReport,
+};
 pub use summary::{build_summary, write_summary, Summary, HARNESS_VERSION};
+pub use toml_zoo::{
+    discover_cases, run_sibling_isolation, run_toml_zoo, CaseResult, SiblingIsolation, TomlZooCase,
+    TomlZooReport, DEFAULT_CORPUS_DIR,
+};
+pub use topology::{
+    run_topology, run_topology_scenario, Probe, ProbeResult, TopologyReport,
+    TopologyScenarioResult, DEFAULT_TOPOLOGY_DIR,
+};
 pub use trace_hash::{normalize_trace, normalized_hash, trace_hash};

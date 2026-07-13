@@ -7,5 +7,6 @@
 pub mod bms;
 pub mod dashboard;
 pub mod gateway;
+pub mod ota_slot;
 pub mod powertrain;
 pub mod protocol;

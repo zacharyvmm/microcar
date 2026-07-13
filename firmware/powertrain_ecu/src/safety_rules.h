@@ -24,6 +24,10 @@ uint8_t safety_brake_overrides_throttle(uint8_t brake_pressed);
 /// Returns 1 if motor should be disabled, 0 otherwise.
 uint8_t safety_fault_disables_motor(mc_vehicle_mode_t mode);
 
+/// S2/SERVICE/CHARGING/OTA: positive torque is only allowed in DRIVE or LIMP.
+/// Returns 1 if the mode blocks torque, 0 otherwise.
+uint8_t safety_mode_blocks_torque(mc_vehicle_mode_t mode);
+
 /// S3: If vehicle mode is LIMP, torque must be capped at MC_TORQUE_LIMP_MAX_PERCENT.
 /// Returns the effective max torque percent (255 = no cap).
 uint8_t safety_limp_torque_cap(mc_vehicle_mode_t mode);

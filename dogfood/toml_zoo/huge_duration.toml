@@ -1,0 +1,9 @@
+# expect-kind: parse
+# duration_ms overflows u64, so TOML deserialization reports an out-of-range error.
+name = "huge_duration"
+duration_ms = 99999999999999999999999999
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"

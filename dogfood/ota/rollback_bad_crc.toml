@@ -1,0 +1,73 @@
+# rollback_bad_crc — an OTA campaign with a corrupt image safely rolls back.
+#
+# This is the first `ota` fault-matrix scenario (the plan's OTA "corrupt image"
+# case). Like the happy path it checks compact firmware trace events emitted by
+# an OTA dogfood firmware variant (no dependence on the still-unreliable
+# firmware-originated CAN RX path):
+#
+#   * gateway_ota_badcrc — drives the OTA slot-metadata model
+#     (common/src/microcar_ota_slot.c) with a corrupt image. The image fails
+#     CRC/signature verification, so the model refuses to arm the inactive slot
+#     and rolls back to the previous known-good slot A:
+#       IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc BAD) → ROLLED_BACK(6, slot A).
+#
+# The lane asserts the update never committed a bad image: the state sequence
+# reaches ROLLED_BACK, the CRC was reported bad, a rollback occurred, and the
+# active/boot slot stayed at slot A (0).
+#
+# ota-expect: state-sequence 0,1,2,6
+# ota-expect: crc-bad
+# ota-expect: rolled-back
+# ota-expect: active-slot 0
+
+name = "ota_rollback_bad_crc"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ota_badcrc"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10

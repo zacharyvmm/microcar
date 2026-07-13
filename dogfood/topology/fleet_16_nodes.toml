@@ -1,0 +1,166 @@
+# fleet_16_nodes — bus isolation at scale: 16 machines across 4 CAN buses with
+# the gateway as the only shared (multi-interface) hub node.
+#
+#   vcan0: gateway(1), node_2, node_3, node_4, node_5
+#   vcan1: gateway(1), node_6, node_7, node_8
+#   vcan2: gateway(1), node_9, node_10, node_11
+#   vcan3: gateway(1), node_12, node_13, node_14, node_15, node_16
+#
+# A probe on any bus must reach exactly that bus's other nodes (the gateway
+# included, since it is on every bus) and no node on any other bus.
+#
+# topology-probe: probe=0x07d0 expect=1,3,4,5
+# topology-probe: probe=0x07d2 expect=1,10,11
+# topology-probe: probe=0x07d3 expect=1,13,14,15,16
+name = "fleet_16_nodes"
+duration_ms = 300
+
+[[machine]]
+id = 1
+name = "gateway"
+[[machine]]
+id = 2
+name = "node_2"
+[[machine]]
+id = 3
+name = "node_3"
+[[machine]]
+id = 4
+name = "node_4"
+[[machine]]
+id = 5
+name = "node_5"
+[[machine]]
+id = 6
+name = "node_6"
+[[machine]]
+id = 7
+name = "node_7"
+[[machine]]
+id = 8
+name = "node_8"
+[[machine]]
+id = 9
+name = "node_9"
+[[machine]]
+id = 10
+name = "node_10"
+[[machine]]
+id = 11
+name = "node_11"
+[[machine]]
+id = 12
+name = "node_12"
+[[machine]]
+id = 13
+name = "node_13"
+[[machine]]
+id = 14
+name = "node_14"
+[[machine]]
+id = 15
+name = "node_15"
+[[machine]]
+id = 16
+name = "node_16"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan0"
+machine = "node_2"
+[[bus.node]]
+bus = "vcan0"
+machine = "node_3"
+[[bus.node]]
+bus = "vcan0"
+machine = "node_4"
+[[bus.node]]
+bus = "vcan0"
+machine = "node_5"
+
+[[bus]]
+name = "vcan1"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan1"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan1"
+machine = "node_6"
+[[bus.node]]
+bus = "vcan1"
+machine = "node_7"
+[[bus.node]]
+bus = "vcan1"
+machine = "node_8"
+
+[[bus]]
+name = "vcan2"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan2"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan2"
+machine = "node_9"
+[[bus.node]]
+bus = "vcan2"
+machine = "node_10"
+[[bus.node]]
+bus = "vcan2"
+machine = "node_11"
+
+[[bus]]
+name = "vcan3"
+type = "can"
+latency_us = 500
+[[bus.node]]
+bus = "vcan3"
+machine = "gateway"
+[[bus.node]]
+bus = "vcan3"
+machine = "node_12"
+[[bus.node]]
+bus = "vcan3"
+machine = "node_13"
+[[bus.node]]
+bus = "vcan3"
+machine = "node_14"
+[[bus.node]]
+bus = "vcan3"
+machine = "node_15"
+[[bus.node]]
+bus = "vcan3"
+machine = "node_16"
+
+# vcan0 probe (from node_2) -> gateway + node_3/4/5.
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "node_2"
+id = 0x07d0
+data = [1]
+
+# vcan2 probe (from node_9) -> gateway + node_10/11.
+[[bus_inject]]
+at_ms = 60
+bus = "vcan2"
+sender = "node_9"
+id = 0x07d2
+data = [2]
+
+# vcan3 probe (from node_12) -> gateway + node_13/14/15/16.
+[[bus_inject]]
+at_ms = 70
+bus = "vcan3"
+sender = "node_12"
+id = 0x07d3
+data = [3]

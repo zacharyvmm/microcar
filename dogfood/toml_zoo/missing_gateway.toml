@@ -1,0 +1,13 @@
+# expect-kind: missing-gateway
+# A drivetrain (powertrain + bms) with no gateway ECU (the mode authority).
+name = "missing_gateway"
+
+[[machine]]
+id = 1
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+
+[[machine]]
+id = 2
+name = "bms"
+firmware = "firmware/bms_ecu"
