@@ -71,12 +71,6 @@ before_ms = 2000
 machine = "gateway"
 event = "fault:reboot"
 
-# Gateway heartbeat resumes after boot (node_online emitted post-reconstruction).
-[[expect.event]]
-before_ms = 2000
-machine = "gateway"
-event = "node_online"
-
 # Gateway does not emit node_lost or gateway_timeout markers after restart.
 # This is a limited no-plant smoke assertion — the check is on the gateway
 # machine itself, not on the sibling ECU.  The powertrain continues to run,

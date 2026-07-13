@@ -1,144 +1,144 @@
-// main.c — diagnostics tool ECU firmware
+// main.c — diagnostics tool firmware
 //
-// The diagnostics tool sends diagnostic requests (0x600) to the gateway
-// and receives responses (0x601). It supports live BMS data queries.
-//
-// Per costar_microcar_dogfood_plan.md Stage D.
-// Uses sim_instance_state(0x4D430006) for per-instance state.
-//
-// Compiles as a FreeRTOS task running on the costar simulator.
+// A small service-tool ECU for the dogfood diagnostics lane. It sends a fixed
+// request script and traces gateway responses. Scenarios can inject faults or
+// driver input around the script to prove SERVICE mode and DTC behavior.
 
 #include "FreeRTOS.h"
 #include "task.h"
 #include "sim_abi.h"
+
 #include "microcar_protocol.h"
 #include "microcar_trace.h"
 #include "microcar_can.h"
 #include <string.h>
-#include <stdalign.h>
 
 #define CAN_BUS 0
-#define DIAG_KEY 0x4D430006
 
-// ── Per-instance context ──────────────────────────────────────────────────
-
-typedef struct {
-    uint8_t request_id;     // monotonically increasing
-    uint8_t sent_mask;      // bitmask of sent selectors
-    uint32_t script_ms;     // virtual time accumulator
-    uint8_t pending_req[3]; // request_ids for selectors 0,1,2 (0xFF = none)
-} diag_ctx_t;
-
-static diag_ctx_t *diag_ctx(void)
+static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
 {
-    return (diag_ctx_t *)sim_instance_state(
-        DIAG_KEY, sizeof(diag_ctx_t), alignof(diag_ctx_t));
+    mc_frame_init(tx, MC_MSG_HEARTBEAT, MC_NODE_DIAGNOSTICS,
+                  MC_HEARTBEAT_MSG_SIZE);
+    tx->data[0] = MC_NODE_DIAGNOSTICS;
+    tx->data[1] = (uint8_t)(now_ms >> 24);
+    tx->data[2] = (uint8_t)(now_ms >> 16);
+    tx->data[3] = (uint8_t)(now_ms >> 8);
+    tx->data[4] = (uint8_t)(now_ms);
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────
-
-void diagnostics_tool_init(void)
+static void send_diag_request(uint8_t service, uint8_t request_id, uint8_t param,
+                              mc_can_frame_t *tx)
 {
-    diag_ctx_t *ctx = diag_ctx();
-    ctx->request_id = 0;
-    ctx->sent_mask = 0;
-    ctx->script_ms = 0;
-    memset(ctx->pending_req, 0xFF, sizeof(ctx->pending_req));
-    sim_trace_u32("diag_tool_init", 1);
+    mc_frame_init(tx, MC_MSG_DIAG_REQUEST, MC_NODE_DIAGNOSTICS,
+                  MC_DIAG_REQUEST_MSG_SIZE);
+    tx->data[0] = MC_NODE_DIAGNOSTICS;
+    tx->data[1] = service;
+    tx->data[2] = request_id;
+    tx->data[3] = param;
+    sim_can_send(CAN_BUS, tx->id, tx->data, tx->len, 0, 0);
 }
 
-// ── Main task ─────────────────────────────────────────────────────────────
+static void handle_diag_response(const mc_can_frame_t *frame)
+{
+    if (frame->len < MC_DIAG_RESPONSE_MSG_SIZE) return;
+
+    uint8_t service = frame->data[1];
+    uint8_t request_id = frame->data[2];
+    uint8_t status = frame->data[3];
+    uint8_t value0 = frame->data[4];
+    uint8_t value1 = frame->data[5];
+
+    uint32_t packed = ((uint32_t)request_id << 24)
+                    | ((uint32_t)service << 16)
+                    | ((uint32_t)status << 8)
+                    | (uint32_t)value0;
+    sim_trace_u32("diag_response", packed);
+
+    switch (service) {
+    case MC_DIAG_START_SESSION:
+        sim_trace_u32("diag_session_rsp", ((uint32_t)status << 8) | value0);
+        break;
+    case MC_DIAG_READ_MODE:
+        sim_trace_u32("diag_mode_rsp", ((uint32_t)status << 8) | value0);
+        break;
+    case MC_DIAG_READ_DTCS:
+        sim_trace_u32("diag_dtcs_rsp",
+                      ((uint32_t)request_id << 16)
+                    | ((uint32_t)value0 << 8)
+                    | (uint32_t)value1);
+        break;
+    case MC_DIAG_CLEAR_DTCS:
+        sim_trace_u32("diag_clear_rsp", (uint32_t)status);
+        break;
+    case MC_DIAG_ACTUATOR_TEST:
+        sim_trace_u32("diag_actuator_rsp", ((uint32_t)status << 8) | value0);
+        break;
+    default:
+        break;
+    }
+}
 
 void diagnostics_tool_main(void *pvParameters)
 {
     (void)pvParameters;
-    diag_ctx_t *ctx = diag_ctx();
-    diagnostics_tool_init();
 
     TickType_t last_wake = xTaskGetTickCount();
+    mc_can_frame_t tx;
+    uint32_t sent_mask = 0;
+    uint32_t script_ms = 0;
+
+    send_heartbeat(0, &tx);
+    sim_can_send(CAN_BUS, tx.id, tx.data, tx.len, 0, 0);
 
     while (1) {
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
-        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        script_ms += 10;
 
-        // Send heartbeat every 100ms.
-        if (now_ms % 100 == 0) {
-            mc_can_frame_t tx;
-            mc_frame_init(&tx, MC_MSG_HEARTBEAT, MC_NODE_DIAGNOSTICS,
-                          MC_HEARTBEAT_MSG_SIZE);
-            tx.data[0] = MC_NODE_DIAGNOSTICS;
-            tx.data[1] = (uint8_t)(now_ms >> 24);
-            tx.data[2] = (uint8_t)(now_ms >> 16);
-            tx.data[3] = (uint8_t)(now_ms >> 8);
-            tx.data[4] = (uint8_t)(now_ms);
-            sim_can_send(CAN_BUS, tx.id, tx.data, tx.len, 0, 0);
+        if (script_ms >= 100 && !(sent_mask & 0x01)) {
+            send_diag_request(MC_DIAG_START_SESSION, 1, 0, &tx);
+            sent_mask |= 0x01;
+        }
+        if (script_ms >= 200 && !(sent_mask & 0x02)) {
+            send_diag_request(MC_DIAG_READ_MODE, 2, 0, &tx);
+            sent_mask |= 0x02;
+        }
+        if (script_ms >= 350 && !(sent_mask & 0x04)) {
+            send_diag_request(MC_DIAG_ACTUATOR_TEST, 6, 0, &tx);
+            sent_mask |= 0x04;
+        }
+        if (script_ms >= 450 && !(sent_mask & 0x08)) {
+            send_diag_request(MC_DIAG_READ_DTCS, 3, 0, &tx);
+            sent_mask |= 0x08;
+        }
+        if (script_ms >= 650 && !(sent_mask & 0x10)) {
+            send_diag_request(MC_DIAG_CLEAR_DTCS, 4, 0, &tx);
+            sent_mask |= 0x10;
+        }
+        if (script_ms >= 750 && !(sent_mask & 0x20)) {
+            send_diag_request(MC_DIAG_READ_DTCS, 5, 0, &tx);
+            sent_mask |= 0x20;
         }
 
-        // Send BMS live-data requests every 500ms.
-        if (now_ms % 500 == 0) {
-            for (uint8_t p = 0; p < 3; p++) {
-                mc_can_frame_t tx;
-                mc_frame_init(&tx, MC_MSG_DIAG_REQUEST, MC_NODE_DIAGNOSTICS,
-                              MC_DIAG_REQUEST_MSG_SIZE);
-                mc_diag_request_msg_t req;
-                req.source_node = MC_NODE_DIAGNOSTICS;
-                req.service    = MC_DIAG_LIVE_BMS;
-                req.request_id = ctx->request_id;
-                req.param      = p;
-                ctx->pending_req[p] = ctx->request_id;
-                ctx->request_id++;
-                memcpy(tx.data, &req, sizeof(req));
-                sim_can_send(CAN_BUS, tx.id, tx.data, tx.len, 0, 0);
-            }
-        }
+        uint32_t can_id;
+        uint32_t is_ext;
+        uint32_t is_remote;
+        while (1) {
+            mc_can_frame_t rx;
+            uint32_t dlc = sim_can_recv(CAN_BUS, rx.data, MC_MAX_PAYLOAD_SIZE,
+                                        &can_id, &is_ext, &is_remote);
+            if (dlc == 0) break;
 
-        // Poll for diagnostic responses.
-        uint32_t can_id, is_ext, is_remote;
-        mc_can_frame_t rx;
-        uint32_t dlc = sim_can_recv(CAN_BUS, rx.data, MC_MAX_PAYLOAD_SIZE,
-                                    &can_id, &is_ext, &is_remote);
-        if (dlc > 0) {
             rx.id = can_id;
             rx.sender = rx.data[0];
             rx.len = (uint8_t)dlc;
-            if (rx.id == MC_MSG_DIAG_RESPONSE
-                && dlc >= MC_DIAG_RESPONSE_MSG_SIZE) {
-                mc_diag_response_msg_t resp;
-                memcpy(&resp, rx.data, sizeof(resp));
-                sim_trace_u32("diag_response", resp.request_id);
-
-                // Match request_id to pending selector.
-                uint8_t sel;
-                for (sel = 0; sel < 3; sel++) {
-                    if (ctx->pending_req[sel] == resp.request_id) break;
-                }
-
-                if (sel < 3 && resp.status == MC_DIAG_OK) {
-                    ctx->pending_req[sel] = 0xFF;
-                    switch (sel) {
-                    case 0: // value0=soc_percent, value1=temp_c+40
-                        sim_trace_u32("diag_soc", resp.value0);
-                        sim_trace_u32("diag_temp_raw", resp.value1);
-                        break;
-                    case 1: { // pack voltage in 100mV, LE u16
-                        uint16_t volt = ((uint16_t)resp.value1 << 8)
-                                      | resp.value0;
-                        sim_trace_u32("diag_volt", volt);
-                        break;
-                    }
-                    case 2: { // pack current in 100mA, LE i16
-                        int16_t curr = (int16_t)(
-                            ((uint16_t)resp.value1 << 8) | resp.value0);
-                        sim_trace_u32("diag_curr",
-                                      (uint32_t)(int32_t)curr);
-                        break;
-                    }
-                    }
-                } else if (sel < 3) {
-                    ctx->pending_req[sel] = 0xFF;
-                    sim_trace_u32("diag_stale", resp.status);
-                }
+            if (rx.id == MC_MSG_DIAG_RESPONSE && rx.sender == MC_NODE_GATEWAY) {
+                handle_diag_response(&rx);
             }
+        }
+
+        if (script_ms % 100 == 0) {
+            send_heartbeat(script_ms, &tx);
+            sim_can_send(CAN_BUS, tx.id, tx.data, tx.len, 0, 0);
         }
     }
 }

@@ -33,28 +33,36 @@
 #include "microcar_trace.h"
 #include "microcar_can.h"
 #include <string.h>
-#include <stdalign.h>
-// ── Instance key ───────────────────────────────────────────────────────────
 
-#define PT_KEY 0x4D430002
+// ── Global state ──────────────────────────────────────────────────────────
 
-// ── Per-instance context (replaces all file-scope statics) ─────────────────
+static torque_controller_t g_tc;
+static watchdog_task_t     g_wd;
+static uint8_t             g_diag_force_service_mode = 0;
+static uint8_t             g_charging_force_mode = 0;
 
-typedef struct {
-    torque_controller_t  tc;
-    watchdog_task_t      wd;
-    SemaphoreHandle_t    can_tx_slots;
-    TimerHandle_t        wd_timer;
-    TaskHandle_t         powertrain_task_handle;
-} powertrain_ctx_t;
+// SEEDED DEBUG-GYM BUG (service_torque corpus case). When set, the powertrain
+// skips the SERVICE-mode safety clamp and commands the raw requested torque with
+// the motor enabled — modeling firmware that forgot to apply the clamp on a
+// service-test path. Off by default; only powertrain_diag_service_bug sets it,
+// so the default firmware and every other lane stay byte-identical.
+static uint8_t             g_diag_service_clamp_bug = 0;
 
-/// Return the per-machine powertrain context, allocating it on first call.
-static powertrain_ctx_t *pctx(void)
-{
-    powertrain_ctx_t *ctx = (powertrain_ctx_t *)sim_instance_state(
-        PT_KEY, sizeof(powertrain_ctx_t), alignof(powertrain_ctx_t));
-    return ctx;
-}
+// ── Counting semaphore (CAN TX mailbox) ───────────────────────────────────
+
+/// Counting semaphore representing available CAN TX mailbox slots.
+/// Initialised to 3 (max 3 pending TX frames).
+static SemaphoreHandle_t g_can_tx_slots = NULL;
+
+// ── Software timer (watchdog check) ───────────────────────────────────────
+
+/// Software timer that fires every 50ms to call watchdog_check.
+/// Uses FreeRTOS software timer (xTimerCreate).
+static TimerHandle_t g_wd_timer = NULL;
+
+// ── Task handles ──────────────────────────────────────────────────────────
+
+static TaskHandle_t g_powertrain_task_handle = NULL;
 
 // ── Watchdog timer callback ───────────────────────────────────────────────
 
@@ -62,13 +70,12 @@ static powertrain_ctx_t *pctx(void)
 static void watchdog_timer_cb(TimerHandle_t xTimer)
 {
     (void)xTimer;
-    powertrain_ctx_t *ctx = pctx();
     uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    uint8_t timeout = watchdog_check(&ctx->wd, now_ms);
+    uint8_t timeout = watchdog_check(&g_wd, now_ms);
 
     if (timeout) {
         // S4: Gateway heartbeat lost → disable torque.
-        ctx->tc.motor_enable = 0;
+        g_tc.motor_enable = 0;
         sim_trace_u32("gateway_timeout", now_ms);
     } else {
         sim_trace_u32("watchdog_ok", now_ms);
@@ -78,83 +85,100 @@ static void watchdog_timer_cb(TimerHandle_t xTimer)
 // ── Boot ──────────────────────────────────────────────────────────────────
 
 /// Allocate FreeRTOS primitives. Called once from powertrain_main.
-static void powertrain_primitives_init(powertrain_ctx_t *ctx)
+static void powertrain_primitives_init(void)
 {
-    ctx->can_tx_slots = xSemaphoreCreateCounting(3, 3);
+    g_can_tx_slots = xSemaphoreCreateCounting(3, 3);
 
-    ctx->wd_timer = xTimerCreate(
+    g_wd_timer = xTimerCreate(
         "wd_timer",
         pdMS_TO_TICKS(50),
         pdTRUE,   // auto-reload
         NULL,
         watchdog_timer_cb);
 
-    if (ctx->wd_timer != NULL) {
-        xTimerStart(ctx->wd_timer, 0);
+    if (g_wd_timer != NULL) {
+        xTimerStart(g_wd_timer, 0);
     }
 
-    sim_trace_u32("pt_can_sem", ctx->can_tx_slots != NULL ? 1 : 0);
-    sim_trace_u32("pt_wd_timer", ctx->wd_timer != NULL ? 1 : 0);
+    sim_trace_u32("pt_can_sem", g_can_tx_slots != NULL ? 1 : 0);
+    sim_trace_u32("pt_wd_timer", g_wd_timer != NULL ? 1 : 0);
 }
 
-void powertrain_init(powertrain_ctx_t *ctx)
+void powertrain_init(void)
 {
-    torque_controller_init(&ctx->tc);
-    watchdog_init(&ctx->wd);
+    torque_controller_init(&g_tc);
+    watchdog_init(&g_wd);
+}
+
+void powertrain_enable_dogfood_service_mode(void)
+{
+    g_diag_force_service_mode = 1;
+}
+
+void powertrain_enable_dogfood_charging(void)
+{
+    g_charging_force_mode = 1;
+}
+
+// SEEDED DEBUG-GYM BUG (service_torque): enable the buggy powertrain firmware
+// that runs a SERVICE-mode torque computation but skips the safety clamp. The
+// fixed reference is powertrain_enable_dogfood_service_mode
+// (powertrain_diag_service), which clamps torque to 0 and disables the motor.
+void powertrain_enable_dogfood_service_clamp_bug(void)
+{
+    g_diag_force_service_mode = 1; // run a SERVICE-mode torque computation
+    g_diag_service_clamp_bug  = 1; // BUG: skip the SERVICE clamp
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
 
 /// Process a driver input frame (0x020) from the plant.
-static void handle_driver_input(powertrain_ctx_t *ctx,
-                                const mc_can_frame_t *frame)
+static void handle_driver_input(const mc_can_frame_t *frame)
 {
     uint8_t throttle = frame->data[0];
     uint8_t brake    = frame->data[1];
     uint8_t gear     = frame->len >= 3 ? frame->data[2] : 0;
 
-    torque_controller_set_input(&ctx->tc, throttle, brake, gear);
+    torque_controller_set_input(&g_tc, throttle, brake, gear);
 }
 
 /// Process a vehicle mode frame (0x010) from the gateway.
-static void handle_vehicle_mode(powertrain_ctx_t *ctx,
-                                const mc_can_frame_t *frame)
+static void handle_vehicle_mode(const mc_can_frame_t *frame)
 {
     uint8_t mode = frame->data[0];
-    torque_controller_set_mode(&ctx->tc, (mc_vehicle_mode_t)mode);
+    torque_controller_set_mode(&g_tc, (mc_vehicle_mode_t)mode);
 }
 
 /// Process a BMS limits frame (0x201).
-static void handle_bms_limits(powertrain_ctx_t *ctx,
-                              const mc_can_frame_t *frame)
+static void handle_bms_limits(const mc_can_frame_t *frame)
 {
     uint8_t max_torque = frame->data[0];
-    torque_controller_set_bms_limit(&ctx->tc, max_torque);
+    torque_controller_set_bms_limit(&g_tc, max_torque);
 }
 
 /// Process a gateway heartbeat frame (0x001).
-static void handle_gateway_heartbeat(powertrain_ctx_t *ctx, uint32_t now_ms)
+static void handle_gateway_heartbeat(uint32_t now_ms)
 {
-    watchdog_gateway_beat(&ctx->wd, now_ms);
+    watchdog_gateway_beat(&g_wd, now_ms);
 }
 
 /// Dispatch a received CAN frame to the appropriate handler.
-static void dispatch_frame(powertrain_ctx_t *ctx, const mc_can_frame_t *frame)
+static void dispatch_frame(const mc_can_frame_t *frame)
 {
     switch (frame->id) {
     case MC_MSG_DRIVER_INPUT:
-        handle_driver_input(ctx, frame);
+        handle_driver_input(frame);
         break;
     case MC_MSG_VEHICLE_MODE:
-        handle_vehicle_mode(ctx, frame);
+        handle_vehicle_mode(frame);
         break;
     case MC_MSG_BMS_LIMITS:
-        handle_bms_limits(ctx, frame);
+        handle_bms_limits(frame);
         break;
     case MC_MSG_HEARTBEAT:
         if (frame->sender == MC_NODE_GATEWAY) {
             uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
-            handle_gateway_heartbeat(ctx, now_ms);
+            handle_gateway_heartbeat(now_ms);
         }
         break;
     default:
@@ -166,12 +190,12 @@ static void dispatch_frame(powertrain_ctx_t *ctx, const mc_can_frame_t *frame)
 
 /// Send a CAN frame using the counting semaphore as mailbox.
 /// Takes a slot, sends, then gives it back after a short delay.
-static void can_tx_with_semaphore(powertrain_ctx_t *ctx, mc_can_frame_t *frame)
+static void can_tx_with_semaphore(mc_can_frame_t *frame)
 {
-    if (xSemaphoreTake(ctx->can_tx_slots, pdMS_TO_TICKS(2)) == pdTRUE) {
+    if (xSemaphoreTake(g_can_tx_slots, pdMS_TO_TICKS(2)) == pdTRUE) {
         sim_can_send(0, frame->id, frame->data, frame->len, 0, 0);
         // Release the mailbox slot (simulates TX completion interrupt).
-        xSemaphoreGive(ctx->can_tx_slots);
+        xSemaphoreGive(g_can_tx_slots);
     }
 }
 
@@ -188,13 +212,12 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
     tx->data[4] = (uint8_t)(now_ms);
 }
 
-static void send_motor_command(powertrain_ctx_t *ctx, int8_t torque,
-                               mc_can_frame_t *tx)
+static void send_motor_command(int8_t torque, mc_can_frame_t *tx)
 {
     mc_frame_init(tx, MC_MSG_MOTOR_COMMAND, MC_NODE_POWERTRAIN,
                   MC_MOTOR_COMMAND_MSG_SIZE);
     tx->data[0] = (uint8_t)torque;
-    tx->data[1] = ctx->tc.motor_enable;
+    tx->data[1] = g_tc.motor_enable;
 }
 
 // ── Sensor poll task ──────────────────────────────────────────────────────
@@ -203,8 +226,7 @@ static void send_motor_command(powertrain_ctx_t *ctx, int8_t torque,
 /// Runs at 5ms period, prio 3 (same as powertrain_main).
 void sensor_poll(void *pvParameters)
 {
-    powertrain_ctx_t *ctx = (powertrain_ctx_t *)pvParameters;
-    (void)ctx;
+    (void)pvParameters;
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -226,10 +248,10 @@ void sensor_poll(void *pvParameters)
 /// If jitter > 2 ticks, traces `deadline_miss` with the jitter value.
 /// This makes scheduler performance regressions immediately visible in trace
 /// output — if a costar change introduces timing drift, golden trace
+/// comparison catches it.
 void deadline_monitor(void *pvParameters)
 {
-    powertrain_ctx_t *ctx = (powertrain_ctx_t *)pvParameters;
-    (void)ctx;
+    (void)pvParameters;
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -262,7 +284,7 @@ void deadline_monitor(void *pvParameters)
 /// Traces torque commands and gateway status.
 void logger(void *pvParameters)
 {
-    powertrain_ctx_t *ctx = (powertrain_ctx_t *)pvParameters;
+    (void)pvParameters;
 
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -272,8 +294,8 @@ void logger(void *pvParameters)
         uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
         // Log current torque and gateway online status.
-        uint8_t gw_online = watchdog_gateway_online(&ctx->wd);
-        uint32_t log_val = ((uint32_t)gw_online << 16) | (ctx->tc.motor_enable & 1);
+        uint8_t gw_online = watchdog_gateway_online(&g_wd);
+        uint32_t log_val = ((uint32_t)gw_online << 16) | (g_tc.motor_enable & 1);
         sim_trace_u32("logger_event", log_val);
 
         (void)now_ms;
@@ -285,15 +307,22 @@ void logger(void *pvParameters)
 void powertrain_main(void *pvParameters)
 {
     (void)pvParameters;
-    powertrain_ctx_t *ctx = pctx();
-    powertrain_init(ctx);
-    powertrain_primitives_init(ctx);
-    ctx->powertrain_task_handle = xTaskGetCurrentTaskHandle();
+    powertrain_init();
+    powertrain_primitives_init();
+    g_powertrain_task_handle = xTaskGetCurrentTaskHandle();
+    if (g_diag_force_service_mode) {
+        torque_controller_set_mode(&g_tc, VEHICLE_SERVICE);
+        torque_controller_set_input(&g_tc, 80, 0, 0);
+    }
+    if (g_charging_force_mode) {
+        torque_controller_set_mode(&g_tc, VEHICLE_CHARGING);
+        torque_controller_set_input(&g_tc, 80, 0, 0);
+    }
 
     // Create subordinate tasks.
-    xTaskCreate(sensor_poll, "sensor", 512, ctx, 3, NULL);
-    xTaskCreate(logger, "logger", 512, ctx, 1, NULL);
-    xTaskCreate(deadline_monitor, "dl_mon", 384, ctx, 2, NULL);
+    xTaskCreate(sensor_poll, "sensor", 512, NULL, 3, NULL);
+    xTaskCreate(logger, "logger", 512, NULL, 1, NULL);
+    xTaskCreate(deadline_monitor, "dl_mon", 384, NULL, 2, NULL);
 
     TickType_t last_wake = xTaskGetTickCount();
     mc_can_frame_t tx;
@@ -318,20 +347,47 @@ void powertrain_main(void *pvParameters)
             rx.id = can_id;
             rx.sender = rx.data[0];
             rx.len = (uint8_t)dlc;
-            dispatch_frame(ctx, &rx);
+            dispatch_frame(&rx);
+        }
+        if (g_diag_force_service_mode) {
+            torque_controller_set_mode(&g_tc, VEHICLE_SERVICE);
+            torque_controller_set_input(&g_tc, 80, 0, 0);
+        }
+        if (g_charging_force_mode) {
+            torque_controller_set_mode(&g_tc, VEHICLE_CHARGING);
+            torque_controller_set_input(&g_tc, 80, 0, 0);
         }
 
         // ── Compute torque ────────────────────────────────────
-        int8_t torque = torque_controller_compute(&ctx->tc);
+        int8_t torque = torque_controller_compute(&g_tc);
+
+        // SEEDED DEBUG-GYM BUG (service_torque): the SERVICE-mode safety clamp
+        // is skipped, so a service session still commands drive torque with the
+        // motor enabled. The fixed firmware (powertrain_diag_service) clamps
+        // torque to 0 and disables the motor. Off by default.
+        if (g_diag_service_clamp_bug && g_tc.vehicle_mode == VEHICLE_SERVICE) {
+            torque = (int8_t)g_tc.throttle_percent;
+            g_tc.motor_enable = 1;
+        }
 
         // ── Send motor command (with semaphore guard) ────────
-        send_motor_command(ctx, torque, &tx);
-        can_tx_with_semaphore(ctx, &tx);
+        send_motor_command(torque, &tx);
+        if (g_tc.vehicle_mode == VEHICLE_SERVICE) {
+            sim_trace_u32("diag_motor_command",
+                          ((uint32_t)(uint8_t)torque << 8)
+                        | (uint32_t)g_tc.motor_enable);
+        }
+        if (g_tc.vehicle_mode == VEHICLE_CHARGING) {
+            sim_trace_u32("charging_motor_command",
+                          ((uint32_t)(uint8_t)torque << 8)
+                        | (uint32_t)g_tc.motor_enable);
+        }
+        can_tx_with_semaphore(&tx);
 
         // ── Send heartbeat ────────────────────────────────────
         if (now_ms % 100 == 0) {
             send_heartbeat(now_ms, &tx);
-            can_tx_with_semaphore(ctx, &tx);
+            can_tx_with_semaphore(&tx);
         }
     }
 }

@@ -1,0 +1,70 @@
+# clear_dtcs_bug — FIXED firmware for the debug_gym seeded-bug corpus case
+# "clear_all_dtcs".
+#
+# Identical to failing.toml except the gateway runs the correct firmware
+# (firmware/gateway_diag_clear_ecu): a CLEAR_DTCS request scoped to the BMS
+# clears only the BMS-node DTCs, so the unrelated powertrain fault survives.
+# After the clear a follow-up READ_DTCS reports 1 DTC (the powertrain fault),
+# where the buggy firmware reports 0.
+
+name = "clear_dtcs_bug_fixed"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_diag_clear_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diagnostics_tool"
+
+[plant]
+type = "microcar"
+tick_ms = 10

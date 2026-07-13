@@ -1,0 +1,22 @@
+# expect-kind: invalid
+# A [[bus.node]] attaches to a bus name that was never defined.
+name = "bad_bus_reference"
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan_missing"
+machine = "gateway"

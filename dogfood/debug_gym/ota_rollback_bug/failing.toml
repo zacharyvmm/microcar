@@ -1,0 +1,68 @@
+# ota_rollback_bug — FAILING (buggy) firmware for the debug_gym seeded-bug
+# corpus case "ota_rollback".
+#
+# The OTA image is corrupt, but this gateway runs the *buggy* firmware
+# (firmware/gateway_ota_crcbug): its CRC check is broken and reports the corrupt
+# image as valid. The slot model therefore commits and boots the bad slot
+# instead of rolling back —
+#   IDLE(0) → DOWNLOADING(1) → VERIFYING(2, crc wrongly OK) → COMMIT_PENDING(3)
+#   → REBOOTING(4) → HEALTHY(5).
+# The bug's symptom: a corrupt image reaches ota_boot_result=1 and NO
+# ota_rollback occurs — the vehicle boots an unverified firmware image.
+#
+# The paired fixed scenario (fixed.toml) runs firmware/gateway_ota_badcrc on the
+# same campaign and rolls back to slot A. The debug_gym corpus harness asserts
+# the bug reproduces here and is resolved there, and that the two traces diverge
+# at the VERIFYING step (this run reports ota_crc_ok=1; the fix reports 0).
+
+name = "ota_rollback_bug_failing"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ota_crcbug"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10

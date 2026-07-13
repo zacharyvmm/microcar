@@ -1,0 +1,78 @@
+# clear_dtcs_bug — FAILING (buggy) firmware for the debug_gym seeded-bug corpus
+# case "clear_all_dtcs".
+#
+# A diagnostic SERVICE session has two DTCs stored: a BMS overtemp fault and an
+# unrelated powertrain fault. The gateway runs the *buggy* firmware
+# (firmware/gateway_diag_clearbug_ecu): a CLEAR_DTCS request scoped to the BMS
+# wrongly clears EVERY node's DTCs, silently dropping the powertrain fault.
+# The bug's symptom: after a BMS-scoped clear, a follow-up READ_DTCS reports 0
+# DTCs — the powertrain fault has vanished even though nobody serviced it.
+#
+# The paired fixed scenario (fixed.toml) runs firmware/gateway_diag_clear_ecu on
+# the same session: it clears only the BMS-scoped DTCs, so the powertrain fault
+# survives and the follow-up READ_DTCS reports 1. The debug_gym corpus harness
+# asserts the bug reproduces here and is resolved there, and that the two final
+# DTC counts diverge (0 vs 1) — localizable by breakpointing on the
+# gateway_diag_response trace for the post-clear READ_DTCS.
+
+name = "clear_dtcs_bug_failing"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_diag_clearbug_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diagnostics_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diagnostics_tool"
+
+[plant]
+type = "microcar"
+tick_ms = 10

@@ -1,0 +1,19 @@
+# expect-kind: invalid
+# Fault targets a machine that does not exist.
+name = "invalid_fault_target"
+duration_ms = 100
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+
+[[fault]]
+at_ms = 50
+target = "machine.nonexistent"
+type = "reboot"

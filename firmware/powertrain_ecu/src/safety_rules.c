@@ -12,6 +12,11 @@ uint8_t safety_fault_disables_motor(mc_vehicle_mode_t mode)
     return (mode == VEHICLE_FAULT) ? 1 : 0;
 }
 
+uint8_t safety_mode_blocks_torque(mc_vehicle_mode_t mode)
+{
+    return (mode != VEHICLE_DRIVE && mode != VEHICLE_LIMP) ? 1 : 0;
+}
+
 uint8_t safety_limp_torque_cap(mc_vehicle_mode_t mode)
 {
     if (mode == VEHICLE_LIMP) {
@@ -35,8 +40,8 @@ int8_t safety_clamp_torque(int8_t requested_torque,
         return 0;
     }
 
-    // S2: FAULT mode disables motor
-    if (safety_fault_disables_motor(mode)) {
+    // S2/SERVICE/CHARGING/OTA: non-drive modes disable positive torque.
+    if (safety_mode_blocks_torque(mode)) {
         return 0;
     }
 

@@ -1,0 +1,83 @@
+# plug_blocks_drive — a plugged-in charger blocks drive torque.
+#
+# This is the first `charging` dogfood lane scenario. Like the diagnostics lane
+# it checks compact firmware trace events (it does not depend on the still
+# unreliable firmware-originated CAN RX path), so it uses explicit charging
+# dogfood firmware variants:
+#
+#   * gateway_charging  — runs a charging script inside gateway firmware: at
+#     100ms a charger is "plugged in" and the gateway enters CHARGING; at 300ms
+#     a drive request arrives while plugged and must be refused (mode stays
+#     CHARGING — drive blocked while plugged).
+#   * powertrain_charging — forces a CHARGING-mode torque computation with an
+#     80% throttle demand so the safety clamp is exercised; in CHARGING the
+#     motor torque must clamp to 0 and the motor must be disabled.
+#
+# The vehicle-mode state machine (mc_gateway_determine_mode) already keeps
+# CHARGING sticky, and the safety clamp (mc_safety_clamp_torque /
+# safety_mode_blocks_torque) already blocks positive torque outside DRIVE/LIMP.
+# This scenario is what actually exercises those safety properties end-to-end.
+#
+# charging-expect: charging-mode
+# charging-expect: drive-blocked
+# charging-expect: motor-torque max=0
+
+name = "charging_plug_blocks_drive"
+duration_ms = 1000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_charging_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_charging_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# Driver stamps the throttle while the car is plugged in — the safety model
+# must refuse to produce drive torque.
+[[input]]
+at_ms = 250
+type = "driver_input"
+throttle_percent = 80
+brake_pressed = false

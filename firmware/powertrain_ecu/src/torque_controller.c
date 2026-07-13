@@ -48,8 +48,8 @@ int8_t torque_controller_compute(torque_controller_t *tc)
                                             tc->brake_pressed,
                                             tc->bms_torque_limit);
 
-    // S2: FAULT mode disables motor entirely
-    if (safety_fault_disables_motor(tc->vehicle_mode)) {
+    // S2/SERVICE/CHARGING/OTA: non-drive modes disable motor entirely.
+    if (safety_mode_blocks_torque(tc->vehicle_mode)) {
         tc->motor_enable = 0;
     } else {
         tc->motor_enable = 1;
