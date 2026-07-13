@@ -30,6 +30,7 @@ pub mod invariants;
 pub mod json;
 pub mod runner;
 pub mod summary;
+pub mod telematics;
 pub mod trace_hash;
 
 pub use determinism::{check_solo_vs_repeat, DeterminismReport};
@@ -39,4 +40,9 @@ pub use invariants::{
 };
 pub use runner::{run_scenario, RunStatus, ScenarioRun};
 pub use summary::{build_summary, write_summary, Summary, HARNESS_VERSION};
+pub use telematics::{
+    discover_scenarios as discover_telematics_scenarios, run_telematics,
+    run_telematics_scenario, TelematicsCheck, TelematicsReport, TelematicsScenarioResult,
+    DEFAULT_TELEMATICS_DIR,
+};
 pub use trace_hash::{normalize_trace, normalized_hash, trace_hash};

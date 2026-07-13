@@ -1,0 +1,51 @@
+# tcp_loopback_test — telematics ECU + host TCP bridge byte-conservation test
+#
+# Stage H: the telematics ECU firmware sends length-prefixed status records
+# over virtual Ethernet device 0. A host-side TCP bridge (loopback, ephemeral
+# port, 256-byte socket buffers) reads the virtual Ethernet frames and
+# forwards them to a local TCP listener. The test splits every request at each
+# possible byte boundary, then verifies byte conservation across a 100-record
+# burst within a 10-second wall-clock timeout.
+#
+# Record format (microcar_telematics.h):
+#   [2-byte BE length][4-byte BE seq_no][4-byte BE uptime_ms][1-byte node_id]
+#   = 11 bytes per record.
+#
+# Invariants exercised:
+#   - byte conservation across fragmented reads/writes
+#   - one response per request ID
+#   - repeated poller wakeups (no stall)
+#   - complete socket/poller cleanup after session destruction
+
+name = "tcp_loopback_test"
+duration_ms = 15000
+
+[[machine]]
+id = 1
+name = "telematics"
+firmware = "firmware/telematics_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "peer"
+# Dummy peer — endpoint for the virtual Ethernet link.
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "telematics"
+
+[[link]]
+type = "eth"
+from = 1
+to = 2
+latency = 1000
+
+[plant]
+type = "microcar"
+tick_ms = 10

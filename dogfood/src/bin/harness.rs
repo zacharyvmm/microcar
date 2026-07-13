@@ -24,6 +24,7 @@ use std::time::Duration;
 use microcar_dogfood::determinism::DeterminismReport;
 use microcar_dogfood::invariants::CheckStatus;
 use microcar_dogfood::summary::{build_summary, ScenarioSummary};
+use std::process::Command as StdCommand;
 use microcar_dogfood::{check_solo_vs_repeat, write_summary};
 
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
@@ -43,6 +44,8 @@ fn main() -> ExitCode {
     match cmd {
         "run" => cmd_run(rest),
         "run-all" => cmd_run_all(rest),
+        "cockpit" => cmd_cockpit(rest),
+        "telematics" => cmd_telematics(rest),
         "-h" | "--help" | "help" => {
             usage();
             ExitCode::SUCCESS
@@ -304,8 +307,10 @@ fn usage() {
         "microcar dogfood harness\n\
          \n\
          USAGE:\n\
-         \x20 harness run     <scenario.toml> [--timeout-secs N] [--repeats N] [--json OUT]\n\
-         \x20 harness run-all [--scenario-dir DIR] [--timeout-secs N] [--repeats N] [--json OUT]\n\
+         \x20 harness run         <scenario.toml> [--timeout-secs N] [--repeats N] [--json OUT]\n\
+         \x20 harness run-all     [--scenario-dir DIR] [--timeout-secs N] [--repeats N] [--json OUT]\n\
+         \x20 harness cockpit     Run gRPC cockpit integration test\n\
+         \x20 harness telematics  Run telematics integration tests\n\
          \n\
          FLAGS:\n\
          \x20 --timeout-secs N   Wall-clock timeout per run (default {DEFAULT_TIMEOUT_SECS})\n\
@@ -316,4 +321,77 @@ fn usage() {
          The microcar binary is found via $MICROCAR_BIN or target/debug/microcar.\n\
          Exit code is non-zero if any scenario failed."
     );
+}
+
+/// Run the gRPC cockpit integration test from the costar sim-grpc crate.
+fn cmd_cockpit(_args: &[String]) -> ExitCode {
+    let costar_root = PathBuf::from("../costar");
+    if !costar_root.join("Cargo.toml").is_file() {
+        eprintln!(
+            "harness cockpit: costar repo not found at {}",
+            costar_root.display()
+        );
+        eprintln!("Run this from the microcar repo root with costar at ../costar");
+        return ExitCode::from(2);
+    }
+
+    println!("Running gRPC cockpit integration test (sim-grpc)...");
+    let status = StdCommand::new("cargo")
+        .args(["test", "-p", "sim-grpc", "--", "cockpit", "--nocapture"])
+        .current_dir(&costar_root)
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("cockpit: PASS");
+            ExitCode::SUCCESS
+        }
+        Ok(s) => {
+            let code = s.code().unwrap_or(-1);
+            eprintln!("cockpit: FAIL (exit code: {code})");
+            ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!("harness cockpit: failed to run cargo test: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// Run telematics integration tests: runs the microcar binary with a
+/// telematics scenario and verifies the JSON summary output contains
+/// expected record counts, request IDs, and payloads.
+fn cmd_telematics(args: &[String]) -> ExitCode {
+    let opts = match parse_opts(args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("harness telematics: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let bin = match locate_microcar() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("harness: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    // Run the fixed telematics debug_gym scenario.
+    let scenario = PathBuf::from("dogfood/debug_gym/telematics_partial_write_bug/fixed.toml");
+    if !scenario.is_file() {
+        eprintln!(
+            "harness telematics: scenario not found at {}",
+            scenario.display()
+        );
+        eprintln!("Run this from the microcar repo root.");
+        return ExitCode::from(2);
+    }
+
+    println!(
+        "Running telematics integration test: {}",
+        scenario.display()
+    );
+    let report = check_solo_vs_repeat(&bin, &scenario, opts.repeats, opts.timeout);
+    finish(&bin, vec![report], &opts.json)
 }
