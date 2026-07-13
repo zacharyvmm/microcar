@@ -72,6 +72,9 @@ fn main() -> ExitCode {
                 if is_zephyr {
                     #[cfg(feature = "zephyr")]
                     {
+                        machine.set_firmware_factory(std::sync::Arc::new(|| {
+                            Box::new(ZephyrDashboardFirmware::new())
+                        }));
                         machine.load_firmware(Box::new(ZephyrDashboardFirmware::new()));
                     }
                     #[cfg(not(feature = "zephyr"))]
