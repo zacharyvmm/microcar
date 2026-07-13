@@ -77,8 +77,15 @@ before_ms = 2000
 machine = "gateway"
 event = "node_online"
 
-# Sibling ECU (powertrain) heartbeat continues uninterrupted across gateway
-# downtime — no node_lost or gateway_timeout markers for powertrain.
+# Gateway does not emit node_lost or gateway_timeout markers after restart.
+# This is a limited no-plant smoke assertion — the check is on the gateway
+# machine itself, not on the sibling ECU.  The powertrain continues to run,
+# but this scenario does not directly assert powertrain/sibling heartbeat
+# continuity.
+#
+# TODO: add explicit powertrain heartbeat-continuity assertion (expect.no
+# on machine = "powertrain" for node_lost / gateway_timeout) once the
+# harness exposes/records the relevant sibling ECU heartbeat markers.
 [[expect.no]]
 before_ms = 2000
 machine = "gateway"
