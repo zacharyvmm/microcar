@@ -65,6 +65,15 @@ typedef struct {
     QueueHandle_t       hb_queue;
     SemaphoreHandle_t   can_frame_sem;
 
+    // BMS status snapshot cache (Stage D: diagnostics live data)
+    mc_bms_status_msg_t bms_snapshot;
+    uint8_t             bms_snapshot_seq;
+    uint32_t            bms_snapshot_time_ms;
+    uint8_t             bms_snapshot_valid;
+
+    // Diagnostics request queue (heartbeat_rx → gateway_main)
+    QueueHandle_t       diag_req_queue;
+
     // Task handle for gateway_main (receives task notifications)
     TaskHandle_t        gateway_task_handle;
 } gateway_ctx_t;
@@ -86,6 +95,7 @@ static void gateway_primitives_init(gateway_ctx_t *ctx)
     ctx->mode_events    = xEventGroupCreate();
     ctx->hb_queue       = xQueueCreate(16, sizeof(hb_event_t));
     ctx->can_frame_sem  = xSemaphoreCreateCounting(64, 0);
+    ctx->diag_req_queue = xQueueCreate(8, sizeof(mc_diag_request_msg_t));
 
     sim_trace_u32("gateway_mutex", ctx->fm_mutex != NULL ? 1 : 0);
     sim_trace_u32("gateway_event_group", ctx->mode_events != NULL ? 1 : 0);
@@ -142,8 +152,8 @@ static void handle_bms_fault(gateway_ctx_t *ctx, const mc_can_frame_t *frame)
     }
 }
 
-/// Dispatch a received CAN frame to the appropriate handler.
-/// Called from heartbeat_rx task (only processes heartbeat and BMS fault).
+// Dispatch a received CAN frame to the appropriate handler.
+// Called from heartbeat_rx task.
 static void dispatch_frame_in_rx(gateway_ctx_t *ctx,
                                  const mc_can_frame_t *frame)
 {
@@ -165,6 +175,21 @@ static void dispatch_frame_in_rx(gateway_ctx_t *ctx,
         break;
     case MC_MSG_BMS_FAULT:
         handle_bms_fault(ctx, frame);
+        break;
+    case MC_MSG_BMS_STATUS:
+        // Stage D: cache BMS status snapshot with timestamp.
+        memcpy(&ctx->bms_snapshot, frame->data, sizeof(mc_bms_status_msg_t));
+        ctx->bms_snapshot_seq      = frame->data[7];
+        ctx->bms_snapshot_time_ms  = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        ctx->bms_snapshot_valid    = 1;
+        break;
+    case MC_MSG_DIAG_REQUEST:
+        // Forward to gateway_main via queue.
+        if (frame->len >= sizeof(mc_diag_request_msg_t)) {
+            mc_diag_request_msg_t req;
+            memcpy(&req, frame->data, sizeof(mc_diag_request_msg_t));
+            xQueueSend(ctx->diag_req_queue, &req, 0);
+        }
         break;
     default:
         break;
@@ -225,6 +250,61 @@ static void send_vehicle_mode(gateway_ctx_t *ctx, mc_can_frame_t *tx)
                   MC_VEHICLE_MODE_MSG_SIZE);
     tx->data[0] = (uint8_t)mode;
     tx->data[1] = fault_cd;
+}
+
+// Handle a diagnostics request from the diagnostics tool.
+// Responds with MC_DIAG_LIVE_BMS selector-based encoding using the
+// cached BMS status snapshot.  If the snapshot is missing or older
+// than 500ms, responds with MC_DIAG_STALE.
+static void handle_diag_request(gateway_ctx_t *ctx, uint32_t now_ms,
+                                const mc_diag_request_msg_t *req,
+                                mc_can_frame_t *tx)
+{
+    mc_diag_response_msg_t resp = {
+        .source_node = MC_NODE_GATEWAY,
+        .service     = req->service,
+        .request_id  = req->request_id,
+        .status      = MC_DIAG_OK,
+        .value0      = 0,
+        .value1      = 0,
+    };
+
+    if (req->service != MC_DIAG_LIVE_BMS) {
+        resp.status = MC_DIAG_UNSUPPORTED;
+    } else if (!ctx->bms_snapshot_valid ||
+               (now_ms - ctx->bms_snapshot_time_ms) > 500) {
+        resp.status = MC_DIAG_STALE;
+    } else {
+        switch (req->param) {
+        case 0:
+            // selector 0: soc_percent, temp_c + 40
+            resp.value0 = ctx->bms_snapshot.soc_percent;
+            resp.value1 = (uint8_t)((ctx->bms_snapshot.pack_temp_c_x10 / 10) + 40);
+            break;
+        case 1: {
+            // selector 1: pack voltage in 100 mV, little-endian u16
+            uint16_t volts_cmv = ctx->bms_snapshot.pack_voltage_mv / 100;
+            resp.value0 = (uint8_t)(volts_cmv & 0xFF);
+            resp.value1 = (uint8_t)(volts_cmv >> 8);
+            break;
+        }
+        case 2: {
+            // selector 2: pack current in 100 mA, little-endian i16
+            int16_t current_cma = ctx->bms_snapshot.pack_current_ma / 100;
+            resp.value0 = (uint8_t)(current_cma & 0xFF);
+            resp.value1 = (uint8_t)(current_cma >> 8);
+            break;
+        }
+        default:
+            resp.status = MC_DIAG_UNSUPPORTED;
+            break;
+        }
+    }
+
+    mc_frame_init(tx, MC_MSG_DIAG_RESPONSE, MC_NODE_GATEWAY,
+                  MC_DIAG_RESPONSE_MSG_SIZE);
+    memcpy(tx->data, &resp, sizeof(resp));
+    sim_can_send(0, tx->id, tx->data, tx->len, 0, 0);
 }
 
 // ── Heartbeat RX task ─────────────────────────────────────────────────────
@@ -400,6 +480,12 @@ void gateway_main(void *pvParameters)
         if (mode_bits & 0x01) {
             sim_trace_u32("mode_event_group", mode_bits);
             xEventGroupClearBits(ctx->mode_events, 0x01);
+        }
+
+        // ── Process diagnostics requests ────────────────────────
+        mc_diag_request_msg_t diag_req;
+        while (xQueueReceive(ctx->diag_req_queue, &diag_req, 0) == pdTRUE) {
+            handle_diag_request(ctx, now_ms, &diag_req, &tx);
         }
 
         // ── Broadcast phase ─────────────────────────────────────

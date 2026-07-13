@@ -45,6 +45,7 @@ typedef struct {
 
     // Global state.
     bms_state_t        bs;
+    uint8_t            seq;
     bms_limits_t       bl;
 } bms_ctx_t;
 
@@ -166,6 +167,23 @@ static void handle_bms_status(bms_ctx_t *ctx, const mc_can_frame_t *frame)
     // Detect state transitions for fault reporting.
     if (new_state == BMS_CRITICAL_FAULT && old_state != BMS_CRITICAL_FAULT) {
         ctx->bs.fault_code = MC_BMS_FAULT_OVERTEMP;
+    }
+
+    // Increment wrapping sequence and publish BMS status.
+    ctx->seq++;
+    {
+        mc_can_frame_t tx;
+        mc_frame_init(&tx, MC_MSG_BMS_STATUS, MC_NODE_BMS,
+                      MC_BMS_STATUS_MSG_SIZE);
+        mc_bms_status_msg_t status = {
+            .pack_voltage_mv = voltage_mv,
+            .pack_current_ma = current_ma,
+            .pack_temp_c_x10 = temp_c_x10,
+            .soc_percent = soc_percent,
+            .seq = ctx->seq,
+        };
+        memcpy(tx.data, &status, MC_BMS_STATUS_MSG_SIZE);
+        sim_can_send(0, tx.id, tx.data, tx.len, 0, 0);
     }
 }
 

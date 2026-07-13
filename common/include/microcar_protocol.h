@@ -202,6 +202,7 @@ typedef struct {
     int16_t  pack_current_ma;
     int16_t  pack_temp_c_x10;
     uint8_t  soc_percent;
+    uint8_t  seq;               // wrapping sequence number (Stage D)
 } __attribute__((packed)) mc_bms_status_msg_t;
 
 typedef struct {
