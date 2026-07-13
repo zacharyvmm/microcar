@@ -1,12 +1,21 @@
 # B3: gateway reboot with nonzero downtime — Stage A3 restart verification.
 #
-# Verifies:
+# Directly asserts:
 #  - machine_reset_boot marker appears after downtime
 #  - legacy fault:reboot marker does NOT appear
-#  - gateway firmware factory is invoked on restart
-#  - sibling ECU (powertrain) heartbeat continues uninterrupted
-#  - downtime frame dropping: frames sent during downtime window
-#    are not observed by the restarted gateway
+#  - gateway emits node_online after reconstruction
+#  - no gateway node_lost / gateway_timeout marker appears
+#
+# Covered by sim-world unit tests:
+#  - pending_boots advances run()/run_until()
+#  - frame before boot is dropped
+#  - frame exactly at boot is delivered
+#  - restart preserves persistent state, resets volatile state
+#
+# TODO:
+#  - plant-backed restart scenario once plant segfault is fixed
+#  - explicit RTOS/config identity assertion
+#  - explicit firmware-factory invocation assertion
 #
 # NOTE: [plant] removed due to pre-existing C firmware segfault with
 # the microcar plant model.  This scenario exercises the core restart
@@ -79,10 +88,3 @@ event = "node_lost"
 before_ms = 2000
 machine = "gateway"
 event = "gateway_timeout"
-
-# RTOS identity survives restart: the reconstructed gateway must still
-# identify as freertos (recorded in machine_reset_boot trace line).
-# If RTOS changed, machine_reset_boot would carry a different label.
-
-# TODO: plant integration segfault blocks full scenario with microcar plant.
-# Once fixed, add [[plant]] section and plant-aware assertions.
