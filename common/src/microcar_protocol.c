@@ -269,6 +269,12 @@ mc_vehicle_mode_t mc_gateway_determine_mode(mc_vehicle_mode_t current_mode,
         return VEHICLE_CHARGING;
     }
 
+    // OTA_UPDATE is a sticky mode: once admitted, stays until reboot.
+    // Only critical fault (handled above) can override it.
+    if (current_mode == VEHICLE_OTA_UPDATE) {
+        return VEHICLE_OTA_UPDATE;
+    }
+
     // BMS limp request → LIMP (overrides node online status —
     // the BMS IS communicating if it sent a limp request)
     if (bms_limp_requested) {

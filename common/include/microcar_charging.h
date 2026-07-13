@@ -20,6 +20,7 @@ extern "C" {
 typedef struct {
     mc_evse_event_t kind;
     uint8_t         fresh_bms_limit;   // BMS current limit in 0.5A units, 0 if stale
+    uint8_t         soc_percent;       // BMS-reported SOC (0-100), from BMS_CHARGE_LIMIT
     uint8_t         critical_fault;    // 1 = BMS critical fault active
     uint8_t         target_soc;        // EVSE target SOC (50-100)
     uint8_t         offered_current;   // EVSE offered current in 0.5A units

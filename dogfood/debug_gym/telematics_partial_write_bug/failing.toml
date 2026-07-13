@@ -1,0 +1,59 @@
+# telematics_partial_write_bug (failing) — parser discards incomplete record
+#
+# Debug-gym seed: a 15-byte TELEM_REC_STATUS record is split across two
+# Ethernet fragments at byte 7. The buggy parser discards the first
+# (incomplete) fragment and treats the second fragment as a fresh record,
+# producing a corrupted parse.
+#
+# This is the *failing* half of the pair.  The fixed half is fixed.toml.
+#
+# Record format (microcar_telematics.h):
+#   [2-byte BE length][1-byte type][4-byte uptime_ms][4-byte send_count][4-byte recv_count]
+#
+# Complete record (15 bytes):
+#   00 0D 01 00 00 00 01 00 00 00 64 00 00 00 00
+#   └─len=13─┘ └type=1┘ └─uptime=1──┘ └send=100──┘ └recv=0───┘
+#
+# Fragment 1 (7 bytes): 00 0D 01 00 00 00 01  — truncates inside uptime_ms
+# Fragment 2 (8 bytes): 00 00 00 64 00 00 00 00  — remainder + payload
+
+name = "telematics_partial_write_bug_failing"
+duration_ms = 5000
+
+[[machine]]
+id = 1
+name = "injector"
+# Dummy machine — link endpoint for fragment injection.
+
+[[machine]]
+id = 2
+name = "parser"
+firmware = "firmware/telematics_ecu_partial_write_bug"
+rtos = "freertos"
+
+[[link]]
+type = "eth"
+from = 1
+to = 2
+latency = 1000
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# Fragment 1 arrives at 100 ms virtual time.
+# The buggy parser receives 7 bytes, sees length=13 requiring 15 total,
+# and instead of buffering, discards the fragment.
+[[inject]]
+at = 100000
+link = { from = 1, to = 2 }
+data = "\u0000\u000D\u0001\u0000\u0000\u0000\u0001"
+
+# Fragment 2 arrives at 200 ms virtual time.
+# The buggy parser treats these 8 bytes as a new record:
+#   length=0x0000 (zero — invalid), or misinterprets bytes.
+# Record is corrupted; wrong uptime_ms, send_count, recv_count.
+[[inject]]
+at = 200000
+link = { from = 1, to = 2 }
+data = "\u0000\u0000\u0000\u0064\u0000\u0000\u0000\u0000"

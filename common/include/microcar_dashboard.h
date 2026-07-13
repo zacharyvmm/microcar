@@ -17,6 +17,7 @@ extern "C" {
 
 typedef struct {
     mc_vehicle_mode_t mode;
+    uint8_t           prev_mode;      // previous mode for screen-change detection
     uint8_t           page;           // 0 or 1
     uint16_t          bg_color;       // RGB565 background
     uint8_t           speed_kmh;      // 0-255 km/h
