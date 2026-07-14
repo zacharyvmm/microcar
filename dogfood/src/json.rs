@@ -1,47 +1,52 @@
-//! Minimal hand-rolled JSON emitter (pretty-printed).
+//! Minimal, dependency-free JSON emitter.
 //!
-//! The dogfood harness is intentionally std-only (no `serde`). This module
-//! provides just enough JSON to emit the CI summary: objects, arrays, strings,
-//! unsigned integers, and booleans, with proper string escaping and 2-space
-//! pretty indentation. Object key order is preserved (insertion order).
+//! serde_json *is* present in microcar's Cargo.lock (transitively), but pulling
+//! it in would add serde + proc-macro build deps to this otherwise std-only
+//! crate and couple our output format to serde's derive machinery. The summary
+//! we emit is small and flat, so a ~100-line hand-rolled writer is the lighter,
+//! more self-contained choice. Output is valid, RFC 8259-compliant JSON.
 
-/// A minimal JSON value.
+use std::fmt::Write as _;
+
+/// A JSON value. Object key order is preserved (insertion order) for stable,
+/// diff-friendly output.
+#[derive(Debug, Clone)]
 pub enum Json {
-    /// A JSON string (escaped on render).
-    Str(String),
-    /// A JSON unsigned integer.
-    UInt(u128),
-    /// A JSON boolean.
+    Null,
     Bool(bool),
-    /// A JSON array.
+    /// Integer-valued number.
+    Int(i64),
+    /// Unsigned integer-valued number (for values that can exceed i64, e.g. ms).
+    UInt(u128),
+    Str(String),
     Arr(Vec<Json>),
-    /// A JSON object (insertion-ordered key/value pairs).
     Obj(Vec<(String, Json)>),
 }
 
 impl Json {
-    /// Convenience constructor for a JSON string from anything string-like
-    /// (`&str`, `&String`, `String`).
-    pub fn str<S: AsRef<str>>(s: S) -> Json {
-        Json::Str(s.as_ref().to_string())
+    pub fn str(s: impl Into<String>) -> Json {
+        Json::Str(s.into())
     }
 
-    /// Render as pretty-printed JSON with 2-space indentation.
+    /// Serialize with 2-space indentation and a trailing newline.
     pub fn to_pretty(&self) -> String {
         let mut out = String::new();
-        self.write_pretty(&mut out, 0);
+        self.write(&mut out, 0);
+        out.push('\n');
         out
     }
 
-    fn write_pretty(&self, out: &mut String, indent: usize) {
+    fn write(&self, out: &mut String, indent: usize) {
         match self {
-            Json::Str(s) => {
-                out.push('"');
-                escape_into(s, out);
-                out.push('"');
-            }
-            Json::UInt(n) => out.push_str(&n.to_string()),
+            Json::Null => out.push_str("null"),
             Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+            Json::Int(n) => {
+                let _ = write!(out, "{n}");
+            }
+            Json::UInt(n) => {
+                let _ = write!(out, "{n}");
+            }
+            Json::Str(s) => write_escaped(out, s),
             Json::Arr(items) => {
                 if items.is_empty() {
                     out.push_str("[]");
@@ -50,7 +55,7 @@ impl Json {
                 out.push_str("[\n");
                 for (i, item) in items.iter().enumerate() {
                     push_indent(out, indent + 1);
-                    item.write_pretty(out, indent + 1);
+                    item.write(out, indent + 1);
                     if i + 1 < items.len() {
                         out.push(',');
                     }
@@ -67,10 +72,9 @@ impl Json {
                 out.push_str("{\n");
                 for (i, (k, v)) in fields.iter().enumerate() {
                     push_indent(out, indent + 1);
-                    out.push('"');
-                    escape_into(k, out);
-                    out.push_str("\": ");
-                    v.write_pretty(out, indent + 1);
+                    write_escaped(out, k);
+                    out.push_str(": ");
+                    v.write(out, indent + 1);
                     if i + 1 < fields.len() {
                         out.push(',');
                     }
@@ -83,62 +87,76 @@ impl Json {
     }
 }
 
-fn push_indent(out: &mut String, indent: usize) {
-    for _ in 0..indent {
+fn push_indent(out: &mut String, level: usize) {
+    for _ in 0..level {
         out.push_str("  ");
     }
 }
 
-fn escape_into(s: &str, out: &mut String) {
-    for c in s.chars() {
-        match c {
+fn write_escaped(out: &mut String, s: &str) {
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
             c if (c as u32) < 0x20 => {
-                out.push_str(&format!("\\u{:04x}", c as u32));
+                let _ = write!(out, "\\u{:04x}", c as u32);
             }
             c => out.push(c),
         }
     }
+    out.push('"');
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Json;
+    use super::*;
 
     #[test]
-    fn renders_object_and_escapes() {
-        let j = Json::Obj(vec![
-            ("name".into(), Json::str("a\"b")),
-            ("n".into(), Json::UInt(7)),
-            ("ok".into(), Json::Bool(true)),
-            (
-                "arr".into(),
-                Json::Arr(vec![Json::str("x"), Json::str("y")]),
-            ),
-        ]);
-        let s = j.to_pretty();
-        assert!(s.contains("\"name\": \"a\\\"b\""));
-        assert!(s.contains("\"n\": 7"));
-        assert!(s.contains("\"ok\": true"));
-        // Balanced delimiters => structurally valid.
-        assert_eq!(s.matches('{').count(), s.matches('}').count());
-        assert_eq!(s.matches('[').count(), s.matches(']').count());
+    fn escapes_special_chars() {
+        let mut s = String::new();
+        write_escaped(&mut s, "a\"b\\c\nd\te\u{01}");
+        assert_eq!(s, r#""a\"b\\c\nd\te\u0001""#);
     }
 
     #[test]
     fn empty_containers() {
-        assert_eq!(Json::Arr(vec![]).to_pretty(), "[]");
-        assert_eq!(Json::Obj(vec![]).to_pretty(), "{}");
+        assert_eq!(Json::Arr(vec![]).to_pretty(), "[]\n");
+        assert_eq!(Json::Obj(vec![]).to_pretty(), "{}\n");
     }
 
     #[test]
-    fn str_accepts_str_and_string() {
-        let owned = String::from("hi");
-        assert!(matches!(Json::str(&owned), Json::Str(_)));
-        assert!(matches!(Json::str("hi"), Json::Str(_)));
+    fn nested_object_roundtrips_shape() {
+        let j = Json::Obj(vec![
+            ("name".into(), Json::str("demo")),
+            ("count".into(), Json::Int(2)),
+            ("ok".into(), Json::Bool(true)),
+            (
+                "items".into(),
+                Json::Arr(vec![Json::str("a"), Json::str("b")]),
+            ),
+        ]);
+        let out = j.to_pretty();
+        assert!(out.contains("\"name\": \"demo\""));
+        assert!(out.contains("\"count\": 2"));
+        assert!(out.contains("\"ok\": true"));
+        assert!(out.contains("\"items\": [\n"));
+        // Well-formed: balanced braces/brackets.
+        assert_eq!(out.matches('{').count(), out.matches('}').count());
+        assert_eq!(out.matches('[').count(), out.matches(']').count());
+    }
+
+    #[test]
+    fn preserves_key_order() {
+        let j = Json::Obj(vec![("z".into(), Json::Int(1)), ("a".into(), Json::Int(2))]);
+        let out = j.to_pretty();
+        let zpos = out.find("\"z\"").unwrap();
+        let apos = out.find("\"a\"").unwrap();
+        assert!(zpos < apos);
     }
 }

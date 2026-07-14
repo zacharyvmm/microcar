@@ -40,7 +40,7 @@ impl VehiclePlant {
         // Speed delta = torque * dt * acceleration_factor / scale
         // acceleration_factor = 1 (percent-to-speed scaling)
         // scale = 100 for fixed-point with dt in ms, units in 0.1 km/h
-        let delta: i32 = i32::from(effective_torque) * (dt_ms as i32) * 1 / 100;
+        let delta: i32 = i32::from(effective_torque) * (dt_ms as i32) / 100;
 
         // Drag: lose 0.01% of speed per tick (simplified)
         let drag: i32 = i32::from(self.speed_kph_x10) * (dt_ms as i32) / 10000;

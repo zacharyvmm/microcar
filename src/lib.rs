@@ -31,12 +31,11 @@
 //! dashboard ECU firmware and advances the scheduler via
 //! `sim_zephyr_scheduler_tick()`.
 
-pub mod validate;
-
 use sim_core::Tick;
 use sim_world::firmware::Firmware;
 use sim_world::Machine;
 
+pub mod validate;
 // C ABI functions from the compiled firmware / sim-ffi.
 extern "C" {
     fn microcar_boot();
@@ -66,6 +65,8 @@ extern "C" {
     fn microcar_boot_net_demo();
     fn microcar_boot_storage_demo();
     fn microcar_boot_bt_demo();
+    fn microcar_boot_ota_tool();
+    fn microcar_boot_telematics();
     fn sim_scheduler_tick() -> u32;
 }
 
@@ -107,6 +108,8 @@ pub const ECU_CATEGORY_PATTERNS: &[(&str, &str)] = &[
     ("net_demo", "net_demo"),
     ("storage_demo", "storage_demo"),
     ("bt_demo", "bt_demo"),
+    ("ota_tool", "ota_tool"),
+    ("telematics", "telematics"),
     // Diagnostics variants (specific → broad)
     ("gateway_diag_clearbug", "diagnostics"),
     ("gateway_diag_clear", "diagnostics"),
@@ -147,10 +150,13 @@ pub fn resolve_ecu_category(firmware: Option<&str>, name: &str) -> Option<&'stat
                 return Some(category);
             }
         }
-    }
-    for (pattern, category) in ECU_CATEGORY_PATTERNS {
-        if name.starts_with(pattern) {
-            return Some(category);
+        // Name-based fallback: only when firmware IS provided but its path
+        // didn't match any pattern.  Machines without firmware (external
+        // actors like evse/ota_tool) must not resolve to a known ECU.
+        for (pattern, category) in ECU_CATEGORY_PATTERNS {
+            if name.starts_with(pattern) {
+                return Some(category);
+            }
         }
     }
     None
@@ -173,88 +179,57 @@ impl MicrocarFirmware {
         }
     }
 
+    /// Resolve this firmware instance to its canonical ECU category.
+    ///
+    /// Uses the shared [`ECU_CATEGORY_PATTERNS`] table so that both boot
+    /// dispatch and automotive-semantic validation resolve firmware the
+    /// same way — preventing the two from drifting.
     fn ecu_type(&self) -> &str {
-        if let Some(ref path) = self.firmware_path {
-            if path.contains("priority_inversion") {
-                return "priority_inversion";
-            }
-            if path.contains("lifecycle_stress") {
-                return "lifecycle_stress";
-            }
-            if path.contains("net_demo") {
-                return "net_demo";
-            }
-            if path.contains("storage_demo") {
-                return "storage_demo";
-            }
-            if path.contains("bt_demo") {
-                return "bt_demo";
-            }
-            if path.contains("gateway_diag_clearbug") {
-                return "gateway_diag_clearbug";
-            }
-            if path.contains("gateway_diag_clear") {
-                return "gateway_diag_clear";
-            }
-            if path.contains("gateway_diag_startdrivebug") {
-                return "gateway_diag_startdrivebug";
-            }
-            if path.contains("gateway_diag_startdrive") {
-                return "gateway_diag_startdrive";
-            }
-            if path.contains("gateway_diag_fault") {
-                return "gateway_diag_fault";
-            }
-            if path.contains("gateway_diag") {
-                return "gateway_diag";
-            }
-            if path.contains("powertrain_diag_service_bug") {
-                return "powertrain_diag_service_bug";
-            }
-            if path.contains("powertrain_diag_service") {
-                return "powertrain_diag_service";
-            }
-            if path.contains("gateway_ota_badcrc") {
-                return "gateway_ota_badcrc";
-            }
-            if path.contains("gateway_ota_intwrite") {
-                return "gateway_ota_intwrite";
-            }
-            if path.contains("gateway_ota_badhealth") {
-                return "gateway_ota_badhealth";
-            }
-            if path.contains("gateway_ota_powercut") {
-                return "gateway_ota_powercut";
-            }
-            if path.contains("gateway_ota_crcbug") {
-                return "gateway_ota_crcbug";
-            }
-            if path.contains("gateway_ota") {
-                return "gateway_ota";
-            }
-            if path.contains("gateway_charging") {
-                return "gateway_charging";
-            }
-            if path.contains("powertrain_charging") {
-                return "powertrain_charging";
-            }
-            if path.contains("diagnostics") {
-                return "diagnostics";
-            }
-            if path.contains("gateway") {
-                return "gateway";
-            }
-            if path.contains("powertrain") {
-                return "powertrain";
-            }
-            if path.contains("bms") {
-                return "bms";
-            }
-            if path.contains("dashboard") {
-                return "dashboard";
+        // Keep the detailed firmware variant for boot dispatch. Validation
+        // intentionally resolves these variants to their broad ECU category,
+        // but the firmware ABI exposes dedicated entry points for the
+        // dogfood lanes and seeded-bug variants.
+        if let Some(path) = self.firmware_path.as_deref() {
+            const VARIANTS: &[&str] = &[
+                "priority_inversion",
+                "lifecycle_stress",
+                "net_demo",
+                "storage_demo",
+                "bt_demo",
+                "ota_tool",
+                "telematics",
+                "gateway_diag_clearbug",
+                "gateway_diag_clear",
+                "gateway_diag_startdrivebug",
+                "gateway_diag_startdrive",
+                "gateway_diag_fault",
+                "gateway_diag",
+                "powertrain_diag_service_bug",
+                "powertrain_diag_service",
+                "gateway_ota_badcrc",
+                "gateway_ota_intwrite",
+                "gateway_ota_badhealth",
+                "gateway_ota_powercut",
+                "gateway_ota_crcbug",
+                "gateway_ota",
+                "gateway_charging",
+                "powertrain_charging",
+                "diagnostics",
+                "gateway",
+                "powertrain",
+                "bms",
+                "dashboard",
+            ];
+            if let Some(variant) = VARIANTS.iter().find(|variant| path.contains(*variant)) {
+                return *variant;
             }
         }
-        &self.name
+
+        if let Some(category) = resolve_ecu_category(self.firmware_path.as_deref(), &self.name) {
+            category
+        } else {
+            &self.name
+        }
     }
 }
 
@@ -308,6 +283,10 @@ impl Firmware for MicrocarFirmware {
                 microcar_boot_powertrain_charging();
             } else if ecu.starts_with("diagnostics") {
                 microcar_boot_diagnostics_tool();
+            } else if ecu.starts_with("ota_tool") {
+                microcar_boot_ota_tool();
+            } else if ecu.starts_with("telematics") {
+                microcar_boot_telematics();
             } else if ecu.starts_with("gateway") {
                 microcar_boot_gateway();
             } else if ecu.starts_with("powertrain") {

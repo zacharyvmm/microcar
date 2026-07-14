@@ -1,0 +1,50 @@
+# eth_status_test — telematics ECU sends periodic status records over virtual Ethernet
+#
+# Stage H: a single telematics ECU on virtual Ethernet device 0 sends
+# length-prefixed big-endian status records every 100 ms (firmware tick).
+# The scenario runs for 3000 ms virtual time, yielding ~30 status records.
+#
+# Record format (microcar_telematics.h):
+#   [2-byte BE length][4-byte BE seq_no][4-byte BE uptime_ms][1-byte node_id]
+#
+# Trace events exercised:
+#   - telematics_boot → boot confirmation
+#   - eth_register → device registration result
+#   - telem_net_sent → bytes written per status record (11 bytes each)
+#   - telem_net_recv → bytes received from network poll
+#   - telem_hb → heartbeat tick count (monotonically increasing)
+#   - telem_can_id / telem_can_dlc → CAN frame metadata
+
+name = "eth_status_test"
+duration_ms = 3000
+
+[[machine]]
+id = 1
+name = "telematics"
+firmware = "firmware/telematics_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "peer"
+# Dummy peer — endpoint for the virtual Ethernet link so sim_eth_send has
+# a destination. No firmware; exists only as a link target.
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "telematics"
+
+[[link]]
+type = "eth"
+from = 1
+to = 2
+latency = 1000
+
+[plant]
+type = "microcar"
+tick_ms = 10

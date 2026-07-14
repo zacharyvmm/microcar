@@ -191,6 +191,12 @@ impl HeartbeatMonitor {
     }
 }
 
+impl Default for HeartbeatMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ── Fault Manager ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -268,6 +274,12 @@ impl FaultManager {
 
     pub fn active_count(&self) -> u8 {
         self.faults.iter().filter(|f| f.active).count() as u8
+    }
+}
+
+impl Default for FaultManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

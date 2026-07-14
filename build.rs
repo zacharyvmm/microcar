@@ -67,6 +67,9 @@ fn main() {
     // ── Common library ───────────────────────────────────────────────
     build.file("common/src/microcar_protocol.c");
     build.file("common/src/microcar_ota_slot.c");
+    build.file("common/src/microcar_charging.c");
+    build.file("common/src/microcar_dashboard.c");
+    build.file("common/src/microcar_telematics.c");
 
     // ── BMS ECU ──────────────────────────────────────────────────────
     build
@@ -89,6 +92,12 @@ fn main() {
 
     // ── Diagnostics tool ECU ────────────────────────────────────────
     build.file("firmware/diagnostics_tool_ecu/src/main.c");
+
+    // ── OTA Tool ECU ────────────────────────────────────────────────
+    build.file("firmware/ota_tool_ecu/src/main.c");
+
+    // ── Telematics ECU ──────────────────────────────────────────────
+    build.file("firmware/telematics_ecu/src/main.c");
 
     // ── Powertrain ECU ───────────────────────────────────────────────
     build

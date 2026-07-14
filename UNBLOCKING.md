@@ -13,6 +13,59 @@ already delivered. Preserve them as regression coverage. The remaining corpus
 work is BMS stale sensor, dashboard missed warning, and telematics partial
 write; the remaining OTA work is the decision-gated real path described below.
 
+## Session Status (2026-07-13)
+
+The P0a/P0b/P1/P2 costar infrastructure is now implemented and verified.
+Both repos' core CI gates are green (they were red before — `microcar-plant`
+did not compile).
+
+| Gate | costar | microcar |
+|---|---|---|
+| `cargo fmt --all --check` | ✅ | ✅ |
+| `cargo test --workspace` | ✅ 433 tests | ✅ 260 tests |
+| `cargo build --bin microcar` | — | ✅ |
+
+Clippy (`-D warnings`) is intentionally waived for both repos (pre-existing
+upstream issues; see MERGE_WAIVERS.md in each repo).
+Per-stage pure-logic/core deliverables (verified, non-breaking, golden
+traces byte-identical throughout):
+
+- **A (gate, full)**: `with_device_context`, `configure_board`/`board_config`,
+  `with_machine_devices`/`machine_ids`/`WorldError`, gRPC `machine_id`
+  targeting + `Arc<Mutex<Session>>` map + resource bounds + terminal
+  states, `PersistentDeviceState` + 7-step restart algorithm, `control::drive_world`
+  (both servers), A4 acceptance incl. `two_worlds_owned_can_interleave_100x`,
+  `restart_downtime_delivery_boundary`, gRPC `concurrent_sessions_isolate_device_zero`
+  (100×), A5 session-limit/keyframe/trace-ring/TTL tests, `serve.rs` take/return
+  (map lock not held during simulation).
+- **B1**: `sim_instance_state` allocator + `AlignedRegion` + `GuestRuntime` (15 tests,
+  incl. zero-size/alignment regression tests). `SIM_NOW`/`CURRENT_TASK_ID` migration deferred (golden-risky).
+- **C1**: protocol node/message IDs, packed structs (sizes `_Static_assert`ed),
+  EVSE/charge enums, `MC_DIAG_STALE`, Rust mirror, docs.
+  BMS_STATUS byte-7 `seq` deferred (lands with D + regenerated goldens).
+- **C2**: `validate_external_actor_frames` static validation (10 tests).
+- **E1**: pure charging FSM C + Rust mirror (13 tests).
+- **E2**: `BatteryModel::step_with_current` + `i32` current + saturation (5 tests).
+- **F1**: 32-byte OTA metadata record + CRC32 + `select`/`abort`/`recover` C + Rust (5 tests).
+- **G**: pure dashboard framebuffer renderer C (verified per-screen pixel test).
+- **H**: telematics record parser C + Rust mirror (9 tests: byte-boundary, burst, errors).
+  `dogfood/src/telematics.rs` is a trace-based smoke test only; full Stage H
+  host-TCP-bridge telematics is deferred until `NetworkBank` is activated.
+- **J1**: `TraceStats` accumulator + bounded retention (5 tests).
+
+Also fixed pre-existing blockers: `microcar-plant` 4-vs-7-tuple compile error,
+two stale examples (`diag`, `boot_test`), ~9 clippy `-D warnings` violations,
+costar `rustfmt` drift.
+
+**The §16 end-to-end lanes are NOT complete.** The remaining work is the
+firmware `main.c` integration layer — wiring each validated core into its ECU,
+adding scenarios and harness assertions, and regenerating goldens — together
+with B2 (8-ECU C-global migration onto `sim_instance_state`), B3
+(`NetworkBank`), B4 isolation acceptance, the deferred BMS_STATUS `seq`, and
+the integration halves of C2/E2/F2/F3/G/H/I/J. These are multi-file,
+golden-affecting integrations that must be completed as entire lanes.
+
+
 ## What Unblocked Means
 
 A lane is not unblocked merely because it emits the desired trace label. A

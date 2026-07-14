@@ -28,7 +28,7 @@ impl SensorReadings {
         Self {
             wheel_speed_kph_x10: vehicle.speed_kph_x10,
             pack_voltage_mv: battery.voltage_mv,
-            pack_current_ma: battery.current_ma,
+            pack_current_ma: battery.current_ma_i16(),
             pack_temp_c_x10: battery.temp_c_x10,
             soc_percent: battery.soc_percent,
         }

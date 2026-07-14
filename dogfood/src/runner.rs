@@ -99,7 +99,7 @@ pub fn run_scenario(microcar_bin: &Path, scenario: &Path, timeout: Duration) -> 
 }
 
 /// Like [`run_scenario`] but passes `extra_args` to the microcar binary after
-/// the scenario path (e.g. `["--step"]` or `["--trace-v2", path]`).
+/// the scenario path (for example `--step` or `--trace-v2 <path>`).
 pub fn run_scenario_args(
     microcar_bin: &Path,
     scenario: &Path,

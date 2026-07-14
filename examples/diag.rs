@@ -1,15 +1,9 @@
-//! Quick diagnostic — shows firmware trace + scheduler tick count.
+//! Quick diagnostic — prints each machine's accumulated trace line count.
 //! Usage: cargo run --example diag -- scenarios/<name>.toml
 
 use microcar::MicrocarFirmware;
 use microcar_plant::MicrocarPlant;
 use sim_world::scenario::Scenario;
-use sim_world::Machine;
-
-extern "C" {
-    fn sim_scheduler_tick() -> u32;
-}
-
 fn main() {
     let path = std::env::args()
         .nth(1)
@@ -42,21 +36,11 @@ fn main() {
         world.run().unwrap();
     }
 
-    // Check each machine's firmware trace
-    for m in world.machines() {
-        let fw_count = m
-            .simulator()
-            .sim_global
-            .borrow()
-            .trace
-            .as_ref()
-            .map(|t| t.events().len())
-            .unwrap_or(0);
-        println!(
-            "[machine.{}] World: {} events, Firmware: {} events",
-            m.id,
-            m.trace().len(),
-            fw_count
-        );
+    // Print each machine's accumulated trace line count via the public API.
+    for id in world.machine_ids().collect::<Vec<_>>() {
+        if let Some(m) = world.machine(id) {
+            let lines = m.drain_trace_prefixed();
+            println!("[machine.{}] {} trace lines", id, lines.len());
+        }
     }
 }

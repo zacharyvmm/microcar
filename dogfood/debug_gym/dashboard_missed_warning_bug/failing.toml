@@ -1,0 +1,123 @@
+# dashboard_missed_warning_bug/failing.toml
+#
+# Bug: the dashboard renderer lets a normal vehicle-mode repaint overwrite
+# a critical warning on screen.  After the gateway transitions from FAULT
+# back to DRIVE (e.g. a brief BMS fault that self-clears), the dashboard
+# display task paints the DRIVE screen, silently dropping the FAULT warning.
+#
+# The plant forces the battery temperature to 95 °C at 1000 ms, which causes
+# the BMS to raise a CRITICAL_BMS_FAULT and the gateway to enter FAULT.
+# At 1010 ms the temperature is forced back to 25 °C, which clears the BMS
+# fault and lets the gateway re-enter DRIVE.  The two vehicle-mode frames
+# (FAULT → DRIVE) arrive <10 ms apart — a tight window that the buggy
+# display-update task does not survive.
+#
+# Localizing evidence: dashboard warning plus framebuffer hash.
+# The buggy firmware paints the DRIVE green screen; the framebuffer hash
+# will be 0x0200 (VEHICLE_DRIVE bg_color), NOT 0x7800 (VEHICLE_FAULT).
+
+name = "dashboard_missed_warning_bug"
+duration_ms = 3000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_missed_warning_bug"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
+[plant]
+type = "microcar"
+tick_ms = 10
+
+# ── Driver applies 40 % throttle to enter DRIVE ──
+[[input]]
+at_ms = 100
+type = "driver_input"
+throttle_percent = 40
+brake_pressed = false
+
+# ── Trigger FAULT: force battery to 95 °C ──
+[[fault]]
+at_ms = 1000
+target = "plant.battery"
+type = "force_temperature"
+value_c = 95
+
+# ── Clear the fault 10 ms later ──
+[[fault]]
+at_ms = 1010
+target = "plant.battery"
+type = "force_temperature"
+value_c = 25
+
+# ── Assertions ────────────────────────────────────────────────────────
+
+# The BMS detects the overtemp and raises a fault.
+[[expect.event]]
+before_ms = 1100
+machine = "bms"
+event = "fault"
+value = "CRITICAL_BMS_FAULT"
+
+# The gateway transitions to FAULT mode.
+[[expect.event]]
+before_ms = 1200
+machine = "gateway"
+event = "vehicle_mode"
+value = "FAULT"
+
+# The dashboard receives the warning from the gateway.
+[[expect.event]]
+before_ms = 1300
+machine = "dashboard"
+event = "warning"
+value = "CRITICAL_BMS_FAULT"
+
+# BUG REPRODUCED: after the fault clears, the buggy display_update task
+# paints the DRIVE screen.  The dashboard's periodic display_update trace
+# reports top_warning=NONE (0) because the normal-mode repaint overwrote
+# the critical-warning display.
+[[expect.event]]
+before_ms = 2000
+machine = "dashboard"
+event = "display_update"
+value = 0
