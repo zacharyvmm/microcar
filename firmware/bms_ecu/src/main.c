@@ -232,6 +232,11 @@ void bms_main(void *pvParameters)
 {
     (void)pvParameters;
     bms_ctx_t *ctx = bms_ctx();
+    if (ctx == NULL) {
+        sim_trace_u32("bms_fatal", 1);
+        vTaskSuspend(NULL);
+        return;
+    }
     bms_init(ctx);
 
     TickType_t last_wake = xTaskGetTickCount();

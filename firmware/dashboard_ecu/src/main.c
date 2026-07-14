@@ -264,6 +264,11 @@ void dashboard_main(void *pvParameters)
     (void)pvParameters;
 
     dashboard_ctx_t *ctx = dashboard_ctx();
+    if (ctx == NULL) {
+        sim_trace_u32("dashboard_fatal", 1);
+        vTaskSuspend(NULL);
+        return;
+    }
     dashboard_init(ctx);
 
     // Create the display_update task (prio 2, lower freq).

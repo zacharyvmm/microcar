@@ -308,8 +308,11 @@ independent mutable C state.
   different torque without cross-observation.
 - Reboot resets only the selected ECU context and reruns initialization;
   sibling context is unchanged.
-- `rg '^static(?! const)(?! inline)' ... --pcre2` finds no mutable storage in
-  the eight ECU implementations (static functions are allowed).
+- Audit all eight ECU `main.c` files for mutable file-scope/function-scope
+  static variables (excluding `static const` tables and `static` functions).
+  All mutable storage must reside in the per-instance context struct obtained
+  via `sim_instance_state`. Immutable `static const` lookup tables and
+  `static` function declarations are allowed.
 - Existing legacy dogfood fixtures retain their hashes.
 
 **May run with:** none; complete after R1 and before R3.
