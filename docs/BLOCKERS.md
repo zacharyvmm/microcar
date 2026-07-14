@@ -85,11 +85,11 @@ Also fixed pre-existing blockers unmasked while greening microcar: the
 | M20 | `debug_gym` corpus #2 — SERVICE torque-clamp bug | `powertrain_diag_service_bug` vs `powertrain_diag_service`; corpus 2/2 |
 | M21 | `debug_gym` corpus #3 — clear-all-DTCs bug | `gateway_diag_clearbug` vs `gateway_diag_clear`; corpus 3/3 |
 | M22 | `debug_gym` corpus #4 — START_SESSION-in-DRIVE bug | `gateway_diag_startdrivebug` vs `gateway_diag_startdrive`; corpus 4/4 |
-| **M23** | **P0a staged — `DeviceBank`** | Device maps, fault injector, and IRQ state moved into a bank primitive. **Not complete:** its public raw-pointer context guard is unsafe under ordinary guard misuse, and no production World owns or activates a bank. |
-| **M24** | **P0a staged — `SimulatorActivation`** | Opt-in owned-device activation has standalone tests. **Not complete:** no `Machine`, World, microcar, or gRPC production path opts in or provisions devices in the owned bank. |
-| **M25** | **P0a staged — IRQ bank routing** | IRQ uses the same bank abstraction. It remains blocked on the safe active-context and real Machine ownership work. |
-| **M26** | **P0b staged — receiver inbox** | A synthetic receiver-inbox test passes. **Not complete:** the World bridge still uses the default controller outside machine activation, and a second firmware-step path bypasses staging/draining. |
-| **M27** | **P1 staged — factory and downtime fields** | A synthetic factory test passes. **Not complete:** microcar does not register factories, reset recreates default configuration, and frames received while down are replayed after boot. |
+| **M23** | **P0a — `DeviceBank`** | Device maps, fault injector, and IRQ state moved into a bank primitive with lifetime-safe scoped activation (`with_bank_if_active`). Guard tests cover nested activation, out-of-order drop, forgotten guard, panic unwind, and IRQ scoping. **[COMPLETE for foundation merge]** |
+| **M24** | **P0a — `SimulatorActivation`** | Production `World` owns and activates banks. `device_registry!` accessors routed through active `DeviceBank`. Machines enable owned banks via `enable_owned_bank()`. gRPC board/touch/display accesses use machine-targeted sessions. **[COMPLETE for foundation merge]** |
+| **M25** | **P0a — IRQ bank routing** | IRQ uses the same bank abstraction, routed through the active bank. **[COMPLETE for foundation merge]** |
+| **M26** | **P0b — receiver inbox** | Receiver-correct CAN inbox drains per-machine under the active device bank in `step_firmware`. The separate firmware-step bypass path is consolidated. **[COMPLETE for foundation merge]** |
+| **M27** | **P1 — factory and downtime** | `FirmwareFactory` + `RestartSpec` preserve immutable machine/board config across reboots. `pending_boots` schedules deferred boots. Frames delivered while stopped are dropped. `boot_at` delivery-boundary semantics implemented with regression test. **[COMPLETE for foundation merge]** |
 
 **Delivered plan tracks:** engine stabilization; networking/device-edge
 hardening; `simfarm`; `toml_zoo` (9/11, 2 deferred); `topology` (7/7); Trace v2
