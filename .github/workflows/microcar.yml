@@ -58,17 +58,17 @@ jobs:
 
       - name: Run microcar scenario tests
         working-directory: costar
-        run: cargo run --bin sim-runner -- test --microcar --all --verbose
+        run: cargo run --bin sim-runner --features microcar -- test --microcar --all --verbose
 
       - name: Deterministic verification (bms_overtemp_limp_mode x3)
         working-directory: costar
         run: |
           set -e
-          HASH1=$(cargo run --bin sim-runner -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
+          HASH1=$(cargo run --bin sim-runner --features microcar -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
           echo "Run 1: $HASH1"
-          HASH2=$(cargo run --bin sim-runner -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
+          HASH2=$(cargo run --bin sim-runner --features microcar -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
           echo "Run 2: $HASH2"
-          HASH3=$(cargo run --bin sim-runner -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
+          HASH3=$(cargo run --bin sim-runner --features microcar -- run --scenario ../microcar/scenarios/bms_overtemp_limp_mode.toml --golden 2>/dev/null | sha256sum | cut -d' ' -f1)
           echo "Run 3: $HASH3"
           if [ "$HASH1" != "$HASH2" ] || [ "$HASH2" != "$HASH3" ]; then
             echo "ERROR: Deterministic trace hashes do not match!"
