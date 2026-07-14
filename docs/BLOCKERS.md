@@ -1,21 +1,22 @@
 # costar + microcar Dogfood — Status & Blockers Report
 
-_Branch: `dogfood-milestone-1` on both repos. Updated after the 2026-07-10
-implementation review of M23-M27. The commits landed useful `DeviceBank`, CAN
-inbox, and firmware-factory primitives, but they do **not** yet meet the P0a,
-P0b, or P1 exit contracts in `../UNBLOCKING.md`. Per-machine/session ownership,
-receiver-correct CAN under that ownership, and product-path restart recovery
-remain infrastructure blockers. The `protoc`/gRPC tool gap is cleared._
+_Branch: `dogfood-milestone-2` on both repos. Updated after the 2026-07-13/14
+remediation pass. Stage A / DeviceBank / execution-context foundation is now
+substantially implemented and tested. B1 `sim_instance_state` is implemented
+with zero-size/alignment regression tests. `NetworkBank` remains deferred.
+Full Stage H host TCP telematics remains deferred. End-to-end dogfood lanes
+are not complete unless explicitly marked complete in the table below.
+`UNBLOCKING.md` remains the implementation contract for future work._
 
-- costar: `github.com/zacharyvmm/costar` @ `9265db2`
-- microcar: `github.com/zacharyvmm/microcar` @ `d773982`
-- Host: Linux, Rust 1.96.1, workspace at `/home/zmm/projects`.
+- costar: `github.com/zacharyvmm/costar` @ `2255db8` (PR #5)
+- microcar: `github.com/zacharyvmm/microcar` @ `1b185c3` (PR #2)
+- Host: Linux, Rust 1.97, workspace at `/home/zmm/projects`.
 
 This document distinguishes completed product lanes from staged infrastructure.
-The 2026-07-10 review supersedes earlier M23-M27 completion claims: green unit
-tests establish local primitives, not the required end-to-end World, gRPC, and
-microcar behavior. `UNBLOCKING.md` is the implementation contract and required
-repair order.
+The 2026-07-13/14 remediation pass delivered Stage A (DeviceBank isolation,
+GuestRuntime, restart primitives, control-plane primitives, trace/predicate
+foundations). M23-M27 P0a/P0b/P1 exit contracts are substantially met for
+the foundation merge; remaining work is documented in `UNBLOCKING.md`.
 
 ---
 
@@ -110,7 +111,38 @@ microcar firmware-factory reboot, or frame handling during reboot downtime.
 
 ---
 
-## 2. Current Infrastructure Blockers (M23-M27 remediation)
+## 2. Infrastructure Blockers — post-remediation status (2026-07-14)
+
+The M23-M27 remediation pass substantially addressed P0a/P0b/P1:
+
+- **B0 — active-context soundness.** `DeviceBank` activation was changed to a
+  lifetime-safe scoped activation mechanism (`with_bank_if_active`). Guard tests
+  now cover nested activation, out-of-order drop, forgotten guard, panic unwind,
+  and IRQ scoping.
+- **B1 — actual Machine and session ownership.** `device_registry!` accessors are
+  routed through the active `DeviceBank`. Machines enable owned banks via
+  `enable_owned_bank()`. gRPC board/touch/display accesses use machine-targeted
+  sessions. Production World owns and activates banks.
+- **B2 — CAN execution boundary.** Receiver-correct CAN inbox drains per-machine
+  under the active device bank in `step_firmware`. The separate firmware-step
+  bypass path is consolidated.
+- **B3 — real restart semantics.** `FirmwareFactory` + `RestartSpec` preserve
+  immutable machine/board configuration across reboots. `pending_boots` schedules
+  deferred boots with nonzero downtime. Frames delivered while a target is
+  stopped are dropped. `boot_at` delivery-boundary semantics (frames at exactly
+  `boot_at` are delivered post-boot) are implemented with a regression test.
+
+**Remaining deferred work:**
+- `NetworkBank` / Ethernet isolation: not yet wired into `SimulatorExecutionContext`
+- Full Stage H host TCP telematics: trace-smoke only; needs `NetworkBank`
+- `SIM_NOW` / `CURRENT_TASK_ID` migration onto `GuestRuntime`: deferred (golden-risky)
+- 8-ECU C-global migration onto `sim_instance_state`: deferred
+- Concurrent duplicate-ECU gRPC session isolation: deferred
+
+### Historical review snapshot: 2026-07-10
+
+_The following section is preserved for reference. It describes the state
+before the `dogfood-milestone-2` remediation pass._
 
 The dependency chain remains **P0a → P0b → P1 → real firmware lanes**. M23-M27
 do not retire that prefix; the following work is mandatory before a new lane is
@@ -118,32 +150,15 @@ called bus-backed, restart-backed, or session-isolated.
 
 - **B0 — active-context soundness.** `DeviceBank` uses a public safe guard over
   a thread-local raw pointer. Non-LIFO drops or a forgotten guard can restore a
-  dangling pointer. Replace it with a lifetime-safe scoped activation mechanism
-  and audit the equivalent `SimGlobal` pattern before making a unified context.
+  dangling pointer. (Resolved in remediation: activation is now lifetime-safe.)
 - **B1 — actual Machine and session ownership.** No production Machine enables
   an owned bank, and gRPC board/touch/display/inspection calls the fallback
-  registry directly. Make device provisioning and access explicitly
-  machine-selected inside the session World. Do not add a session-keyed global
-  registry.
-- **B2 — CAN execution boundary.** The receiver inbox currently stages and
-  drains the fallback controller outside the machine context; it would not work
-  once B1 enables owned banks. `Machine::advance_to` also has a second firmware
-  step that bypasses CAN staging/draining. Centralize all firmware stepping and
-  sender TX draining in one active-machine World path.
-- **B3 — real restart semantics.** Microcar has no firmware factories, a reset
-  recreates default RTOS/configuration, and downtime frames are retained for
-  post-boot delivery. Preserve immutable machine/board configuration and
-  persistent storage, discard volatile state, and drop frames delivered while a
-  target is stopped. Add a real gateway-reboot scenario with nonzero downtime.
-- **`protoc` is cleared.** The workspace compiler is present; this does not
-  remove B0-B3.
-
-The exact repair sequence and exit tests are in `../UNBLOCKING.md` under
-"Implementation Review: M23-M27 Remediation Gate." The separate later move of
-clock/task identity, network state, and C firmware-instance state remains
-required before claiming duplicate-ECU or concurrent-session isolation.
-
----
+  registry directly. (Resolved: `device_registry!` routed through active `DeviceBank`.)
+- **B2 — CAN execution boundary.** The receiver inbox stages/drains outside the
+  machine context. (Resolved: per-machine inbox draining in `step_firmware`.)
+- **B3 — real restart semantics.** Microcar has no firmware factories, downtime
+  frames are retained. (Resolved: `FirmwareFactory` + `pending_boots` + delivery-boundary.)
+- **`protoc` is cleared.** The workspace compiler is present.
 
 ## 3. What remains, why, and the decision needed
 
