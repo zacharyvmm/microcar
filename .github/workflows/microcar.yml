@@ -9,8 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Temporary paired-PR ref. Change to `main` after costar#5 lands.
-  COSTAR_REF: dogfood-milestone-2
+  # Pinned to main after costar#5 landed.
+  COSTAR_REF: main
 
 jobs:
   build-and-test:
