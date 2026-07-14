@@ -23,9 +23,10 @@ did not compile).
 |---|---|---|
 | `cargo fmt --all --check` | ✅ | ✅ |
 | `cargo test --workspace` | ✅ 433 tests | ✅ 260 tests |
-| `cargo clippy -D warnings` | ✅ | ✅ |
 | `cargo build --bin microcar` | — | ✅ |
 
+Clippy (`-D warnings`) is intentionally waived for both repos (pre-existing
+upstream issues; see MERGE_WAIVERS.md in each repo).
 Per-stage pure-logic/core deliverables (verified, non-breaking, golden
 traces byte-identical throughout):
 
@@ -37,8 +38,8 @@ traces byte-identical throughout):
   `restart_downtime_delivery_boundary`, gRPC `concurrent_sessions_isolate_device_zero`
   (100×), A5 session-limit/keyframe/trace-ring/TTL tests, `serve.rs` take/return
   (map lock not held during simulation).
-- **B1**: `sim_instance_state` allocator + `AlignedRegion` + `GuestRuntime` (6 tests).
-  `SIM_NOW`/`CURRENT_TASK_ID` migration deferred (golden-risky).
+- **B1**: `sim_instance_state` allocator + `AlignedRegion` + `GuestRuntime` (15 tests,
+  incl. zero-size/alignment regression tests). `SIM_NOW`/`CURRENT_TASK_ID` migration deferred (golden-risky).
 - **C1**: protocol node/message IDs, packed structs (sizes `_Static_assert`ed),
   EVSE/charge enums, `MC_DIAG_STALE`, Rust mirror, docs.
   BMS_STATUS byte-7 `seq` deferred (lands with D + regenerated goldens).
@@ -48,7 +49,8 @@ traces byte-identical throughout):
 - **F1**: 32-byte OTA metadata record + CRC32 + `select`/`abort`/`recover` C + Rust (5 tests).
 - **G**: pure dashboard framebuffer renderer C (verified per-screen pixel test).
 - **H**: telematics record parser C + Rust mirror (9 tests: byte-boundary, burst, errors).
-- **I2**: `ContinuePredicate`/`DeviceCondition`/`ScalarValue` + evaluator + sinks (5 tests).
+  `dogfood/src/telematics.rs` is a trace-based smoke test only; full Stage H
+  host-TCP-bridge telematics is deferred until `NetworkBank` is activated.
 - **J1**: `TraceStats` accumulator + bounded retention (5 tests).
 
 Also fixed pre-existing blockers: `microcar-plant` 4-vs-7-tuple compile error,

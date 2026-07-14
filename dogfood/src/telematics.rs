@@ -1,9 +1,12 @@
-//! telematics lane — virtual Ethernet status records and host TCP loopback.
+//! telematics lane — trace smoke test (not full Stage H yet).
 //!
-//! Stage H (costar_microcar_dogfood_plan.md §12): the telematics ECU sends
-//! length-prefixed big-endian status records over virtual Ethernet device 0.
-//! This module runs scenarios, parses the microcar binary's trace output for
-//! telematics-specific firmware events, and verifies record invariants:
+//! This is a trace-based smoke test, not the full Stage H telematics lane from
+//! costar_microcar_dogfood_plan.md §12. True host-networking telematics
+//! (TCP bridge, socket-buffer, request-response burst, byte conservation) remains
+//! deferred until `NetworkBank` is activated through the simulator execution
+//! context and a real host TCP/client harness exists.
+//!
+//! What this module currently does:
 //!
 //! * periodic 100 ms telemetry ticks with monotonically increasing sequence
 //!   numbers (tracked via `telem_hb` heartbeat ticks),
@@ -14,7 +17,8 @@
 //!
 //! The lane deliberately avoids full golden traces and does not depend on
 //! firmware-originated CAN delivery — it checks only the compact trace events
-//! the telematics ECU emits via `sim_trace_u32`.
+//! the telematics ECU emits via `sim_trace_u32`. It explicitly accepts the case
+//! where no receive events exist.
 
 use std::fs;
 use std::io;

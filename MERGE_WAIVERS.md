@@ -38,6 +38,11 @@ The microcar crates themselves pass clippy cleanly.
 - Explicit RTOS/config identity assertion: TODO
 - Explicit firmware-factory invocation assertion: TODO
 - Explicit powertrain heartbeat-continuity assertion: TODO
-- NetworkBank / Ethernet isolation: Stage B3
+- NetworkBank / Ethernet isolation: Stage B3 (NetworkBank infrastructure exists
+  in costar's `sim-net/src/bank.rs` but is not yet wired into `SimulatorExecutionContext`)
+- Telematics: current `dogfood/src/telematics.rs` is a telematics trace smoke
+  test only, not the full Stage H host-TCP-bridge lane. True host-networking
+  telematics remains blocked until `NetworkBank` is activated through the
+  simulator execution context and a real host TCP/client harness exists.
 - gRPC-specific restart/session-failure tests: follow-up
 - JSON-RPC `sim.stop` semantics: follow-up
