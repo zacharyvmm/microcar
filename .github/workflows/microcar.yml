@@ -9,6 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  COSTAR_REF: dogfood-milestone-2
+  COSTAR_REPO: zacharyvmm/costar
 
 jobs:
   build-and-test:
@@ -19,8 +21,10 @@ jobs:
       - name: Checkout costar
         uses: actions/checkout@v4
         with:
-          repository: zacharyvmm/costar
+          repository: ${{ env.COSTAR_REPO }}
+          ref: ${{ env.COSTAR_REF }}
           path: costar
+          token: ${{ secrets.COSTAR_READ_TOKEN }}
 
       - name: Checkout microcar
         uses: actions/checkout@v4
