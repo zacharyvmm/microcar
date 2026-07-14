@@ -122,7 +122,7 @@ Status meanings:
 | JSON-RPC per-session locking | SCAFFOLD | `sim-runner/src/serve.rs` still stores `BTreeMap<u64, Session>` under one global mutex. |
 | Per-machine time and task identity | DONE | `GuestRuntime` accessors (`active_now`, `active_task_id`, etc.) wired into all C ABI paths; global atomics kept as legacy fallback only. |
 | C firmware instance isolation | DONE | All eight ECUs use `sim_instance_state` with unique keys; zero mutable file/function statics remain. |
-| NetworkBank | DONE | Per-machine NetworkBank scoped via execution context; `World::deliver_links` injects Ethernet RX under receiver context; World-level Ethernet device-0 isolation test passes 100x A/B interleave; fragmented TCP/smoltcp bridge state isolated across banks; bank destroy/recreate yields no stale network state; panic restores prior context. |
+| NetworkBank | CORE ONLY | Per-machine NetworkBank is scoped via execution context; World Ethernet RX/TX for ETH_DEVICES[0] is banked and covered by a 100x A/B World isolation test; SimNetDevice and SmoltcpBridge objects are bank-local; destroy/recreate yields no stale bank state; panic restores prior context. Host FD poller/readiness routing through NetworkBank and real fragmented TCP stream isolation are follow-up R3 hardening work. |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | ECU role classification | DONE | `gateway_diag*` variants correctly classify as `gateway`; table-driven tests cover every firmware variant. |
 | Live diagnostics | SCAFFOLD | BMS emits sequenced status but dispatches the wrong input ID; gateway returns `UNSUPPORTED` for live BMS; tool does not issue/assemble selectors. |
@@ -350,10 +350,11 @@ destroyed with their owning machine/session.
    handles and remove every poller registration; clone/reset/keyframe rebuild
    must not retain the old host readiness state.
 
-**Acceptance (all implemented):**
+**Acceptance (implemented within CORE ONLY scope):**
 
-- `two_worlds_eth_device_zero_rx_isolated_100x` — two Worlds with Ethernet device 0 conserve distinct frames in both interleave orders for 100 repetitions.
-- `fragmented_net_device_state_isolated_across_banks` and `smoltcp_bridge_tcp_state_isolated_across_banks` — two banks with fragmented TCP/smoltcp state retain only their own partial bytes across interleaved access.
+- `two_worlds_eth_device_zero_rx_isolated_100x` — two Worlds with Ethernet device 0 conserve distinct frames in both interleave orders for 100 repetitions (production World path).
+- `sim_net_device_rx_queue_isolated_across_banks` — two banks with distinct `SimNetDevice` RX queue contents do not leak across interleaved access.
+- `smoltcp_bridge_instance_isolated_across_banks` — two banks with distinct `SmoltcpBridge` instances retain their own MACs; interleaved access sees only the active bank's bridge.
 - `recreate_bank_has_no_stale_smoltcp_bridge` and `destroy_and_recreate_bank_yields_no_stale_state` — bank destroy/recreate yields no stale network state (eth devices, net devices, smoltcp bridge).
 - `panic_in_active_network_context_restores_prior_bank` — a panic inside one active network context restores the sibling context.
 - `World::deliver_links` injects Ethernet RX under the receiver machine's execution context (production path).
@@ -366,6 +367,12 @@ cargo test -p sim-net -p sim-ffi -p sim-world
 ```
 
 **May run with:** none; R3 overlaps the execution context established by R1.
+
+**Follow-up R3 hardening:**
+
+- Route `sim_host_register_fd`, `sim_host_deregister_fd`, and `sim_host_block_on_fd` through bank-aware host-poller accessors so fd registration/blocking goes into the active `NetworkBank` rather than the legacy thread-local `HOST_POLLER`.
+- Add a Unix-only destroy/recreate test proving no stale fd readiness, blocked task ID, or registered handle survives bank destruction.
+- Add a real fragmented TCP/stream isolation test using `TcpBridge` partial read/write buffers or smoltcp socket state with partial TCP payloads.
 
 ### R4 — Finish control-plane and restart residuals
 
