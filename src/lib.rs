@@ -221,7 +221,7 @@ impl MicrocarFirmware {
                 "dashboard",
             ];
             if let Some(variant) = VARIANTS.iter().find(|variant| path.contains(*variant)) {
-                return *variant;
+                return variant;
             }
         }
 
@@ -370,35 +370,103 @@ mod tests {
     /// returns the broad category used for validation.
     const CLASSIFICATION_TESTS: &[(&str, &str, &str)] = &[
         // Demo / test ECUs
-        ("firmware/priority_inversion_demo", "priority_inversion", "priority_inversion"),
-        ("firmware/lifecycle_stress_ecu", "lifecycle_stress", "lifecycle_stress"),
+        (
+            "firmware/priority_inversion_demo",
+            "priority_inversion",
+            "priority_inversion",
+        ),
+        (
+            "firmware/lifecycle_stress_ecu",
+            "lifecycle_stress",
+            "lifecycle_stress",
+        ),
         ("firmware/net_demo_ecu", "net_demo", "net_demo"),
         ("firmware/storage_demo_ecu", "storage_demo", "storage_demo"),
         ("firmware/bt_demo_ecu", "bt_demo", "bt_demo"),
         // Tool ECUs
         ("firmware/ota_tool_ecu", "ota_tool", "ota_tool"),
         ("firmware/telematics_ecu", "telematics", "telematics"),
-        ("firmware/diagnostics_tool_ecu", "diagnostics", "diagnostics"),
+        (
+            "firmware/diagnostics_tool_ecu",
+            "diagnostics",
+            "diagnostics",
+        ),
         // Gateway diagnosis variants → category = gateway (not diagnostics!)
-        ("firmware/gateway_diag_clearbug_ecu", "gateway", "gateway_diag_clearbug"),
-        ("firmware/gateway_diag_clear_ecu", "gateway", "gateway_diag_clear"),
-        ("firmware/gateway_diag_startdrivebug_ecu", "gateway", "gateway_diag_startdrivebug"),
-        ("firmware/gateway_diag_startdrive_ecu", "gateway", "gateway_diag_startdrive"),
-        ("firmware/gateway_diag_fault_ecu", "gateway", "gateway_diag_fault"),
+        (
+            "firmware/gateway_diag_clearbug_ecu",
+            "gateway",
+            "gateway_diag_clearbug",
+        ),
+        (
+            "firmware/gateway_diag_clear_ecu",
+            "gateway",
+            "gateway_diag_clear",
+        ),
+        (
+            "firmware/gateway_diag_startdrivebug_ecu",
+            "gateway",
+            "gateway_diag_startdrivebug",
+        ),
+        (
+            "firmware/gateway_diag_startdrive_ecu",
+            "gateway",
+            "gateway_diag_startdrive",
+        ),
+        (
+            "firmware/gateway_diag_fault_ecu",
+            "gateway",
+            "gateway_diag_fault",
+        ),
         ("firmware/gateway_diag_ecu", "gateway", "gateway_diag"),
         // Powertrain diagnosis variants
-        ("firmware/powertrain_diag_service_bug_ecu", "powertrain", "powertrain_diag_service_bug"),
-        ("firmware/powertrain_diag_service_ecu", "powertrain", "powertrain_diag_service"),
+        (
+            "firmware/powertrain_diag_service_bug_ecu",
+            "powertrain",
+            "powertrain_diag_service_bug",
+        ),
+        (
+            "firmware/powertrain_diag_service_ecu",
+            "powertrain",
+            "powertrain_diag_service",
+        ),
         // OTA variants
-        ("firmware/gateway_ota_badcrc_ecu", "gateway", "gateway_ota_badcrc"),
-        ("firmware/gateway_ota_intwrite_ecu", "gateway", "gateway_ota_intwrite"),
-        ("firmware/gateway_ota_badhealth_ecu", "gateway", "gateway_ota_badhealth"),
-        ("firmware/gateway_ota_powercut_ecu", "gateway", "gateway_ota_powercut"),
-        ("firmware/gateway_ota_crcbug_ecu", "gateway", "gateway_ota_crcbug"),
+        (
+            "firmware/gateway_ota_badcrc_ecu",
+            "gateway",
+            "gateway_ota_badcrc",
+        ),
+        (
+            "firmware/gateway_ota_intwrite_ecu",
+            "gateway",
+            "gateway_ota_intwrite",
+        ),
+        (
+            "firmware/gateway_ota_badhealth_ecu",
+            "gateway",
+            "gateway_ota_badhealth",
+        ),
+        (
+            "firmware/gateway_ota_powercut_ecu",
+            "gateway",
+            "gateway_ota_powercut",
+        ),
+        (
+            "firmware/gateway_ota_crcbug_ecu",
+            "gateway",
+            "gateway_ota_crcbug",
+        ),
         ("firmware/gateway_ota_ecu", "gateway", "gateway_ota"),
         // Charging variants
-        ("firmware/gateway_charging_ecu", "gateway", "gateway_charging"),
-        ("firmware/powertrain_charging_ecu", "powertrain", "powertrain_charging"),
+        (
+            "firmware/gateway_charging_ecu",
+            "gateway",
+            "gateway_charging",
+        ),
+        (
+            "firmware/powertrain_charging_ecu",
+            "powertrain",
+            "powertrain_charging",
+        ),
         // Base ECUs
         ("firmware/gateway_ecu", "gateway", "gateway"),
         ("firmware/powertrain_ecu", "powertrain", "powertrain"),
@@ -411,7 +479,8 @@ mod tests {
         for (path, expected_category, _expected_boot) in CLASSIFICATION_TESTS {
             let category = resolve_ecu_category(Some(path), "test_machine");
             assert_eq!(
-                category, Some(*expected_category),
+                category,
+                Some(*expected_category),
                 "path '{path}': expected category '{expected_category}', got {category:?}"
             );
         }
@@ -443,7 +512,8 @@ mod tests {
         for path in diag_paths {
             let category = resolve_ecu_category(Some(path), "test_machine");
             assert_eq!(
-                category, Some("gateway"),
+                category,
+                Some("gateway"),
                 "gateway_diag variant '{path}' must be category 'gateway', got {category:?}"
             );
         }
@@ -457,7 +527,10 @@ mod tests {
 
     #[test]
     fn unknown_firmware_returns_none() {
-        assert_eq!(resolve_ecu_category(Some("firmware/mystery_ecu"), "x"), None);
+        assert_eq!(
+            resolve_ecu_category(Some("firmware/mystery_ecu"), "x"),
+            None
+        );
     }
 
     #[test]
