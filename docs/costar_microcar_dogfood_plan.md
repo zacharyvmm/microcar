@@ -122,7 +122,7 @@ Status meanings:
 | JSON-RPC per-session locking | SCAFFOLD | `sim-runner/src/serve.rs` still stores `BTreeMap<u64, Session>` under one global mutex. |
 | Per-machine time and task identity | DONE | `GuestRuntime` accessors (`active_now`, `active_task_id`, etc.) wired into all C ABI paths; global atomics kept as legacy fallback only. |
 | C firmware instance isolation | DONE | All eight ECUs use `sim_instance_state` with unique keys; zero mutable file/function statics remain. |
-| NetworkBank | CORE ONLY | `sim-net/src/bank.rs` exists, but `SimulatorExecutionContext` does not own or activate it. |
+| NetworkBank | DONE | `Simulator` and `SimulatorExecutionContext` own an optional `NetworkBank`; `enable_owned_network()` activation scoped alongside `SimGlobal`, `DeviceBank`, and `GuestRuntime`. |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | ECU role classification | DONE | `gateway_diag*` variants correctly classify as `gateway`; table-driven tests cover every firmware variant. |
 | Live diagnostics | SCAFFOLD | BMS emits sequenced status but dispatches the wrong input ID; gateway returns `UNSUPPORTED` for live BMS; tool does not issue/assemble selectors. |
