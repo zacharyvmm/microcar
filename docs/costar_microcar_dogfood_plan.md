@@ -121,7 +121,7 @@ Status meanings:
 | Unified run control and gRPC session resource bounds | DONE | `drive_world`, per-session gRPC locks, deterministic listing, TTL, trace ring, and keyframe limits exist. |
 | JSON-RPC per-session locking | SCAFFOLD | `sim-runner/src/serve.rs` still stores `BTreeMap<u64, Session>` under one global mutex. |
 | Per-machine time and task identity | DONE | `GuestRuntime` accessors (`active_now`, `active_task_id`, etc.) wired into all C ABI paths; global atomics kept as legacy fallback only. |
-| C firmware instance isolation | SCAFFOLD | BMS, both dashboards, OTA tool, and telematics use `sim_instance_state`; gateway and powertrain still use mutable globals, and diagnostics has not adopted key `0x4D430006`. |
+| C firmware instance isolation | DONE | All eight ECUs use `sim_instance_state` with unique keys; zero mutable file/function statics remain. |
 | NetworkBank | CORE ONLY | `sim-net/src/bank.rs` exists, but `SimulatorExecutionContext` does not own or activate it. |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | ECU role classification | DONE | `gateway_diag*` variants correctly classify as `gateway`; table-driven tests cover every firmware variant. |
