@@ -120,7 +120,7 @@ Status meanings:
 | DeviceBank, explicit machine targeting, owned CAN, restart algorithm | DONE | `with_machine_devices`, owned banks, persistent-device snapshot/restore, boot boundary, gRPC machine IDs, and core acceptance tests exist. |
 | Unified run control and gRPC session resource bounds | DONE | `drive_world`, per-session gRPC locks, deterministic listing, TTL, trace ring, and keyframe limits exist. |
 | JSON-RPC per-session locking | SCAFFOLD | `sim-runner/src/serve.rs` still stores `BTreeMap<u64, Session>` under one global mutex. |
-| Per-machine time and task identity | CORE ONLY | `GuestRuntime.now/current_task_id` exist, but many FFI paths still read/write process-global `SIM_NOW` and `CURRENT_TASK_ID`. |
+| Per-machine time and task identity | DONE | `GuestRuntime` accessors (`active_now`, `active_task_id`, etc.) wired into all C ABI paths; global atomics kept as legacy fallback only. |
 | C firmware instance isolation | SCAFFOLD | BMS, both dashboards, OTA tool, and telematics use `sim_instance_state`; gateway and powertrain still use mutable globals, and diagnostics has not adopted key `0x4D430006`. |
 | NetworkBank | CORE ONLY | `sim-net/src/bank.rs` exists, but `SimulatorExecutionContext` does not own or activate it. |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
