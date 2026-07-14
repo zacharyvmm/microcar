@@ -24,7 +24,7 @@ jobs:
           repository: ${{ env.COSTAR_REPO }}
           ref: ${{ env.COSTAR_REF }}
           path: costar
-
+          submodules: true
       - name: Checkout microcar
         uses: actions/checkout@v4
         with:
