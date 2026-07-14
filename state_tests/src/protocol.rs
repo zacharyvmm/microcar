@@ -15,6 +15,11 @@ pub const MC_NODE_DASHBOARD: u8 = 4;
 pub const MC_NODE_PLANT: u8 = 100;
 pub const MC_NODE_TEST_HARNESS: u8 = 200;
 
+// External protocol actors (Stage C).
+pub const MC_NODE_EVSE: u8 = 6;
+pub const MC_NODE_OTA_TOOL: u8 = 7;
+pub const MC_NODE_TELEMATICS: u8 = 8;
+
 // ── Message IDs ──────────────────────────────────────────────────────────
 
 pub const MC_MSG_HEARTBEAT: u32 = 0x001;
@@ -28,6 +33,16 @@ pub const MC_MSG_BMS_LIMITS: u32 = 0x201;
 pub const MC_MSG_BMS_FAULT: u32 = 0x202;
 pub const MC_MSG_DASHBOARD_STATUS: u32 = 0x300;
 pub const MC_MSG_WARNING: u32 = 0x400;
+
+// ── Charging / EVSE (Stage C) ──────────────────────────────────────────────
+pub const MC_MSG_BMS_CHARGE_LIMIT: u32 = 0x203;
+pub const MC_MSG_EVSE_EVENT: u32 = 0x610;
+pub const MC_MSG_CHARGE_COMMAND: u32 = 0x611;
+// ── OTA (Stage C) ──────────────────────────────────────────────────────────
+pub const MC_MSG_OTA_REQUEST: u32 = 0x630;
+pub const MC_MSG_OTA_CHUNK: u32 = 0x631;
+pub const MC_MSG_OTA_FINISH: u32 = 0x632;
+pub const MC_MSG_OTA_STATUS: u32 = 0x633;
 
 // ── Vehicle Modes ────────────────────────────────────────────────────────
 
@@ -321,8 +336,7 @@ pub fn safety_clamp_torque(
         _ => bms_max_torque.min(100),
     };
 
-    let clamped = requested.max(0).min(effective_max as i8);
-    clamped
+    requested.max(0).min(effective_max as i8)
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────

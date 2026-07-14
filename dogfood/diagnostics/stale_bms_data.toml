@@ -1,0 +1,82 @@
+# stale_bms_data — stop BMS publication, wait 501ms, query receives STALE
+#
+# Tests freshness: after the plant stops publishing sensor data,
+# the BMS stops updating, and after 500ms the gateway returns
+# MC_DIAG_STALE for LIVE_BMS queries.
+
+name = "stale_bms_data"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diag_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diag_tool"
+
+# ── Initial plant data: makes BMS publish ──
+[[bus_inject]]
+at_ms = 100
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 250, 0, 100]
+
+# ── Query while fresh (should get OK) ──
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "diag_tool"
+id = 0x600
+data = [5, 5, 1, 0]  # LIVE_BMS, param=0
+
+# ── No more plant data after this point ──
+# ── Wait ~600ms, then query again — should be STALE ──
+[[bus_inject]]
+at_ms = 1000
+bus = "vcan0"
+sender = "diag_tool"
+id = 0x600
+data = [5, 5, 2, 0]  # LIVE_BMS, param=0
+
+[plant]
+type = "microcar"
+tick_ms = 10

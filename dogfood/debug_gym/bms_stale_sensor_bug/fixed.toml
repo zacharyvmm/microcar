@@ -1,0 +1,77 @@
+# bms_stale_sensor_bug (fixed) — gateway rejects stale BMS data
+#
+# Debug-gym seed: the correct gateway enforces the 500ms freshness check,
+# so a LIVE_BMS query 1100ms after the last plant sensor frame
+# returns MC_DIAG_STALE rather than serving the expired snapshot.
+#
+# This is the *fixed* half of the pair.  The failing half is failing.toml.
+
+name = "bms_stale_sensor_bug_fixed"
+duration_ms = 2000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 5
+name = "diag_tool"
+firmware = "firmware/diagnostics_tool_ecu"
+rtos = "freertos"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "diag_tool"
+
+# ── Single plant sensor frame at t=100ms ──
+# SOC=80%, voltage=360V, temp=25°C, current=10A
+[[bus_inject]]
+at_ms = 100
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 250, 0, 100]
+
+# ── Query LIVE_BMS at t=1200ms (1100ms after plant data, well past 500ms) ──
+# Correct gateway returns MC_DIAG_STALE because the snapshot is too old.
+[[bus_inject]]
+at_ms = 1200
+bus = "vcan0"
+sender = "diag_tool"
+id = 0x600
+data = [5, 5, 1, 0]  # source=DIAGNOSTICS, service=LIVE_BMS=5, request_id=1, param=0
+
+[plant]
+type = "microcar"
+tick_ms = 10

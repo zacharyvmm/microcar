@@ -21,29 +21,41 @@
 #include "microcar_can.h"
 #include <zephyr/kernel.h>
 #include <string.h>
+#include <stdalign.h>
+#include "sim_abi.h"
 
 #define CAN_BUS 0
 
-// ── ABI helpers (from costar sim-ffi) ─────────────────────────────────────
-// When compiled with the full Zephyr kernel, sim_abi.h is available.
-// When compiled standalone, trace calls are no-ops.
-#ifdef SIMULATION_HOST_MODE
-#include "sim_abi.h"
-#else
-#define sim_trace_u32(label, val) ((void)0)
-#endif
+// ── Instance key — allocated once per machine via sim_instance_state ──────
 
-// ── Global state ──────────────────────────────────────────────────────────
+#define DASH_KEY 0x4D430005
 
-static dashboard_state_t g_ds;
-static warning_display_t g_wd;
+// ── Per-instance context (replaces all file-scope statics) ────────────────
+
+typedef struct {
+    dashboard_state_t   ds;
+    warning_display_t   wd;
+
+    // Zephyr thread primitives — live in per-instance state so each
+    // simulated machine gets its own thread data and stack.
+    struct k_thread     thread_data;
+    k_thread_stack_t    stack[DASHBOARD_STACK_SIZE];
+} dashboard_ctx_t;
+
+/// Return the per-machine dashboard context, allocating it on first call.
+static dashboard_ctx_t *dashboard_ctx(void)
+{
+    dashboard_ctx_t *ctx = (dashboard_ctx_t *)sim_instance_state(
+        DASH_KEY, sizeof(dashboard_ctx_t), alignof(dashboard_ctx_t));
+    return ctx;
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 
-void dashboard_init(void)
+void dashboard_init(dashboard_ctx_t *ctx)
 {
-    dashboard_state_init(&g_ds);
-    warning_display_init(&g_wd);
+    dashboard_state_init(&ctx->ds);
+    warning_display_init(&ctx->wd);
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────
@@ -51,16 +63,18 @@ void dashboard_init(void)
 /// Process vehicle mode frame (0x010) from gateway.
 static void handle_vehicle_mode(const mc_can_frame_t *frame)
 {
+    dashboard_ctx_t *ctx = dashboard_ctx();
     uint8_t mode = frame->data[0];
-    dashboard_state_set_mode(&g_ds, (mc_vehicle_mode_t)mode);
+    dashboard_state_set_mode(&ctx->ds, (mc_vehicle_mode_t)mode);
     sim_trace_u32("dash_mode", mode);
 }
 
 /// Process wheel speed frame (0x102) from plant.
 static void handle_wheel_speed(const mc_can_frame_t *frame)
 {
+    dashboard_ctx_t *ctx = dashboard_ctx();
     uint16_t speed_kph_x10 = ((uint16_t)frame->data[0] << 8) | frame->data[1];
-    dashboard_state_set_speed(&g_ds, speed_kph_x10);
+    dashboard_state_set_speed(&ctx->ds, speed_kph_x10);
     sim_trace_u32("dash_speed", speed_kph_x10);
 }
 
@@ -70,24 +84,26 @@ static void handle_plant_sensors(const mc_can_frame_t *frame)
 {
     if (frame->len < 7) return;
 
+    dashboard_ctx_t *ctx = dashboard_ctx();
     uint8_t  soc_percent = frame->data[0];
     uint16_t voltage_mv  = ((uint16_t)frame->data[1] << 8) | frame->data[2];
     int16_t  temp_c_x10  = (int16_t)(((uint16_t)frame->data[3] << 8) | frame->data[4]);
 
-    dashboard_state_set_battery(&g_ds, soc_percent, temp_c_x10, voltage_mv);
+    dashboard_state_set_battery(&ctx->ds, soc_percent, temp_c_x10, voltage_mv);
     sim_trace_u32("dash_batt", soc_percent);
 }
 
 /// Process warning frame (0x400).
 static void handle_warning(const mc_can_frame_t *frame)
 {
+    dashboard_ctx_t *ctx = dashboard_ctx();
     uint8_t source_node  = frame->data[0];
     uint8_t warning_code = frame->data[1];
 
-    dashboard_state_add_warning(&g_ds, warning_code, source_node);
+    dashboard_state_add_warning(&ctx->ds, warning_code, source_node);
 
     uint8_t severity = warning_display_severity_for(warning_code);
-    warning_display_update(&g_wd, warning_code, severity);
+    warning_display_update(&ctx->wd, warning_code, severity);
     sim_trace_u32("dash_warn", warning_code);
 }
 
@@ -110,16 +126,15 @@ static void send_heartbeat(uint32_t now_ms, mc_can_frame_t *tx)
 #define DASHBOARD_STACK_SIZE 4096
 #define DASHBOARD_PRIORITY 4
 
-K_THREAD_STACK_DEFINE(dashboard_stack, DASHBOARD_STACK_SIZE);
-static struct k_thread dashboard_thread_data;
 
 // ── Dashboard thread entry ────────────────────────────────────────────────
 
 void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
 {
-    (void)arg1; (void)arg2; (void)arg3;
+    dashboard_ctx_t *ctx = (dashboard_ctx_t *)arg1;
+    (void)arg2; (void)arg3;
 
-    dashboard_init();
+    dashboard_init(ctx);
     sim_trace_u32("dash_boot", 1);
 
     uint32_t uptime_ms = 0;
@@ -133,7 +148,7 @@ void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
         uptime_ms += 10;
 
         // ── Check for top warning ──────────────────────────────
-        uint8_t top_warning = dashboard_state_top_warning(&g_ds);
+        uint8_t top_warning = dashboard_state_top_warning(&ctx->ds);
         if (top_warning != MC_WARN_NONE) {
             sim_trace_u32("dash_top_warn", top_warning);
         }
@@ -155,13 +170,15 @@ void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
 
 int zephyr_app_main(void)
 {
+    dashboard_ctx_t *ctx = dashboard_ctx();
+
     sim_trace_u32("dash_zephyr_main", 1);
 
-    k_thread_create(&dashboard_thread_data,
-                    dashboard_stack,
-                    K_THREAD_STACK_SIZEOF(dashboard_stack),
+    k_thread_create(&ctx->thread_data,
+                    ctx->stack,
+                    K_THREAD_STACK_SIZEOF(ctx->stack),
                     dashboard_thread_entry,
-                    NULL, NULL, NULL,
+                    ctx, NULL, NULL,
                     DASHBOARD_PRIORITY, 0, K_NO_WAIT);
 
     sim_trace_u32("dash_main_done", 1);

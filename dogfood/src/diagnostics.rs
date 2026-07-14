@@ -197,7 +197,7 @@ fn collect_diag_responses(trace: &[UserTrace]) -> Vec<DiagResponse> {
     responses.into_values().collect()
 }
 
-fn response<'a>(responses: &'a [DiagResponse], service: u8, req: u8) -> Option<&'a DiagResponse> {
+fn response(responses: &[DiagResponse], service: u8, req: u8) -> Option<&DiagResponse> {
     responses
         .iter()
         .find(|r| r.service == service && r.req == req)

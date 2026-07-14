@@ -1,0 +1,156 @@
+# bms_fault_during_update — BMS critical fault during OTA; gateway aborts update
+#
+# The OTA update is actively receiving chunks when the BMS publishes a
+# critical fault (MC_MSG_BMS_FAULT with BMS_CRITICAL_FAULT). The gateway
+# must abort the OTA session immediately — vehicle safety takes priority
+# over firmware updates. The slot A firmware remains active.
+
+name = "ota_bms_fault_during_update"
+duration_ms = 5000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 7
+name = "ota_tool"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "ota_tool"
+
+# ── Boot to READY ──
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 50]
+
+[[bus_inject]]
+at_ms = 70
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 70]
+
+[[bus_inject]]
+at_ms = 80
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 80]
+
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 150]
+
+[[bus_inject]]
+at_ms = 170
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 170]
+
+[[bus_inject]]
+at_ms = 180
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 180]
+
+# ── Plant data ──
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 250, 0, 100]
+
+# ── OTA_REQUEST: total_chunks=3 ──
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x630
+data = [7, 1, 2, 3]
+
+# ── Chunks 0 and 1 arrive normally ──
+[[bus_inject]]
+at_ms = 600
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x631
+data = [7, 1, 0, 160, 161, 162, 163, 164]
+
+[[bus_inject]]
+at_ms = 700
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x631
+data = [7, 1, 1, 165, 166, 167, 168, 169]
+
+# ── BMS CRITICAL FAULT: overtemperature (fault_code=1, BMS_CRITICAL_FAULT=3) ──
+# This forces vehicle mode to FAULT; OTA must abort immediately.
+[[bus_inject]]
+at_ms = 720
+bus = "vcan0"
+sender = "bms"
+id = 0x202
+data = [3, 0, 1, 0]  # source=3, state=0(msg), fault_code=Overtemp(1)
+
+# ── Gateway sets vehicle mode to FAULT and aborts OTA ──
+# OTA_STATUS: RolledBack (state=6), slot A still active
+[[bus_inject]]
+at_ms = 900
+bus = "vcan0"
+sender = "gateway"
+id = 0x633
+data = [1, 1, 6, 0, 0, 0]  # state=RolledBack(6), slot=A(0)
+
+# ── Vehicle mode transitions to FAULT ──
+[[bus_inject]]
+at_ms = 1000
+bus = "vcan0"
+sender = "gateway"
+id = 0x010
+data = [1, 4, 0]  # source=1, mode=FAULT(4), fault_code=0
+
+[plant]
+type = "microcar"
+tick_ms = 10

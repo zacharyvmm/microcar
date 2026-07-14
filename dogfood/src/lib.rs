@@ -36,6 +36,7 @@ pub mod ota;
 pub mod runner;
 pub mod simfarm;
 pub mod summary;
+pub mod telematics;
 pub mod toml_zoo;
 pub mod topology;
 pub mod trace_hash;
@@ -65,6 +66,10 @@ pub use simfarm::{
     SimfarmReport,
 };
 pub use summary::{build_summary, write_summary, Summary, HARNESS_VERSION};
+pub use telematics::{
+    discover_scenarios as discover_telematics_scenarios, run_telematics, run_telematics_scenario,
+    TelematicsCheck, TelematicsReport, TelematicsScenarioResult, DEFAULT_TELEMATICS_DIR,
+};
 pub use toml_zoo::{
     discover_cases, run_sibling_isolation, run_toml_zoo, CaseResult, SiblingIsolation, TomlZooCase,
     TomlZooReport, DEFAULT_CORPUS_DIR,

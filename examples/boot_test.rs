@@ -2,6 +2,9 @@
 
 use sim_core::SimConfig;
 use sim_ffi::simulator::Simulator;
+// Link the microcar crate so its firmware C payload (which defines
+// `microcar_boot`) is linked into this example.
+use microcar as _;
 
 extern "C" {
     fn microcar_boot();

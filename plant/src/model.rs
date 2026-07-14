@@ -217,10 +217,10 @@ mod tests {
         // First frame should be wheel speed at 0.
         let wheel_frames: Vec<_> = frames
             .iter()
-            .filter(|(_, _, id, _)| *id == CAN_ID_WHEEL_SPEED)
+            .filter(|(_, _, id, ..)| *id == CAN_ID_WHEEL_SPEED)
             .collect();
         assert_eq!(wheel_frames.len(), 2); // one per node
-        let (_rx, _sender, _id, data) = wheel_frames[0];
+        let (_rx, _sender, _id, data, ..) = wheel_frames[0];
         assert_eq!(data.len(), 2);
         // speed = 0 at rest
         assert_eq!(u16::from_be_bytes([data[0], data[1]]), 0);
@@ -228,10 +228,10 @@ mod tests {
         // Plant sensor frames.
         let bms_frames: Vec<_> = frames
             .iter()
-            .filter(|(_, _, id, _)| *id == CAN_ID_PLANT_SENSORS)
+            .filter(|(_, _, id, ..)| *id == CAN_ID_PLANT_SENSORS)
             .collect();
         assert_eq!(bms_frames.len(), 2);
-        let (_rx, _sender, _id, data) = bms_frames[0];
+        let (_rx, _sender, _id, data, ..) = bms_frames[0];
         assert_eq!(data.len(), 7);
         // SOC = 80% initially
         assert_eq!(data[0], 80);

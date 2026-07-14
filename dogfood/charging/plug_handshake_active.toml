@@ -1,0 +1,94 @@
+# plug_handshake_active — EVSE plug → handshake → charging active
+#
+# Tests the closed-loop charging path (Stage E):
+# 1. EVSE sends PLUG event (0x610)
+# 2. EVSE sends HANDSHAKE_OK event
+# 3. BMS publishes charge limit (0x203)
+# 4. Gateway FSM transitions: DISCONNECTED → PLUG_DETECTED → HANDSHAKE → ACTIVE
+# 5. Gateway sends CHARGE_COMMAND (0x611) to powertrain/plant
+# 6. Plant applies charge current, battery SOC increases
+
+name = "plug_handshake_active"
+duration_ms = 5000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+# EVSE as passive external actor (no firmware, bus_inject only)
+[[machine]]
+id = 6
+name = "evse"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "evse"
+
+# ── Plant provides initial sensor data ──
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 250, 0, 100]
+
+# ── EVSE: PLUG event (0x610) ──
+# payload: [source=6, event=PLUG=1, request_id=1, offered_current=64(32A), target_soc=80, reserved=0]
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "evse"
+id = 0x610
+data = [6, 1, 1, 64, 80, 0]
+
+# ── EVSE: HANDSHAKE_OK event ──
+[[bus_inject]]
+at_ms = 300
+bus = "vcan0"
+sender = "evse"
+id = 0x610
+data = [6, 2, 1, 64, 80, 0]
+
+# ── BMS: publish charge limit (0x203) ──
+# payload: [source=3, max_current=64(32A), soc=80, temp=250(25°C), fault=0, seq=1]
+[[bus_inject]]
+at_ms = 350
+bus = "vcan0"
+sender = "bms"
+id = 0x203
+data = [3, 64, 80, 0, 250, 0, 1]
+
+[plant]
+type = "microcar"
+tick_ms = 10

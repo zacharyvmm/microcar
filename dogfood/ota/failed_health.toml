@@ -1,0 +1,221 @@
+# failed_health — post-boot health check fails; gateway rolls back to slot A
+#
+# The OTA update is fully downloaded, verified, and committed to slot B.
+# The gateway reboots into slot B and runs its health check. The health
+# check fails (e.g., a critical sensor or CAN bus fault is detected).
+# The gateway rolls back to slot A and reports RolledBack.
+
+name = "ota_failed_health"
+duration_ms = 10000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 7
+name = "ota_tool"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "ota_tool"
+
+# ── Boot to READY ──
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 50]
+
+[[bus_inject]]
+at_ms = 70
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 70]
+
+[[bus_inject]]
+at_ms = 80
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 80]
+
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 150]
+
+[[bus_inject]]
+at_ms = 170
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 170]
+
+[[bus_inject]]
+at_ms = 180
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 180]
+
+# ── Plant data ──
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 250, 0, 100]
+
+# ── OTA_REQUEST: total_chunks=3 ──
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x630
+data = [7, 1, 2, 3]
+
+# ── All chunks delivered ──
+[[bus_inject]]
+at_ms = 600
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x631
+data = [7, 1, 0, 160, 161, 162, 163, 164]
+
+[[bus_inject]]
+at_ms = 700
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x631
+data = [7, 1, 1, 165, 166, 167, 168, 169]
+
+[[bus_inject]]
+at_ms = 800
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x631
+data = [7, 1, 2, 170, 171, 172, 173, 174]
+
+# ── OTA_FINISH with valid CRC ──
+[[bus_inject]]
+at_ms = 900
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x632
+data = [7, 1, 3, 239, 190, 173, 222]
+
+# ── Heartbeats during verification and commit ──
+[[bus_inject]]
+at_ms = 1000
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 150]
+
+# ── Commit time: gateway reboots to slot B ──
+[[fault]]
+at_ms = 1200
+target = "machine.gateway"
+type = "reboot"
+downtime_ms = 30
+
+# ── Post-reboot: gateway on slot B, health check fails ──
+# Inject a BMS critical fault to trigger health check failure.
+[[bus_inject]]
+at_ms = 1400
+bus = "vcan0"
+sender = "bms"
+id = 0x202
+data = [3, 0, 1, 0]  # source=3, fault=Overtemp(1)
+
+# Gateway detects health failure and rolls back to slot A.
+# Second reboot back to slot A.
+[[fault]]
+at_ms = 1600
+target = "machine.gateway"
+type = "reboot"
+downtime_ms = 10
+
+# ── Gateway boots from slot A (rollback complete) ──
+[[bus_inject]]
+at_ms = 1800
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 100]
+
+[[bus_inject]]
+at_ms = 1900
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 200]
+
+[[bus_inject]]
+at_ms = 2000
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 200]
+
+# ── Gateway reports OTA_STATUS: RolledBack, slot A active ──
+[[bus_inject]]
+at_ms = 2200
+bus = "vcan0"
+sender = "gateway"
+id = 0x633
+data = [1, 1, 6, 0, 0, 0]  # state=RolledBack(6), slot=A(0)
+
+# ── Assertions ──
+
+# Gateway must reboot twice (to slot B, then back to slot A).
+[[expect.event]]
+before_ms = 2000
+machine = "gateway"
+event = "machine_reset_begin"
+
+# Gateway must NOT end up in Healthy OTA state.
+[[expect.no]]
+before_ms = 5000
+machine = "gateway"
+event = "ota_state:Healthy"
+
+[plant]
+type = "microcar"
+tick_ms = 10

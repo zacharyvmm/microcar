@@ -1,0 +1,128 @@
+# drive_while_plugged — driver input while EVSE plugged, torque stays zero
+#
+# Tests safety interlock (Stage E):
+# 1. EVSE plug → handshake → charging ACTIVE
+# 2. Gateway vehicle mode is CHARGING
+# 3. Driver presses throttle (50%) while EVSE is still connected
+# 4. Powertrain MUST produce zero torque (vehicle in CHARGING mode)
+# 5. Gateway must NOT transition to DRIVE while plugged
+
+name = "drive_while_plugged"
+duration_ms = 4000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+# EVSE as passive external actor (no firmware, bus_inject only)
+[[machine]]
+id = 6
+name = "evse"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "evse"
+
+# ── Plant: normal temp 25°C, SOC=80% ──
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 250, 0, 100]
+
+# ── EVSE: PLUG event (0x610) ──
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "evse"
+id = 0x610
+data = [6, 1, 1, 64, 80, 0]
+
+# ── EVSE: HANDSHAKE_OK event ──
+[[bus_inject]]
+at_ms = 300
+bus = "vcan0"
+sender = "evse"
+id = 0x610
+data = [6, 2, 1, 64, 80, 0]
+
+# ── BMS: normal charge limit (32A, no fault) ──
+[[bus_inject]]
+at_ms = 350
+bus = "vcan0"
+sender = "bms"
+id = 0x203
+data = [3, 64, 80, 0, 250, 0, 1]
+
+# ── Continued plant data to keep BMS publishing ──
+[[bus_inject]]
+at_ms = 1500
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 252, 0, 100]
+
+# ── Driver presses throttle while EVSE still plugged ──
+[[input]]
+at_ms = 2000
+type = "driver_input"
+throttle_percent = 50
+brake_pressed = false
+
+# ── Assertions ────────────────────────────────────────────────────────────
+
+[[expect.event]]
+before_ms = 1000
+machine = "gateway"
+event = "vehicle_mode"
+value = "CHARGING"
+
+# After driver input: powertrain MUST produce zero torque
+[[expect.event]]
+before_ms = 2800
+machine = "powertrain"
+event = "motor_command"
+torque = 0
+
+# Gateway must remain in CHARGING mode (not switch to DRIVE)
+[[expect.event]]
+before_ms = 3500
+machine = "gateway"
+event = "vehicle_mode"
+value = "CHARGING"
+
+[plant]
+type = "microcar"
+tick_ms = 10

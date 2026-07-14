@@ -1,0 +1,52 @@
+# tcp_loopback_test — telematics ECU trace smoke test
+#
+# NOTE: This scenario is a trace-based smoke test, not a real host TCP bridge
+# test. The comments below describe the full Stage H contract from the dogfood
+# plan. The current harness checks only `sim_trace_u32` trace events; it does
+# NOT exercise a real host TCP bridge with socket buffers, fragmented reads,
+# request-response matching, or byte conservation. Full Stage H telematics
+# remains deferred until `NetworkBank` is activated through the simulator
+# execution context and a real host TCP/client harness exists.
+#
+# Dogfood plan contract (not yet exercised by the harness):
+#
+# Stage H: the telematics ECU firmware sends length-prefixed status records
+# over virtual Ethernet device 0. A host-side TCP bridge (loopback, ephemeral
+# port, 256-byte socket buffers) reads the virtual Ethernet frames and
+# forwards them to a local TCP listener. The test splits every request at each
+# possible byte boundary, then verifies byte conservation across a 100-record
+# burst within a 10-second wall-clock timeout.
+#
+# Record format (microcar_telematics.h):
+name = "tcp_loopback_test"
+duration_ms = 15000
+
+[[machine]]
+id = 1
+name = "telematics"
+firmware = "firmware/telematics_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "peer"
+# Dummy peer — endpoint for the virtual Ethernet link.
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "telematics"
+
+[[link]]
+type = "eth"
+from = 1
+to = 2
+latency = 1000
+
+[plant]
+type = "microcar"
+tick_ms = 10

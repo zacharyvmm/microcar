@@ -448,6 +448,7 @@ dependencies = [
 name = "sim-net"
 version = "1.0.0"
 dependencies = [
+ "libc",
  "polling",
  "sim-core",
  "smoltcp",

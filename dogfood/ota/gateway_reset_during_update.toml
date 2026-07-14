@@ -1,0 +1,175 @@
+# gateway_reset_during_update — gateway reboots mid-update, recovers to idle
+#
+# OTA update is in progress (chunks being delivered) when the gateway
+# experiences an unexpected reboot. After restart, the gateway has no
+# active OTA session — the in-progress download is discarded. The
+# vehicle remains operational on slot A.
+
+name = "ota_gateway_reset_during_update"
+duration_ms = 8000
+
+[[machine]]
+id = 1
+name = "gateway"
+firmware = "firmware/gateway_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 2
+name = "powertrain"
+firmware = "firmware/powertrain_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 3
+name = "bms"
+firmware = "firmware/bms_ecu"
+rtos = "freertos"
+
+[[machine]]
+id = 7
+name = "ota_tool"
+
+[[bus]]
+name = "vcan0"
+type = "can"
+latency_us = 500
+
+[[bus.node]]
+bus = "vcan0"
+machine = "gateway"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "powertrain"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "bms"
+
+[[bus.node]]
+bus = "vcan0"
+machine = "ota_tool"
+
+# ── Boot to READY ──
+[[bus_inject]]
+at_ms = 50
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 50]
+
+[[bus_inject]]
+at_ms = 70
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 70]
+
+[[bus_inject]]
+at_ms = 80
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 80]
+
+[[bus_inject]]
+at_ms = 150
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 150]
+
+[[bus_inject]]
+at_ms = 170
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 170]
+
+[[bus_inject]]
+at_ms = 180
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 180]
+
+# ── Plant data ──
+[[bus_inject]]
+at_ms = 200
+bus = "vcan0"
+sender = "plant"
+id = 0x500
+data = [80, 1, 104, 0, 250, 0, 100]
+
+# ── OTA_REQUEST: total_chunks=4 ──
+[[bus_inject]]
+at_ms = 500
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x630
+data = [7, 1, 2, 4]
+
+# ── Chunks 0 and 1 delivered before reset ──
+[[bus_inject]]
+at_ms = 600
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x631
+data = [7, 1, 0, 160, 161, 162, 163, 164]
+
+[[bus_inject]]
+at_ms = 700
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x631
+data = [7, 1, 1, 165, 166, 167, 168, 169]
+
+# ── GATEWAY RESET during update — chunks 2 and 3 are never received ──
+[[fault]]
+at_ms = 750
+target = "machine.gateway"
+type = "reboot"
+downtime_ms = 20
+
+# ── After reboot: gateway has no OTA session state ──
+[[bus_inject]]
+at_ms = 900
+bus = "vcan0"
+sender = "gateway"
+id = 0x001
+data = [1, 0, 0, 0, 100]
+
+[[bus_inject]]
+at_ms = 1000
+bus = "vcan0"
+sender = "powertrain"
+id = 0x001
+data = [2, 0, 0, 0, 100]
+
+[[bus_inject]]
+at_ms = 1100
+bus = "vcan0"
+sender = "bms"
+id = 0x001
+data = [3, 0, 0, 0, 100]
+
+# ── OTA tool retries new request after gateway comes back ──
+[[bus_inject]]
+at_ms = 1500
+bus = "vcan0"
+sender = "ota_tool"
+id = 0x630
+data = [7, 2, 2, 4]
+
+# ── Assertions ──
+
+# Gateway must experience a reset during update.
+[[expect.event]]
+before_ms = 2000
+machine = "gateway"
+event = "machine_reset_begin"
+
+[plant]
+type = "microcar"
+tick_ms = 10
