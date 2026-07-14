@@ -24,7 +24,6 @@ jobs:
           repository: ${{ env.COSTAR_REPO }}
           ref: ${{ env.COSTAR_REF }}
           path: costar
-          token: ${{ secrets.COSTAR_READ_TOKEN }}
 
       - name: Checkout microcar
         uses: actions/checkout@v4
