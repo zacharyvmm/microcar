@@ -64,6 +64,7 @@ void dashboard_init(dashboard_ctx_t *ctx)
 static void handle_vehicle_mode(const mc_can_frame_t *frame)
 {
     dashboard_ctx_t *ctx = dashboard_ctx();
+    if (ctx == NULL) return;
     uint8_t mode = frame->data[0];
     dashboard_state_set_mode(&ctx->ds, (mc_vehicle_mode_t)mode);
     sim_trace_u32("dash_mode", mode);
@@ -73,9 +74,9 @@ static void handle_vehicle_mode(const mc_can_frame_t *frame)
 static void handle_wheel_speed(const mc_can_frame_t *frame)
 {
     dashboard_ctx_t *ctx = dashboard_ctx();
+    if (ctx == NULL) return;
     uint16_t speed_kph_x10 = ((uint16_t)frame->data[0] << 8) | frame->data[1];
     dashboard_state_set_speed(&ctx->ds, speed_kph_x10);
-    sim_trace_u32("dash_speed", speed_kph_x10);
 }
 
 /// Process plant sensor data frame (0x500).
@@ -85,11 +86,12 @@ static void handle_plant_sensors(const mc_can_frame_t *frame)
     if (frame->len < 7) return;
 
     dashboard_ctx_t *ctx = dashboard_ctx();
+    if (ctx == NULL) return;
     uint8_t  soc_percent = frame->data[0];
     uint16_t voltage_mv  = ((uint16_t)frame->data[1] << 8) | frame->data[2];
     int16_t  temp_c_x10  = (int16_t)(((uint16_t)frame->data[3] << 8) | frame->data[4]);
-
     dashboard_state_set_battery(&ctx->ds, soc_percent, temp_c_x10, voltage_mv);
+
     sim_trace_u32("dash_batt", soc_percent);
 }
 
@@ -97,6 +99,7 @@ static void handle_plant_sensors(const mc_can_frame_t *frame)
 static void handle_warning(const mc_can_frame_t *frame)
 {
     dashboard_ctx_t *ctx = dashboard_ctx();
+    if (ctx == NULL) return;
     uint8_t source_node  = frame->data[0];
     uint8_t warning_code = frame->data[1];
 
@@ -166,11 +169,13 @@ void dashboard_thread_entry(void *arg1, void *arg2, void *arg3)
     }
 }
 
-// ── Zephyr app entry point ────────────────────────────────────────────────
-
 int zephyr_app_main(void)
 {
     dashboard_ctx_t *ctx = dashboard_ctx();
+    if (ctx == NULL) {
+        sim_trace_u32("dash_zephyr_fatal", 1);
+        return -1;
+    }
 
     sim_trace_u32("dash_zephyr_main", 1);
 

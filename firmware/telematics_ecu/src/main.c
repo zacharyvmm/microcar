@@ -112,6 +112,11 @@ void telematics_main(void *pvParameters)
     (void)pvParameters;
 
     telem_ctx_t *ctx = telem_ctx();
+    if (ctx == NULL) {
+        sim_trace_u32("telematics_fatal", 1);
+        vTaskSuspend(NULL);
+        return;
+    }
     memset(ctx, 0, sizeof(*ctx));
 
     sim_trace_u32("telematics_boot", 1);

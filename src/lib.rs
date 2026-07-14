@@ -110,13 +110,13 @@ pub const ECU_CATEGORY_PATTERNS: &[(&str, &str)] = &[
     ("bt_demo", "bt_demo"),
     ("ota_tool", "ota_tool"),
     ("telematics", "telematics"),
-    // Diagnostics variants (specific → broad)
-    ("gateway_diag_clearbug", "diagnostics"),
-    ("gateway_diag_clear", "diagnostics"),
-    ("gateway_diag_startdrivebug", "diagnostics"),
-    ("gateway_diag_startdrive", "diagnostics"),
-    ("gateway_diag_fault", "diagnostics"),
-    ("gateway_diag", "diagnostics"),
+    // Gateway diagnosis variants (specific → broad; category is gateway, not diagnostics)
+    ("gateway_diag_clearbug", "gateway"),
+    ("gateway_diag_clear", "gateway"),
+    ("gateway_diag_startdrivebug", "gateway"),
+    ("gateway_diag_startdrive", "gateway"),
+    ("gateway_diag_fault", "gateway"),
+    ("gateway_diag", "gateway"),
     ("powertrain_diag_service_bug", "powertrain"),
     ("powertrain_diag_service", "powertrain"),
     // OTA variants
@@ -184,7 +184,7 @@ impl MicrocarFirmware {
     /// Uses the shared [`ECU_CATEGORY_PATTERNS`] table so that both boot
     /// dispatch and automotive-semantic validation resolve firmware the
     /// same way — preventing the two from drifting.
-    fn ecu_type(&self) -> &str {
+    pub(crate) fn ecu_type(&self) -> &str {
         // Keep the detailed firmware variant for boot dispatch. Validation
         // intentionally resolves these variants to their broad ECU category,
         // but the firmware ABI exposes dedicated entry points for the
@@ -221,7 +221,7 @@ impl MicrocarFirmware {
                 "dashboard",
             ];
             if let Some(variant) = VARIANTS.iter().find(|variant| path.contains(*variant)) {
-                return *variant;
+                return variant;
             }
         }
 
@@ -357,5 +357,184 @@ impl Firmware for ZephyrDashboardFirmware {
             sim_zephyr_scheduler_tick();
         }
         sim_ffi::flush_trace();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each entry: (firmware_path, expected_ecu_category, expected_boot_variant)
+    /// `ecu_type()` returns the FIRST matching variant from the `VARIANTS` list
+    /// (which may be more specific than the category). `resolve_ecu_category()`
+    /// returns the broad category used for validation.
+    const CLASSIFICATION_TESTS: &[(&str, &str, &str)] = &[
+        // Demo / test ECUs
+        (
+            "firmware/priority_inversion_demo",
+            "priority_inversion",
+            "priority_inversion",
+        ),
+        (
+            "firmware/lifecycle_stress_ecu",
+            "lifecycle_stress",
+            "lifecycle_stress",
+        ),
+        ("firmware/net_demo_ecu", "net_demo", "net_demo"),
+        ("firmware/storage_demo_ecu", "storage_demo", "storage_demo"),
+        ("firmware/bt_demo_ecu", "bt_demo", "bt_demo"),
+        // Tool ECUs
+        ("firmware/ota_tool_ecu", "ota_tool", "ota_tool"),
+        ("firmware/telematics_ecu", "telematics", "telematics"),
+        (
+            "firmware/diagnostics_tool_ecu",
+            "diagnostics",
+            "diagnostics",
+        ),
+        // Gateway diagnosis variants → category = gateway (not diagnostics!)
+        (
+            "firmware/gateway_diag_clearbug_ecu",
+            "gateway",
+            "gateway_diag_clearbug",
+        ),
+        (
+            "firmware/gateway_diag_clear_ecu",
+            "gateway",
+            "gateway_diag_clear",
+        ),
+        (
+            "firmware/gateway_diag_startdrivebug_ecu",
+            "gateway",
+            "gateway_diag_startdrivebug",
+        ),
+        (
+            "firmware/gateway_diag_startdrive_ecu",
+            "gateway",
+            "gateway_diag_startdrive",
+        ),
+        (
+            "firmware/gateway_diag_fault_ecu",
+            "gateway",
+            "gateway_diag_fault",
+        ),
+        ("firmware/gateway_diag_ecu", "gateway", "gateway_diag"),
+        // Powertrain diagnosis variants
+        (
+            "firmware/powertrain_diag_service_bug_ecu",
+            "powertrain",
+            "powertrain_diag_service_bug",
+        ),
+        (
+            "firmware/powertrain_diag_service_ecu",
+            "powertrain",
+            "powertrain_diag_service",
+        ),
+        // OTA variants
+        (
+            "firmware/gateway_ota_badcrc_ecu",
+            "gateway",
+            "gateway_ota_badcrc",
+        ),
+        (
+            "firmware/gateway_ota_intwrite_ecu",
+            "gateway",
+            "gateway_ota_intwrite",
+        ),
+        (
+            "firmware/gateway_ota_badhealth_ecu",
+            "gateway",
+            "gateway_ota_badhealth",
+        ),
+        (
+            "firmware/gateway_ota_powercut_ecu",
+            "gateway",
+            "gateway_ota_powercut",
+        ),
+        (
+            "firmware/gateway_ota_crcbug_ecu",
+            "gateway",
+            "gateway_ota_crcbug",
+        ),
+        ("firmware/gateway_ota_ecu", "gateway", "gateway_ota"),
+        // Charging variants
+        (
+            "firmware/gateway_charging_ecu",
+            "gateway",
+            "gateway_charging",
+        ),
+        (
+            "firmware/powertrain_charging_ecu",
+            "powertrain",
+            "powertrain_charging",
+        ),
+        // Base ECUs
+        ("firmware/gateway_ecu", "gateway", "gateway"),
+        ("firmware/powertrain_ecu", "powertrain", "powertrain"),
+        ("firmware/bms_ecu", "bms", "bms"),
+        ("firmware/dashboard_ecu", "dashboard", "dashboard"),
+    ];
+
+    #[test]
+    fn ecu_category_table() {
+        for (path, expected_category, _expected_boot) in CLASSIFICATION_TESTS {
+            let category = resolve_ecu_category(Some(path), "test_machine");
+            assert_eq!(
+                category,
+                Some(*expected_category),
+                "path '{path}': expected category '{expected_category}', got {category:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ecu_boot_variant_table() {
+        for (path, _expected_category, expected_boot) in CLASSIFICATION_TESTS {
+            let fw = MicrocarFirmware::with_firmware_path("test_machine", *path);
+            let boot_variant = fw.ecu_type();
+            assert_eq!(
+                boot_variant, *expected_boot,
+                "path '{path}': expected boot variant '{expected_boot}', got '{boot_variant}'"
+            );
+        }
+    }
+    #[test]
+    fn gateway_diag_variants_are_category_gateway_not_diagnostics() {
+        // This is the regression test for the R0 bug: gateway_diag* variants
+        // must NOT resolve to "diagnostics" for validation purposes.
+        let diag_paths = &[
+            "firmware/gateway_diag_ecu",
+            "firmware/gateway_diag_fault_ecu",
+            "firmware/gateway_diag_clear_ecu",
+            "firmware/gateway_diag_clearbug_ecu",
+            "firmware/gateway_diag_startdrive_ecu",
+            "firmware/gateway_diag_startdrivebug_ecu",
+        ];
+        for path in diag_paths {
+            let category = resolve_ecu_category(Some(path), "test_machine");
+            assert_eq!(
+                category,
+                Some("gateway"),
+                "gateway_diag variant '{path}' must be category 'gateway', got {category:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn diagnostics_tool_is_still_diagnostics() {
+        let category = resolve_ecu_category(Some("firmware/diagnostics_tool_ecu"), "test_machine");
+        assert_eq!(category, Some("diagnostics"));
+    }
+
+    #[test]
+    fn unknown_firmware_returns_none() {
+        assert_eq!(
+            resolve_ecu_category(Some("firmware/mystery_ecu"), "x"),
+            None
+        );
+    }
+
+    #[test]
+    fn no_firmware_returns_none() {
+        assert_eq!(resolve_ecu_category(None, "some_machine"), None);
     }
 }
