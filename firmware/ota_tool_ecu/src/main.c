@@ -76,6 +76,11 @@ void ota_tool_main(void *pvParameters)
     (void)pvParameters;
 
     ota_ctx_t *ctx = ota_ctx();
+    if (ctx == NULL) {
+        sim_trace_u32("ota_tool_fatal", 1);
+        vTaskSuspend(NULL);
+        return;
+    }
     memset(ctx, 0, sizeof(*ctx));
 
     sim_trace_u32("ota_tool_boot", 1);
