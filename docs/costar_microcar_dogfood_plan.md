@@ -131,8 +131,8 @@ Status meanings:
 | C firmware instance isolation | DONE | All eight ECUs use `sim_instance_state` with unique keys; mutable ECU state has moved into per-instance contexts. |
 | NetworkBank core isolation | DONE | Per-machine NetworkBank is scoped via execution context; World Ethernet RX/TX for `ETH_DEVICES[0]` is banked and covered by 100x A/B World isolation tests; SimNetDevice and SmoltcpBridge objects are bank-local; destroy/recreate yields no stale core bank state; panic restores prior context. |
 | NetworkBank host/TCP hardening | TODO | Host FD poller/readiness routing through NetworkBank and real fragmented TCP stream isolation are not complete. This is the next packet: R3H. |
-| JSON-RPC per-session locking | SCAFFOLD | `sim-runner/src/serve.rs` still stores `BTreeMap<u64, Session>` under one global mutex. |
-| Restart/control-plane residuals | SCAFFOLD | gRPC has core session bounds, but the remaining cross-control-plane outcome parity, panic/error sibling test, and stronger microcar reboot fixture are not complete. |
+| JSON-RPC per-session locking | DONE | `sim-runner` uses `BTreeMap<u64, Arc<Mutex<Session>>>`; map lock is lookup-only; TTL exempts Running/Paused; cleanup ≤30s + create/list; Stop → Done; session-limit / TTL-exempt / failed-sibling tests pass. |
+| Restart/control-plane residuals (R4) | DONE | gRPC `failed_session_returns_world_and_sibling_runs` with panicking test firmware; JSON-RPC sibling Error isolation test; `b3_gateway_reboot_downtime` + `tests/gateway_reboot_downtime.rs` (100× flash/RTOS/volatile/sibling). |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | Live diagnostics | SCAFFOLD | BMS emits sequenced status but dispatches the wrong input ID; gateway returns `UNSUPPORTED` for live BMS; tool does not issue/assemble selectors. |
 | Charging | CORE ONLY | C FSM and battery signed-current method exist. Rust FSM mirror is a one-test stub; firmware and plant CAN loop are not wired. |
@@ -163,17 +163,17 @@ R0 ECU classification
 R1 GuestRuntime time/task identity
 R2 per-instance C firmware state
 R3 core NetworkBank activation and Ethernet device-0 isolation
+R4 control-plane and restart residuals
 ```
 
 Remaining order:
 
 ```text
 R3H host/TCP NetworkBank hardening
-  └─ R4 control-plane and restart residuals
-      └─ R5 duplicate-world/session isolation gate
-          ├─ R6 diagnostics
-          ├─ R7 charging
-          └─ R8 telematics
+R5 duplicate-world/session isolation gate
+  ├─ R6 diagnostics
+  ├─ R7 charging
+  └─ R8 telematics
 R6 + R7 ───────────────── R9 OTA
 R5 + R6/R7/R9 as inputs ─ R10 cockpit
 R6 + R8 + R10 ─────────── R11 debug corpus + predicates
@@ -262,6 +262,8 @@ cargo test --workspace
 host-poller code.
 
 ### R4 — Finish control-plane and restart residuals
+
+**Status: DONE** (2026-07-16)
 
 **Goal:** both control planes have the same lock/lifecycle behavior, and the
 microcar reboot fixture proves firmware recovery rather than reset markers.
