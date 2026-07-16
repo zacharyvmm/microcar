@@ -226,6 +226,7 @@ dependencies = [
  "cc",
  "microcar-plant",
  "sim-core",
+ "sim-devices",
  "sim-ffi",
  "sim-freertos-port",
  "sim-world",

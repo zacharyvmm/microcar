@@ -1,26 +1,14 @@
-# B3: gateway reboot with nonzero downtime — Stage A3 restart verification.
+# B3 / R4: gateway reboot with nonzero downtime — firmware recovery proof.
 #
-# Directly asserts:
-#  - machine_reset_boot marker appears after downtime
+# Asserts real restart semantics (not reset markers alone):
+#  - machine_reset_begin / machine_reset_boot around the downtime boundary
+#  - gateway firmware factory re-runs boot (microcar_boot_gateway, primitives)
 #  - legacy fault:reboot marker does NOT appear
-#  - gateway emits node_online after reconstruction
-#  - no gateway node_lost / gateway_timeout marker appears
+#  - no gateway node_lost / gateway_timeout
+#  - sibling powertrain does not observe gateway_timeout across the 5 ms downtime
 #
-# Covered by sim-world unit tests:
-#  - pending_boots advances run()/run_until()
-#  - frame before boot is dropped
-#  - frame exactly at boot is delivered
-#  - restart preserves persistent state, resets volatile state
-#
-# TODO:
-#  - plant-backed restart scenario once plant segfault is fixed
-#  - explicit RTOS/config identity assertion
-#  - explicit firmware-factory invocation assertion
-#
-# NOTE: [plant] removed due to pre-existing C firmware segfault with
-# the microcar plant model.  This scenario exercises the core restart
-# infrastructure (pending_boots, deferred reconstruction, firmware
-# factory, delivery boundary) without the plant.
+# Flash persistence, RTOS/config identity, volatile-queue reset, and 100×
+# determinism are covered by tests/gateway_reboot_downtime.rs.
 
 name = "b3_gateway_reboot_downtime"
 duration_ms = 2000
@@ -59,11 +47,33 @@ downtime_ms = 5
 
 # ── Assertions ──
 
-# machine_reset_boot fires on the reconstructed gateway.
+[[expect.event]]
+before_ms = 1200
+machine = "gateway"
+event = "machine_reset_begin"
+
 [[expect.event]]
 before_ms = 1200
 machine = "gateway"
 event = "machine_reset_boot"
+
+# Post-reconstruction firmware boot (factory path). Pre-reset machine traces
+# are discarded with the old GuestRuntime; these markers prove the factory
+# reattached firmware and re-ran init after machine_reset_boot.
+[[expect.event]]
+before_ms = 2000
+machine = "gateway"
+event = "microcar_boot_gateway"
+
+[[expect.event]]
+before_ms = 2000
+machine = "gateway"
+event = "gateway_mutex"
+
+[[expect.event]]
+before_ms = 2000
+machine = "gateway"
+event = "gateway_queue"
 
 # The legacy fault:reboot marker MUST NOT appear.
 [[expect.no]]
@@ -71,15 +81,6 @@ before_ms = 2000
 machine = "gateway"
 event = "fault:reboot"
 
-# Gateway does not emit node_lost or gateway_timeout markers after restart.
-# This is a limited no-plant smoke assertion — the check is on the gateway
-# machine itself, not on the sibling ECU.  The powertrain continues to run,
-# but this scenario does not directly assert powertrain/sibling heartbeat
-# continuity.
-#
-# TODO: add explicit powertrain heartbeat-continuity assertion (expect.no
-# on machine = "powertrain" for node_lost / gateway_timeout) once the
-# harness exposes/records the relevant sibling ECU heartbeat markers.
 [[expect.no]]
 before_ms = 2000
 machine = "gateway"
@@ -88,4 +89,10 @@ event = "node_lost"
 [[expect.no]]
 before_ms = 2000
 machine = "gateway"
+event = "gateway_timeout"
+
+# Sibling powertrain heartbeat path stays healthy across the short downtime.
+[[expect.no]]
+before_ms = 2000
+machine = "powertrain"
 event = "gateway_timeout"
