@@ -9,8 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Pinned to main after costar#5 landed.
-  COSTAR_REF: main
+  # Paired with costar dogfood-milestone-4 (R4 control-plane); retarget to main after merge.
+  COSTAR_REF: dogfood-milestone-4
 
 jobs:
   build-and-test:
