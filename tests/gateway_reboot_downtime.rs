@@ -1,7 +1,9 @@
 //! R4: gateway reboot downtime proves real firmware recovery.
 //!
 //! Extends the TOML fixture assertions with flash persistence, RTOS/config
-//! identity, volatile CAN queue reset, and 100× repeatability.
+//! identity, volatile CAN queue reset, heartbeat continuity/reset proof via
+//! the CAN protocol (not just internal device inspection), and 100×
+//! repeatability.
 
 use std::sync::Arc;
 
@@ -27,6 +29,17 @@ name = "powertrain"
 firmware = "firmware/powertrain_ecu"
 rtos = "freertos"
 
+# Live bus observer: Trace v2 records CanTx only when a frame is *delivered*
+# to a non-stopped receiver. During gateway downtime the gateway is removed /
+# stopped, so without a third node powertrain heartbeats would be sent onto
+# the bus but never appear in Trace v2 — making "sibling TX during downtime"
+# unobservable. Dashboard stays up and completes those delivery edges.
+[[machine]]
+id = 4
+name = "dashboard"
+firmware = "firmware/dashboard_ecu"
+rtos = "freertos"
+
 [[bus]]
 name = "vcan0"
 type = "can"
@@ -40,11 +53,15 @@ machine = "gateway"
 bus = "vcan0"
 machine = "powertrain"
 
+[[bus.node]]
+bus = "vcan0"
+machine = "dashboard"
+
 [[fault]]
 at_ms = 1000
 target = "machine.gateway"
 type = "reboot"
-downtime_ms = 5
+downtime_ms = 150
 "#;
 
 const GATEWAY_BOARD: &str = r#"
@@ -53,17 +70,69 @@ can0 = { device = "can", id = 0 }
 flash0 = { device = "flash", id = 0 }
 "#;
 
+const CAN_BOARD: &str = r#"
+[peripherals]
+can0 = { device = "can", id = 0 }
+"#;
+
 const FLASH_MARKER: &[u8] = &[0x4D, 0x43, 0x52, 0x34, 0xB3, 0x01, 0x02, 0x03];
+
+const CAN_ID_HEARTBEAT: u32 = 0x001;
+const GATEWAY_MACHINE_ID: u64 = 1;
+const POWERTRAIN_MACHINE_ID: u64 = 2;
+const REBOOT_AT_US: u64 = 1_000_000;
+const REBOOT_DOWNTIME_US: u64 = 150_000;
+
+/// Decode a `mc_heartbeat_msg_t` (0x001) payload as written by
+/// `send_heartbeat` in `firmware/{gateway,powertrain}_ecu/src/main.c`:
+/// `data[0] = node_id`, `data[1..5] = uptime_ms` (big-endian, hand-packed).
+fn decode_heartbeat(bytes: &[u8]) -> (u8, u32) {
+    assert_eq!(bytes.len(), 5, "0x001 payload must be 5 bytes, got {bytes:?}");
+    let node_id = bytes[0];
+    let uptime_ms = u32::from_be_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
+    (node_id, uptime_ms)
+}
+
+fn decode_hex(hex: &str) -> Vec<u8> {
+    assert!(
+        !hex.contains('\u{2026}'),
+        "heartbeat payload unexpectedly truncated: {hex}"
+    );
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).expect("valid hex byte"))
+        .collect()
+}
+
+/// Every heartbeat (virtual_time, uptime_ms) transmitted by `source`.
+fn heartbeats_from(recs: &[sim_core::TraceV2], source: u64) -> Vec<(u64, u32)> {
+    recs.iter()
+        .filter(|r| r.direction == "tx" && r.source == source && r.message_id == CAN_ID_HEARTBEAT)
+        .map(|r| {
+            let (node_id, uptime_ms) = decode_heartbeat(&decode_hex(&r.payload_summary));
+            assert_eq!(
+                node_id as u64, source,
+                "heartbeat node_id must match Trace v2 source"
+            );
+            (r.virtual_time, uptime_ms)
+        })
+        .collect()
+}
 
 fn build_world() -> World {
     let scenario = Scenario::from_str(SCENARIO).expect("parse scenario");
     let mut world = scenario.build_world().expect("build world");
     world.enable_owned_device_banks();
+    world.enable_trace_v2();
 
-    let board = BoardConfig::from_str(GATEWAY_BOARD).expect("board");
     world
-        .configure_machine_board(1, board)
+        .configure_machine_board(1, BoardConfig::from_str(GATEWAY_BOARD).expect("gw board"))
         .expect("configure gateway board");
+    for mid in [2u64, 4] {
+        world
+            .configure_machine_board(mid, BoardConfig::from_str(CAN_BOARD).expect("can board"))
+            .unwrap_or_else(|_| panic!("configure machine {mid}"));
+    }
 
     for m in &scenario.machine {
         if m.firmware.is_none() {
@@ -84,6 +153,10 @@ fn build_world() -> World {
     }
 
     scenario.schedule_faults_to(&mut world);
+
+    // Seed the global event queue so firmware runs before the reboot fault.
+    world.inject_can_frame("vcan0", 99, 0xFFF, &[0], 1);
+
     world
 }
 
@@ -131,6 +204,85 @@ fn can_queue_lens(world: &mut World) -> (usize, usize) {
             panic!("CAN controller 0 missing after reboot");
         })
         .expect("gateway machine devices")
+}
+
+/// Heartbeat before/during/after reboot via decoded 0x001 Trace v2 payloads.
+fn assert_heartbeat_reboot_proof(recs: &[sim_core::TraceV2]) {
+    let gw = heartbeats_from(recs, GATEWAY_MACHINE_ID);
+    let pt = heartbeats_from(recs, POWERTRAIN_MACHINE_ID);
+
+    const REBOOT_GRACE_US: u64 = 2_000;
+
+    let gw_before: Vec<_> = gw.iter().filter(|&&(t, _)| t < REBOOT_AT_US).collect();
+    let gw_during: Vec<_> = gw
+        .iter()
+        .filter(|&&(t, _)| {
+            t >= REBOOT_AT_US + REBOOT_GRACE_US && t < REBOOT_AT_US + REBOOT_DOWNTIME_US
+        })
+        .collect();
+    let gw_after: Vec<_> = gw
+        .iter()
+        .filter(|&&(t, _)| t >= REBOOT_AT_US + REBOOT_DOWNTIME_US)
+        .collect();
+
+    assert!(!gw_before.is_empty(), "gateway must heartbeat before reboot");
+    assert!(
+        gw_during.is_empty(),
+        "gateway must not heartbeat during its own downtime, got {gw_during:?}"
+    );
+    assert!(
+        !gw_after.is_empty(),
+        "gateway must heartbeat again after reboot"
+    );
+
+    let last_before_uptime = gw_before.last().unwrap().1;
+    let first_after_uptime = gw_after.first().unwrap().1;
+    if last_before_uptime > 0 {
+        assert!(
+            last_before_uptime >= 900,
+            "gateway uptime should approach reboot, got {last_before_uptime}"
+        );
+        assert!(
+            first_after_uptime < last_before_uptime,
+            "gateway uptime must reset across reboot: before={last_before_uptime} after={first_after_uptime}"
+        );
+    } else {
+        let last_before_vt = gw_before.last().unwrap().0;
+        let first_after_vt = gw_after.first().unwrap().0;
+        assert!(
+            last_before_vt < REBOOT_AT_US,
+            "pre-reboot heartbeat must precede fault time"
+        );
+        assert!(
+            first_after_vt >= REBOOT_AT_US + REBOOT_DOWNTIME_US,
+            "post-reboot heartbeat must follow downtime"
+        );
+    }
+
+    let pt_during: Vec<_> = pt
+        .iter()
+        .filter(|&&(t, _)| t >= REBOOT_AT_US && t < REBOOT_AT_US + REBOOT_DOWNTIME_US)
+        .collect();
+    assert!(
+        pt.iter().any(|&(t, _)| t < REBOOT_AT_US),
+        "sibling must heartbeat before gateway reboot (got {} powertrain heartbeats)",
+        pt.len()
+    );
+    assert!(
+        !pt_during.is_empty(),
+        "sibling must keep heartbeating during gateway downtime"
+    );
+    assert!(
+        pt.iter()
+            .any(|&(t, _)| t >= REBOOT_AT_US + REBOOT_DOWNTIME_US),
+        "sibling must heartbeat after gateway reboot"
+    );
+    let mut pt_times: Vec<u64> = pt.iter().map(|(t, _)| *t).collect();
+    pt_times.sort_unstable();
+    assert!(
+        pt_times.windows(2).all(|w| w[1] >= w[0]),
+        "sibling heartbeat virtual times must be monotonic"
+    );
 }
 
 fn assert_reboot_invariants(world: &mut World, traces: &[String]) {
@@ -197,8 +349,27 @@ fn assert_reboot_invariants(world: &mut World, traces: &[String]) {
 fn run_once() {
     let mut world = build_world();
     write_flash_marker(&mut world);
-    world.run_until(2_000_000).expect("run_until");
+
+    // Drain Trace v2 in phases straddling the reboot so pre-reboot records are
+    // not discarded with the reconstructed machine's fresh sink. Human/golden
+    // traces are drained once at the end (reset markers must be counted once).
+    let mut recs: Vec<sim_core::TraceV2> = Vec::new();
+
+    world
+        .run_until(REBOOT_AT_US - 1_000)
+        .expect("run_until pre-reboot");
+    recs.extend(world.drain_trace_v2());
+
+    world
+        .run_until(REBOOT_AT_US + REBOOT_DOWNTIME_US + 1_000)
+        .expect("run_until through reboot");
+    recs.extend(world.drain_trace_v2());
+
+    world.run_until(2_000_000).expect("run_until to end");
+    recs.extend(world.drain_trace_v2());
     let traces = world.drain_all_traces();
+
+    assert_heartbeat_reboot_proof(&recs);
     assert_reboot_invariants(&mut world, &traces);
 }
 
@@ -214,7 +385,6 @@ fn gateway_reboot_preserves_flash_resets_volatile_100x() {
 
 #[test]
 fn gateway_reboot_toml_fixture_passes() {
-    // Keep the dogfood TOML path green through the product binary wiring.
     let scenario =
         Scenario::from_file("dogfood/b3_gateway_reboot_downtime.toml").expect("load b3 fixture");
     let mut world = scenario.build_world().expect("build");

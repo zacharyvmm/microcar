@@ -5,10 +5,12 @@
 #  - gateway firmware factory re-runs boot (microcar_boot_gateway, primitives)
 #  - legacy fault:reboot marker does NOT appear
 #  - no gateway node_lost / gateway_timeout
-#  - sibling powertrain does not observe gateway_timeout across the 5 ms downtime
+#  - sibling powertrain does not observe gateway_timeout across the downtime
 #
-# Flash persistence, RTOS/config identity, volatile-queue reset, and 100×
-# determinism are covered by tests/gateway_reboot_downtime.rs.
+# Heartbeat before/during/after continuity, flash persistence, RTOS/config
+# identity, volatile-queue reset, and 100× determinism are covered by
+# tests/gateway_reboot_downtime.rs (uses a 150 ms downtime so the powertrain
+# 100 ms heartbeat lands inside the outage window).
 
 name = "b3_gateway_reboot_downtime"
 duration_ms = 2000
@@ -38,12 +40,12 @@ machine = "gateway"
 bus = "vcan0"
 machine = "powertrain"
 
-# ── Gateway reboot at 1000ms with 5ms downtime → boot at ~1005ms ──
+# ── Gateway reboot at 1000ms with 150ms downtime → boot at ~1150ms ──
 [[fault]]
 at_ms = 1000
 target = "machine.gateway"
 type = "reboot"
-downtime_ms = 5
+downtime_ms = 150
 
 # ── Assertions ──
 
