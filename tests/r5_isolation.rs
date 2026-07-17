@@ -1259,8 +1259,7 @@ data = "{eth_payload}"
             concurrent.timer_fire_count, solo.timer_fire_count,
             "seed {seed}: {label} timer_fire_count != solo \
              (concurrent={} solo={})",
-            concurrent.timer_fire_count,
-            solo.timer_fire_count
+            concurrent.timer_fire_count, solo.timer_fire_count
         );
         assert_eq!(
             concurrent.timer_armed, solo.timer_armed,
@@ -1270,15 +1269,13 @@ data = "{eth_payload}"
             concurrent.timer_last_fire_tick, solo.timer_last_fire_tick,
             "seed {seed}: {label} timer_last_fire_tick != solo \
              (concurrent={} solo={})",
-            concurrent.timer_last_fire_tick,
-            solo.timer_last_fire_tick
+            concurrent.timer_last_fire_tick, solo.timer_last_fire_tick
         );
         assert_eq!(
             concurrent.timer_deadline, solo.timer_deadline,
             "seed {seed}: {label} timer_deadline != solo \
              (concurrent={} solo={})",
-            concurrent.timer_deadline,
-            solo.timer_deadline
+            concurrent.timer_deadline, solo.timer_deadline
         );
     }
 
