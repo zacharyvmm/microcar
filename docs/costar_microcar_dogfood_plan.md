@@ -132,8 +132,8 @@ Status meanings:
 | NetworkBank core isolation | DONE | Per-machine NetworkBank is scoped via execution context; World Ethernet RX/TX for `ETH_DEVICES[0]` is banked and covered by 100x A/B World isolation tests; SimNetDevice and SmoltcpBridge objects are bank-local; destroy/recreate yields no stale core bank state; panic restores prior context. |
 | NetworkBank host/TCP hardening | DONE | Host FD register/block/wake/deregister routes through the active `NetworkBank`; bank destroy/recreate clears fds/readiness/blocked task IDs; fragmented TcpBridge streams are isolated across banks; legacy TLS fallback remains for single-simulator paths. |
 | JSON-RPC per-session locking | DONE | `sim-runner` uses `BTreeMap<u64, Arc<Mutex<Session>>>`; map lock is lookup-only; TTL exempts Running/Paused; cleanup ≤30s + create/list; Stop → Done; session-limit / TTL-exempt / failed-sibling tests pass. |
-| Restart/control-plane residuals (R4) | DONE | gRPC `failed_session_returns_world_and_sibling_runs` with panicking test firmware; JSON-RPC sibling Error isolation test; `b3_gateway_reboot_downtime` + `tests/gateway_reboot_downtime.rs` (100× flash/RTOS/volatile/sibling). |
-| Duplicate-world/session isolation gate (R5) | DONE | `two_worlds_owned_can_interleave_100x`; microcar Trace v2 recreate hashes 100×; BMS plant-frame isolation; gateway `boot_at` CAN delivery; gRPC dual-session real-firmware configure with colliding device IDs 100× (`tests/r5_isolation.rs`). |
+| Restart/control-plane residuals (R4) | IN PROGRESS | gRPC `failed_session_returns_world_and_sibling_runs` with panicking test firmware; JSON-RPC sibling Error isolation test; `b3_gateway_reboot_downtime` + `tests/gateway_reboot_downtime.rs` (100× flash/RTOS/volatile/sibling). |
+| Duplicate-world/session isolation gate (R5) | IN PROGRESS | `two_worlds_owned_can_interleave_100x`; microcar Trace v2 recreate hashes 100×; BMS plant-frame isolation; gateway `boot_at` CAN delivery; gRPC dual-session real-firmware configure with colliding device IDs 100× (`tests/r5_isolation.rs`). |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | Live diagnostics | SCAFFOLD | BMS now consumes `MC_MSG_PLANT_SENSORS` (0x500) into live state; gateway still returns `UNSUPPORTED` for live BMS selectors; diagnostics tool does not yet issue/assemble protocol requests. |
 | Charging | CORE ONLY | C FSM and battery signed-current method exist. Rust FSM mirror is a one-test stub; firmware and plant CAN loop are not wired. |
@@ -266,7 +266,7 @@ host-poller code.
 
 ### R4 — Finish control-plane and restart residuals
 
-**Status: DONE** (2026-07-16)
+**Status: IN PROGRESS** (2026-07-17) — heartbeat/reboot positive proofs landing; JSON-RPC stop/disconnect closed in paired costar
 
 **Goal:** both control planes have the same lock/lifecycle behavior, and the
 microcar reboot fixture proves firmware recovery rather than reset markers.
@@ -312,7 +312,7 @@ microcar reboot fixture proves firmware recovery rather than reset markers.
 
 ### R5 — Full duplicate-world/session isolation gate
 
-**Status: DONE** (2026-07-17)
+**Status: IN PROGRESS** (2026-07-17)
 
 **Goal:** close the infrastructure gate before product lanes claim real
 concurrent isolation.

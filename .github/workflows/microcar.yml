@@ -9,8 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Paired with costar dogfood-milestone-4 (R4 control-plane); retarget to main after merge.
-  COSTAR_REF: dogfood-milestone-4
+  # Pin to the exact costar dogfood-milestone-4 head that closes R3H/R4/R5
+  # infrastructure (cooperative JSON-RPC + host-poller + CAN isolation).
+  # After costar#7 merges, retarget to main or the merge commit SHA.
+  COSTAR_REF: 8ef92046723dbedd6dc08b5e2b4a53ee148bca31
 
 jobs:
   build-and-test:
