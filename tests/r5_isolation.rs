@@ -756,11 +756,14 @@ data = "{eth_payload}"
         sess.session_id
     }
 
-    /// Virtual-time comparison bound. Product FreeRTOS sessions use explicit
-    /// Stop (not `deadline_ticks`) because jumping `world.now` across FreeRTOS
-    /// wake gaps for deadline fill is unsafe with real firmware; the gRPC
-    /// integration test still covers `deadline_ticks` with generic firmware.
-    const RUN_DEADLINE_US: u64 = 80_000;
+    /// Batch size for gRPC run stepping; timer runtime fields in evidence are
+    /// quantized to this boundary so solo and concurrent runs match.
+    const RUN_TICK_BATCH: u64 = 5_000;
+
+    /// Virtual-time comparison bound enforced via `RunConfig.deadline_ticks`.
+    /// Must exceed max `timer_delay` (~35k ticks) plus at least one periodic
+    /// fire so runtime TimerArm evidence is observable before pause.
+    const RUN_DEADLINE_US: u64 = 100_000;
 
     fn touch_xy(marker: u8) -> (u32, u32) {
         (40 + u32::from(marker), 60 + u32::from(marker) * 2)
@@ -778,6 +781,14 @@ data = "{eth_payload}"
         10 + u32::from(marker)
     }
 
+    fn timer_delay(marker: u8) -> u64 {
+        20_000 + u64::from(marker % 16) * 1_000
+    }
+
+    fn timer_period(marker: u8) -> u64 {
+        7_000 + u64::from(marker % 8) * 500
+    }
+
     /// Per-session semantic evidence for the R5 gRPC isolation gate.
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct SessionEvidence {
@@ -789,20 +800,48 @@ data = "{eth_payload}"
         touch_observed_y: u32,
         adc_channel0: u32,
         timer_irq: u32,
+        timer_deadline: u64,
+        timer_period: u64,
+        timer_fire_count: u64,
+        timer_last_fire_tick: u64,
+        timer_armed: bool,
         eth_pkt_rx_lens: Vec<usize>,
     }
 
     impl SessionEvidence {
+        fn quantize_timer_last_fire(&self) -> u64 {
+            // Coarser than RUN_TICK_BATCH so solo vs concurrent scheduling slop
+            // (up to one batch) lands in the same evidence bucket.
+            let quantum = RUN_TICK_BATCH * 2;
+            self.timer_last_fire_tick / quantum * quantum
+        }
+
+        fn quantize_timer_deadline(&self) -> u64 {
+            if self.timer_armed {
+                self.quantize_timer_last_fire()
+                    .saturating_add(self.timer_period)
+            } else {
+                0
+            }
+        }
+
         fn canonicalize(&self) -> String {
             let mut s = String::new();
             s.push_str(&format!(
-                "touch_in={},{} touch_obs={},{} adc0={} timer_irq={}\n",
+                "touch_in={},{} touch_obs={},{} adc0={} timer_irq={} \
+                 timer_deadline={} timer_period={} timer_fire_count={} \
+                 timer_last_fire_tick={} timer_armed={}\n",
                 self.touch_x,
                 self.touch_y,
                 self.touch_observed_x,
                 self.touch_observed_y,
                 self.adc_channel0,
-                self.timer_irq
+                self.timer_irq,
+                self.quantize_timer_deadline(),
+                self.timer_period,
+                self.timer_fire_count,
+                self.quantize_timer_last_fire(),
+                self.timer_armed,
             ));
             for line in &self.can_marker_lines {
                 s.push_str("can:");
@@ -816,6 +855,36 @@ data = "{eth_payload}"
                 s.push_str(&format!("eth_rx_len:{len}\n"));
             }
             s
+        }
+
+        /// Hash for solo-vs-concurrent reproduction: timer runtime counters may
+        /// differ by one batch or one periodic fire at the pause boundary.
+        fn repro_hash(&self) -> u64 {
+            let mut s = String::new();
+            s.push_str(&format!(
+                "touch_in={},{} touch_obs={},{} adc0={} timer_irq={} \
+                 timer_period={} timer_armed={}\n",
+                self.touch_x,
+                self.touch_y,
+                self.touch_observed_x,
+                self.touch_observed_y,
+                self.adc_channel0,
+                self.timer_irq,
+                self.timer_period,
+                self.timer_armed,
+            ));
+            for line in &self.can_marker_lines {
+                s.push_str("can:");
+                s.push_str(line);
+                s.push('\n');
+            }
+            for h in &self.display_hashes {
+                s.push_str(&format!("disp:{h:#016x}\n"));
+            }
+            for len in &self.eth_pkt_rx_lens {
+                s.push_str(&format!("eth_rx_len:{len}\n"));
+            }
+            super::hash_lines(&[s])
         }
 
         fn hash(&self) -> u64 {
@@ -939,11 +1008,12 @@ data = "{eth_payload}"
             .and_then(|d| d.adc_channels.first())
             .map(|c| c.value)
             .unwrap_or(0);
-        let t_irq = gw
-            .iter()
-            .find(|d| d.r#type == "timer")
-            .map(|d| d.timer_irq)
-            .unwrap_or(0);
+        let timer = gw.iter().find(|d| d.r#type == "timer");
+        assert!(
+            timer.is_some(),
+            "session {session_id}: gateway timer device must exist after run"
+        );
+        let timer = timer.unwrap();
 
         SessionEvidence {
             can_marker_lines: can_marker_lines(traces, marker),
@@ -953,7 +1023,12 @@ data = "{eth_payload}"
             touch_observed_x,
             touch_observed_y,
             adc_channel0: adc0,
-            timer_irq: t_irq,
+            timer_irq: timer.timer_irq,
+            timer_deadline: timer.timer_deadline,
+            timer_period: timer.timer_period,
+            timer_fire_count: timer.timer_fire_count,
+            timer_last_fire_tick: timer.timer_last_fire_tick,
+            timer_armed: timer.timer_armed,
             eth_pkt_rx_lens: eth_rx_lens(traces),
         }
     }
@@ -979,14 +1054,26 @@ data = "{eth_payload}"
             .send(RunRequest {
                 payload: Some(run_request::Payload::Config(RunConfig {
                     session_id,
-                    tick_batch_size: 20_000,
+                    tick_batch_size: RUN_TICK_BATCH,
                     stream_display: true,
                     stream_trace: true,
-                    deadline_ticks: 0,
+                    deadline_ticks: RUN_DEADLINE_US,
                 })),
             })
             .await
             .expect("send config");
+
+        req_tx
+            .send(RunRequest {
+                payload: Some(run_request::Payload::TimerArm(TimerArm {
+                    machine_id: Some(1),
+                    device_id: 0,
+                    delay_ticks: timer_delay(marker),
+                    period_ticks: timer_period(marker),
+                })),
+            })
+            .await
+            .expect("timer arm");
 
         start_barrier.wait().await;
 
@@ -1046,8 +1133,8 @@ data = "{eth_payload}"
 
         let mut traces = Vec::new();
         let mut display_hashes = Vec::new();
-        let mut stop_sent = false;
         let mut last_ts = 0u64;
+        let mut paused = false;
         while let Ok(Some(event)) = stream.message().await {
             match event.payload {
                 Some(run_event::Payload::Trace(t)) => traces.push(t.line),
@@ -1056,14 +1143,11 @@ data = "{eth_payload}"
                 }
                 Some(run_event::Payload::Tick(t)) => {
                     last_ts = t.ts;
-                    if !stop_sent && t.ts >= RUN_DEADLINE_US {
-                        stop_sent = true;
-                        let _ = req_tx
-                            .send(RunRequest {
-                                payload: Some(run_request::Payload::Stop(StopCommand {})),
-                            })
-                            .await;
-                    }
+                }
+                Some(run_event::Payload::Paused(p)) => {
+                    last_ts = p.ts;
+                    paused = true;
+                    break;
                 }
                 Some(run_event::Payload::Error(err)) => {
                     panic!("session {session_id} error: {}", err.message);
@@ -1073,8 +1157,12 @@ data = "{eth_payload}"
             }
         }
         assert!(
+            paused,
+            "session {session_id}: expected deadline pause at {RUN_DEADLINE_US}, last_ts={last_ts}"
+        );
+        assert!(
             last_ts >= RUN_DEADLINE_US,
-            "session {session_id}: stopped too early at ts={last_ts}"
+            "session {session_id}: paused too early at ts={last_ts}"
         );
         assert!(!traces.is_empty(), "session {session_id}: empty traces");
         display_hashes.sort_unstable();
@@ -1126,6 +1214,35 @@ data = "{eth_payload}"
             timer_irq(marker),
             "seed {seed}: timer irq must match board configure input"
         );
+        assert_eq!(
+            ev.timer_period,
+            timer_period(marker),
+            "seed {seed}: timer period must match TimerArm inject"
+        );
+        assert!(
+            ev.timer_fire_count >= 1,
+            "seed {seed}: timer must fire at least once, got {}",
+            ev.timer_fire_count
+        );
+        assert!(
+            ev.timer_last_fire_tick >= timer_delay(marker),
+            "seed {seed}: first timer fire must reach arm+delay={}, got last_fire={}",
+            timer_delay(marker),
+            ev.timer_last_fire_tick
+        );
+        if ev.timer_armed {
+            // Costar maps timer_deadline to absolute next_expiry while armed.
+            assert_eq!(
+                ev.timer_deadline,
+                ev.timer_last_fire_tick.saturating_add(ev.timer_period),
+                "seed {seed}: armed timer deadline must be last_fire + period"
+            );
+        } else {
+            assert_eq!(
+                ev.timer_deadline, 0,
+                "seed {seed}: disarmed timer must expose deadline=0"
+            );
+        }
         let want_eth = eth_payload_len(marker);
         assert!(
             ev.eth_pkt_rx_lens.contains(&want_eth),
@@ -1156,6 +1273,57 @@ data = "{eth_payload}"
             ev.timer_irq,
             timer_irq(peer_marker),
             "seed {seed}: timer irq matches peer"
+        );
+        if timer_period(marker) != timer_period(peer_marker) {
+            assert_ne!(
+                ev.timer_period,
+                timer_period(peer_marker),
+                "seed {seed}: timer period matches peer"
+            );
+        }
+    }
+
+    fn assert_timer_solo_concurrent_match(
+        seed: u32,
+        label: &str,
+        concurrent: &SessionEvidence,
+        solo: &SessionEvidence,
+    ) {
+        assert_eq!(
+            concurrent.timer_irq, solo.timer_irq,
+            "seed {seed}: {label} timer_irq != solo"
+        );
+        assert_eq!(
+            concurrent.timer_period, solo.timer_period,
+            "seed {seed}: {label} timer_period != solo"
+        );
+        assert!(
+            concurrent.timer_fire_count.abs_diff(solo.timer_fire_count) <= 1,
+            "seed {seed}: {label} timer_fire_count != solo within boundary slop \
+             (concurrent={} solo={})",
+            concurrent.timer_fire_count,
+            solo.timer_fire_count
+        );
+        assert_eq!(
+            concurrent.timer_armed, solo.timer_armed,
+            "seed {seed}: {label} timer_armed != solo"
+        );
+        assert!(
+            concurrent
+                .timer_last_fire_tick
+                .abs_diff(solo.timer_last_fire_tick)
+                <= RUN_TICK_BATCH * 2,
+            "seed {seed}: {label} timer_last_fire_tick != solo within batch slop \
+             (concurrent={} solo={})",
+            concurrent.timer_last_fire_tick,
+            solo.timer_last_fire_tick
+        );
+        assert!(
+            concurrent.timer_deadline.abs_diff(solo.timer_deadline) <= RUN_TICK_BATCH * 2,
+            "seed {seed}: {label} timer_deadline != solo within batch slop \
+             (concurrent={} solo={})",
+            concurrent.timer_deadline,
+            solo.timer_deadline
         );
     }
 
@@ -1259,11 +1427,16 @@ data = "{eth_payload}"
             ev
         };
 
-        let hash_a_solo = solo_a.hash();
-        let hash_b_solo = solo_b.hash();
+        let hash_a_solo = solo_a.repro_hash();
+        let hash_b_solo = solo_b.repro_hash();
+        assert_ne!(
+            solo_a.hash(),
+            solo_b.hash(),
+            "seed {seed}: distinct sessions must yield distinct isolation evidence"
+        );
         assert_ne!(
             hash_a_solo, hash_b_solo,
-            "seed {seed}: distinct sessions must yield distinct isolation evidence"
+            "seed {seed}: distinct sessions must yield distinct repro evidence"
         );
 
         let id_a = setup_session(&mut ctrl, marker_a).await;
@@ -1365,13 +1538,16 @@ data = "{eth_payload}"
         assert_evidence_isolation(seed, marker_a, &ev_a, marker_b);
         assert_evidence_isolation(seed, marker_b, &ev_b, marker_a);
 
+        assert_timer_solo_concurrent_match(seed, "concurrent A", &ev_a, &solo_a);
+        assert_timer_solo_concurrent_match(seed, "concurrent B", &ev_b, &solo_b);
+
         assert_eq!(
-            ev_a.hash(),
+            ev_a.repro_hash(),
             hash_a_solo,
             "seed {seed}: concurrent A evidence diverged from solo"
         );
         assert_eq!(
-            ev_b.hash(),
+            ev_b.repro_hash(),
             hash_b_solo,
             "seed {seed}: concurrent B evidence diverged from solo"
         );
