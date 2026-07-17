@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
   # Temporary pin to costar dogfood-milestone-4 head with inject warmup.
-  COSTAR_REF: 1f35b3b1eb6a4d77df4290cf9d7c7b93b8b19cc2
+  COSTAR_REF: e1fa00e1f78e8191db769292563f87aef60f81e2
 
 jobs:
   build-and-test:
