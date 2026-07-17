@@ -9,10 +9,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Pin to the exact costar dogfood-milestone-4 head that closes R3H/R4/R5
-  # infrastructure (cooperative JSON-RPC + host-poller + CAN isolation).
+  # Temporary pin to costar#7 head (TimerArm + timer inspect fields) pending merge.
   # After costar#7 merges, retarget to main or the merge commit SHA.
-  COSTAR_REF: 8ef92046723dbedd6dc08b5e2b4a53ee148bca31
+  COSTAR_REF: 1c63f3e9d604381e419e055a68ce7c0ba6000e81
 
 jobs:
   build-and-test:
