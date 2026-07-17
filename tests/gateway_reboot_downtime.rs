@@ -87,7 +87,11 @@ const REBOOT_DOWNTIME_US: u64 = 150_000;
 /// `send_heartbeat` in `firmware/{gateway,powertrain}_ecu/src/main.c`:
 /// `data[0] = node_id`, `data[1..5] = uptime_ms` (big-endian, hand-packed).
 fn decode_heartbeat(bytes: &[u8]) -> (u8, u32) {
-    assert_eq!(bytes.len(), 5, "0x001 payload must be 5 bytes, got {bytes:?}");
+    assert_eq!(
+        bytes.len(),
+        5,
+        "0x001 payload must be 5 bytes, got {bytes:?}"
+    );
     let node_id = bytes[0];
     let uptime_ms = u32::from_be_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
     (node_id, uptime_ms)
@@ -225,7 +229,10 @@ fn assert_heartbeat_reboot_proof(recs: &[sim_core::TraceV2]) {
         .filter(|&&(t, _)| t >= REBOOT_AT_US + REBOOT_DOWNTIME_US)
         .collect();
 
-    assert!(!gw_before.is_empty(), "gateway must heartbeat before reboot");
+    assert!(
+        !gw_before.is_empty(),
+        "gateway must heartbeat before reboot"
+    );
     assert!(
         gw_during.is_empty(),
         "gateway must not heartbeat during its own downtime, got {gw_during:?}"

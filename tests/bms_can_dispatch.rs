@@ -118,7 +118,11 @@ fn decode_hex(hex: &str) -> Vec<u8> {
 }
 
 fn decode_bms_status(bytes: &[u8]) -> (u16, i16, i16, u8, u8) {
-    assert_eq!(bytes.len(), 8, "0x200 payload must be 8 bytes, got {bytes:?}");
+    assert_eq!(
+        bytes.len(),
+        8,
+        "0x200 payload must be 8 bytes, got {bytes:?}"
+    );
     (
         u16::from_le_bytes([bytes[0], bytes[1]]),
         i16::from_le_bytes([bytes[2], bytes[3]]),
@@ -129,7 +133,11 @@ fn decode_bms_status(bytes: &[u8]) -> (u16, i16, i16, u8, u8) {
 }
 
 fn decode_bms_limits(bytes: &[u8]) -> (u8, u8) {
-    assert_eq!(bytes.len(), 2, "0x201 payload must be 2 bytes, got {bytes:?}");
+    assert_eq!(
+        bytes.len(),
+        2,
+        "0x201 payload must be 2 bytes, got {bytes:?}"
+    );
     (bytes[0], bytes[1])
 }
 
@@ -148,7 +156,13 @@ fn bms_plant_dispatch_acceptance() {
 
     // ── 1. Foreign 0x200 must not be treated as plant input ─────────────
     let bogus_status: Vec<u8> = vec![0x10, 0xB4, 0x00, 0xFF, 0xFF, 0x00, 50, 7];
-    world.inject_can_frame("vcan0", MC_NODE_PLANT, CAN_ID_BMS_STATUS, &bogus_status, t_us);
+    world.inject_can_frame(
+        "vcan0",
+        MC_NODE_PLANT,
+        CAN_ID_BMS_STATUS,
+        &bogus_status,
+        t_us,
+    );
     t_us += 40_000;
     world.run_until(t_us).expect("run after foreign 0x200");
     let recs = world.drain_trace_v2();
@@ -193,19 +207,17 @@ fn bms_plant_dispatch_acceptance() {
         "rejected short frame must not trigger a status publish"
     );
     let limits = bms_tx(&recs, CAN_ID_BMS_LIMITS);
-    assert!(!limits.is_empty(), "BMS must keep publishing periodic 0x201");
+    assert!(
+        !limits.is_empty(),
+        "BMS must keep publishing periodic 0x201"
+    );
     let (max_torque, reason) =
         decode_bms_limits(&decode_hex(&limits.last().unwrap().payload_summary));
     assert_eq!(max_torque, 255, "short frame must not change torque limits");
     assert_eq!(reason, 0);
 
     // ── 4. Temperature bands → correct 0x200 / 0x201 ────────────────────
-    let cases: [(i16, u8, u8); 4] = [
-        (300, 0, 255),
-        (650, 1, 255),
-        (800, 2, 25),
-        (950, 3, 0),
-    ];
+    let cases: [(i16, u8, u8); 4] = [(300, 0, 255), (650, 1, 255), (800, 2, 25), (950, 3, 0)];
     for (temp, expect_reason, expect_torque) in cases {
         t_us += 10_000;
         let p = plant_sensor_payload(50, 40_000, temp, -800);
