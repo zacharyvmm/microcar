@@ -146,7 +146,7 @@ uint8_t bms_calibration_done(bms_ctx_t *ctx)
 
 // ── Message handlers ──────────────────────────────────────────────────────
 
-/// Process BMS status frame (0x300) from the plant.
+/// Process plant sensor (0x500) or status-format frame into live BMS state.
 /// Format: [soc, volt_hi, volt_lo, temp_hi, temp_lo, current_hi, current_lo]
 static void handle_bms_status(bms_ctx_t *ctx, const mc_can_frame_t *frame)
 {
@@ -191,7 +191,8 @@ static void handle_bms_status(bms_ctx_t *ctx, const mc_can_frame_t *frame)
 static void dispatch_frame(bms_ctx_t *ctx, const mc_can_frame_t *frame)
 {
     switch (frame->id) {
-    case MC_MSG_BMS_STATUS:
+    case MC_MSG_PLANT_SENSORS: /* plant → BMS sensor path (0x500) */
+    case MC_MSG_BMS_STATUS:    /* also accept status-format inputs */
         handle_bms_status(ctx, frame);
         break;
     default:

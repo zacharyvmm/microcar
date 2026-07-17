@@ -37,3 +37,7 @@ cc = "1"
 
 [dev-dependencies]
 sim-devices = { path = "../costar/crates/sim-devices" }
+sim-grpc = { path = "../costar/crates/sim-grpc" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "time"] }
+tokio-stream = "0.1"
+tonic = "0.12"

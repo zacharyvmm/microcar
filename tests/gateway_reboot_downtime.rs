@@ -92,10 +92,7 @@ fn write_flash_marker(world: &mut World) {
         .with_machine_devices(1, || {
             let ok = sim_devices::with_flash_mut(0, |flash| {
                 assert!(flash.erase_page(0), "erase page 0");
-                assert!(
-                    flash.write_page(0, 0, FLASH_MARKER),
-                    "write flash marker"
-                );
+                assert!(flash.write_page(0, 0, FLASH_MARKER), "write flash marker");
             })
             .is_some();
             assert!(ok, "flash device 0 must exist on gateway");
@@ -187,8 +184,14 @@ fn assert_reboot_invariants(world: &mut World, traces: &[String]) {
     );
 
     let (tx_len, rx_len) = can_queue_lens(world);
-    assert_eq!(tx_len, 0, "volatile CAN TX queue must be empty after reboot");
-    assert_eq!(rx_len, 0, "volatile CAN RX queue must be empty after reboot");
+    assert_eq!(
+        tx_len, 0,
+        "volatile CAN TX queue must be empty after reboot"
+    );
+    assert_eq!(
+        rx_len, 0,
+        "volatile CAN RX queue must be empty after reboot"
+    );
 }
 
 fn run_once() {
@@ -212,8 +215,8 @@ fn gateway_reboot_preserves_flash_resets_volatile_100x() {
 #[test]
 fn gateway_reboot_toml_fixture_passes() {
     // Keep the dogfood TOML path green through the product binary wiring.
-    let scenario = Scenario::from_file("dogfood/b3_gateway_reboot_downtime.toml")
-        .expect("load b3 fixture");
+    let scenario =
+        Scenario::from_file("dogfood/b3_gateway_reboot_downtime.toml").expect("load b3 fixture");
     let mut world = scenario.build_world().expect("build");
     world.enable_owned_device_banks();
     for m in &scenario.machine {
