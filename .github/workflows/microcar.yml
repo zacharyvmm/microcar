@@ -9,7 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Temporary pin to costar dogfood-milestone-4 head with inject warmup.
+  # Pin to the costar#7 merge commit on main (lifecycle/isolation closeout).
   COSTAR_REF: 7dd644822aae365e4027e81430822f556063d847
 
 jobs:
