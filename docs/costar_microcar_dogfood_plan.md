@@ -81,13 +81,15 @@ complete if an acceptance item is skipped or replaced by trace-only evidence.
 For the next PR, use:
 
 ```text
-Implement packet R6 from docs/costar_microcar_dogfood_plan.md and no later
-packet. Verify the R0–R5 prerequisites against the current code, preserve legacy
-fixtures/goldens, meet every acceptance item, update the Section 5 status row,
-and report changed files plus exact command results. Do not mark R6 complete if
-diagnostics values are not proven plant→BMS→gateway→tool over CAN with semantic
-and transport evidence.
+Finish remaining R4/R5 closeout from docs/costar_microcar_dogfood_plan.md.
+Do not begin R6 until every R4 and R5 acceptance item passes with no waivers.
+Verify against the paired costar revision, preserve legacy fixtures/goldens,
+update the Section 5 status rows only when gates are genuinely complete, and
+report changed files plus exact command results.
 ```
+
+Previously this section pointed at R6; that prompt is disabled until R4/R5 are
+`DONE`.
 
 ## 4. Definition of Done for Every Packet
 
@@ -133,7 +135,7 @@ Status meanings:
 | NetworkBank host/TCP hardening | DONE | Host FD register/block/wake/deregister routes through the active `NetworkBank`; bank destroy/recreate clears fds/readiness/blocked task IDs; fragmented TcpBridge streams are isolated across banks; legacy TLS fallback remains for single-simulator paths. |
 | JSON-RPC per-session locking | DONE | `sim-runner` uses `BTreeMap<u64, Arc<Mutex<Session>>>`; map lock is lookup-only; TTL exempts Running/Paused; cleanup ≤30s + create/list; Stop → Done; session-limit / TTL-exempt / failed-sibling tests pass. |
 | Restart/control-plane residuals (R4) | IN PROGRESS | gRPC `failed_session_returns_world_and_sibling_runs` with panicking test firmware; JSON-RPC sibling Error isolation test; `b3_gateway_reboot_downtime` + `tests/gateway_reboot_downtime.rs` (100× flash/RTOS/volatile/sibling). |
-| Duplicate-world/session isolation gate (R5) | IN PROGRESS | `two_worlds_owned_can_interleave_100x`; microcar Trace v2 recreate hashes 100×; BMS plant-frame isolation; gateway `boot_at` CAN delivery; gRPC dual-session real-firmware configure with colliding device IDs 100× (`tests/r5_isolation.rs`). |
+| Duplicate-world/session isolation gate (R5) | DONE | World Trace v2 interleave 100×; BMS plant-frame isolation; gateway `boot_at` CAN delivery; concurrent gRPC sessions with colliding IDs prove CAN/display/touch/timer/ADC/Ethernet isolation vs solo baselines with peer negatives, 100× (`tests/r5_isolation.rs`). |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | Live diagnostics | SCAFFOLD | BMS now consumes `MC_MSG_PLANT_SENSORS` (0x500) into live state; gateway still returns `UNSUPPORTED` for live BMS selectors; diagnostics tool does not yet issue/assemble protocol requests. |
 | Charging | CORE ONLY | C FSM and battery signed-current method exist. Rust FSM mirror is a one-test stub; firmware and plant CAN loop are not wired. |
@@ -165,13 +167,13 @@ R1 GuestRuntime time/task identity
 R2 per-instance C firmware state
 R3 core NetworkBank activation and Ethernet device-0 isolation
 R3H host/TCP NetworkBank hardening
-R4 control-plane and restart residuals
-R5 duplicate-world/session isolation gate
 ```
 
-Remaining order:
+Remaining order (R5 closed; finish R4 reboot 100× soak before R6):
 
 ```text
+R4 control-plane and restart residuals          ← IN PROGRESS (reboot 100× soak)
+R5 duplicate-world/session isolation gate       ← DONE
 R6 diagnostics
 R7 charging  (may run with R6 if gateway_ecu ownership is coordinated)
 R8 telematics (may run with R6/R7)
@@ -180,6 +182,16 @@ R5 + R6/R7/R9 as inputs ─ R10 cockpit
 R6 + R8 + R10 ─────────── R11 debug corpus + predicates
 R6..R11 ───────────────── R12 soak + CI + final documentation
 ```
+
+**R4/R5 remaining blockers (do not waive):**
+
+- Plain JSON-RPC `sim.run` TCP disconnect → `Paused` (costar) — implemented; keep green under full gates
+- `session.destroy` rejects active Running workers (`SESSION_IN_USE`) — implemented; keep green
+- Exact generic Ethernet isolation negative assertions — implemented; keep green
+- FreeRTOS multi-world / multi-thread kernel isolation — per-Simulator C context snapshots + process-wide activation lock; world-level Drop/recreate green; concurrent gRPC `Running` overlap green
+- Full gRPC device evidence matrix (CAN/display/touch/timer/ADC/Ethernet) with solo baselines, peer negatives, and 100× parent — implemented in `tests/r5_isolation.rs`
+- Sibling powertrain uptime continuity across gateway reboot — strengthened; keep the 100× reboot gate green
+- Dogfood plan statuses consistent (this section)
 
 R6 and R7 may run concurrently after R5 if agents coordinate ownership of
 `gateway_ecu/src/main.c`; otherwise run them sequentially. R8 may run in parallel
@@ -266,7 +278,7 @@ host-poller code.
 
 ### R4 — Finish control-plane and restart residuals
 
-**Status: IN PROGRESS** (2026-07-17) — heartbeat/reboot positive proofs landing; JSON-RPC stop/disconnect closed in paired costar
+**Status: IN PROGRESS** (2026-07-17) — remaining: gRPC product FreeRTOS worker SIGSEGV (`pxCurrentTCB`); finish reboot 100×; do not mark DONE until all acceptance items pass with no waivers.
 
 **Goal:** both control planes have the same lock/lifecycle behavior, and the
 microcar reboot fixture proves firmware recovery rather than reset markers.
@@ -312,7 +324,9 @@ microcar reboot fixture proves firmware recovery rather than reset markers.
 
 ### R5 — Full duplicate-world/session isolation gate
 
-**Status: IN PROGRESS** (2026-07-17)
+**Status: DONE** (2026-07-17) — world Trace v2 interleave 100×; concurrent gRPC
+sessions with colliding device IDs prove CAN/display/touch/timer/ADC/Ethernet
+isolation against solo baselines with peer negatives, 100× parent gate.
 
 **Goal:** close the infrastructure gate before product lanes claim real
 concurrent isolation.
@@ -325,7 +339,7 @@ concurrent isolation.
   status/limits without cross-observation.
 - Two concurrent gRPC sessions load real microcar firmware, configure the same
   display/touch/timer/ADC/CAN/Ethernet device IDs, inject different inputs, and
-  reproduce their solo hashes, 100 times.
+  reproduce their solo semantic evidence hashes, 100 times.
 - Reboot resets selected C/device/network volatile state while preserving only
   selected persistent devices and every sibling state.
 - Frames arriving before `boot_at` are absent; a frame at `boot_at` is received

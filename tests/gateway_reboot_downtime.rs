@@ -211,17 +211,28 @@ fn can_queue_lens(world: &mut World) -> (usize, usize) {
 }
 
 /// Heartbeat before/during/after reboot via decoded 0x001 Trace v2 payloads.
+///
+/// Powertrain continuity is proven by **uptime**, not only monotonic virtual
+/// time: a sibling that itself rebooted could restart heartbeating from a
+/// boot-range uptime while virtual time remains increasing.
 fn assert_heartbeat_reboot_proof(recs: &[sim_core::TraceV2]) {
     let gw = heartbeats_from(recs, GATEWAY_MACHINE_ID);
-    let pt = heartbeats_from(recs, POWERTRAIN_MACHINE_ID);
+    let mut pt = heartbeats_from(recs, POWERTRAIN_MACHINE_ID);
+    pt.sort_by_key(|&(t, _)| t);
 
     const REBOOT_GRACE_US: u64 = 2_000;
+    /// Firmware sends heartbeats every `MC_SAFETY_HEARTBEAT_INTERVAL_MS` (100ms).
+    const HEARTBEAT_PERIOD_US: u64 = 100_000;
+    /// Allow one missed beat plus tick/scheduling slack.
+    const HEARTBEAT_GAP_TOLERANCE_US: u64 = HEARTBEAT_PERIOD_US + 50_000;
+    /// Uptime values in this range are treated as "just booted".
+    const BOOT_UPTIME_CEILING_MS: u32 = 200;
 
     let gw_before: Vec<_> = gw.iter().filter(|&&(t, _)| t < REBOOT_AT_US).collect();
     let gw_during: Vec<_> = gw
         .iter()
         .filter(|&&(t, _)| {
-            t >= REBOOT_AT_US + REBOOT_GRACE_US && t < REBOOT_AT_US + REBOOT_DOWNTIME_US
+            (REBOOT_AT_US + REBOOT_GRACE_US..REBOOT_AT_US + REBOOT_DOWNTIME_US).contains(&t)
         })
         .collect();
     let gw_after: Vec<_> = gw
@@ -253,6 +264,10 @@ fn assert_heartbeat_reboot_proof(recs: &[sim_core::TraceV2]) {
             first_after_uptime < last_before_uptime,
             "gateway uptime must reset across reboot: before={last_before_uptime} after={first_after_uptime}"
         );
+        assert!(
+            first_after_uptime <= BOOT_UPTIME_CEILING_MS,
+            "post-reboot gateway uptime must be in boot range, got {first_after_uptime}"
+        );
     } else {
         let last_before_vt = gw_before.last().unwrap().0;
         let first_after_vt = gw_after.first().unwrap().0;
@@ -266,12 +281,17 @@ fn assert_heartbeat_reboot_proof(recs: &[sim_core::TraceV2]) {
         );
     }
 
+    let pt_before: Vec<_> = pt.iter().filter(|&&(t, _)| t < REBOOT_AT_US).collect();
     let pt_during: Vec<_> = pt
         .iter()
-        .filter(|&&(t, _)| t >= REBOOT_AT_US && t < REBOOT_AT_US + REBOOT_DOWNTIME_US)
+        .filter(|&&(t, _)| (REBOOT_AT_US..REBOOT_AT_US + REBOOT_DOWNTIME_US).contains(&t))
+        .collect();
+    let pt_after: Vec<_> = pt
+        .iter()
+        .filter(|&&(t, _)| t >= REBOOT_AT_US + REBOOT_DOWNTIME_US)
         .collect();
     assert!(
-        pt.iter().any(|&(t, _)| t < REBOOT_AT_US),
+        !pt_before.is_empty(),
         "sibling must heartbeat before gateway reboot (got {} powertrain heartbeats)",
         pt.len()
     );
@@ -280,16 +300,55 @@ fn assert_heartbeat_reboot_proof(recs: &[sim_core::TraceV2]) {
         "sibling must keep heartbeating during gateway downtime"
     );
     assert!(
-        pt.iter()
-            .any(|&(t, _)| t >= REBOOT_AT_US + REBOOT_DOWNTIME_US),
+        !pt_after.is_empty(),
         "sibling must heartbeat after gateway reboot"
     );
-    let mut pt_times: Vec<u64> = pt.iter().map(|(t, _)| *t).collect();
-    pt_times.sort_unstable();
+
+    // Powertrain uptime is nondecreasing across the entire run — proves the
+    // sibling never restarted (a reboot would drop uptime back near zero).
+    for pair in pt.windows(2) {
+        assert!(
+            pair[1].1 >= pair[0].1,
+            "powertrain uptime must be nondecreasing: {:?} -> {:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+
+    let last_before = *pt_before.last().unwrap();
+    let first_after = *pt_after.first().unwrap();
     assert!(
-        pt_times.windows(2).all(|w| w[1] >= w[0]),
-        "sibling heartbeat virtual times must be monotonic"
+        first_after.1 >= last_before.1,
+        "powertrain uptime must continue across gateway reboot: before={last_before:?} after={first_after:?}"
     );
+    assert!(
+        first_after.1 > BOOT_UPTIME_CEILING_MS,
+        "powertrain uptime must not return to boot range after gateway reboot, got {}",
+        first_after.1
+    );
+
+    // FreeRTOS scheduler time and World virtual time are coupled but not
+    // lock-step under multi-machine interleaving; require uptime to move
+    // forward across the outage by at least one heartbeat period worth of
+    // progress rather than matching vt delta exactly.
+    let uptime_delta = first_after.1.saturating_sub(last_before.1);
+    assert!(
+        uptime_delta >= 50,
+        "powertrain uptime must advance across gateway downtime by >= 50 ms, \
+         got delta={uptime_delta} before={last_before:?} after={first_after:?}"
+    );
+
+    // No heartbeat gap larger than the expected period + tolerance (World µs).
+    for pair in pt.windows(2) {
+        let gap = pair[1].0.saturating_sub(pair[0].0);
+        assert!(
+            gap <= HEARTBEAT_GAP_TOLERANCE_US,
+            "powertrain heartbeat gap {gap} µs exceeds tolerance {HEARTBEAT_GAP_TOLERANCE_US} µs \
+             between {:?} and {:?}",
+            pair[0],
+            pair[1]
+        );
+    }
 }
 
 fn assert_reboot_invariants(world: &mut World, traces: &[String]) {
@@ -303,9 +362,17 @@ fn assert_reboot_invariants(world: &mut World, traces: &[String]) {
         .count();
     assert_eq!(reset_begin, 1, "exactly one machine_reset_begin");
     assert_eq!(reset_boot, 1, "exactly one machine_reset_boot");
-    assert!(
-        traces.iter().any(|l| l.contains("microcar_boot_gateway")),
-        "factory must re-run gateway boot after reconstruction"
+
+    // Exactly two gateway boots: initial factory boot + one post-reboot boot.
+    // Match the exact user-u32 label so variants like `microcar_boot_gateway_diag`
+    // cannot inflate the count.
+    let gateway_boots = traces
+        .iter()
+        .filter(|l| l.contains("user-u32 \"microcar_boot_gateway\""))
+        .count();
+    assert_eq!(
+        gateway_boots, 2,
+        "gateway must boot exactly twice (initial + post-reboot), got {gateway_boots}"
     );
     assert!(
         traces.iter().any(|l| l.contains("gateway_mutex")),
@@ -357,27 +424,38 @@ fn run_once() {
     let mut world = build_world();
     write_flash_marker(&mut world);
 
-    // Drain Trace v2 in phases straddling the reboot so pre-reboot records are
-    // not discarded with the reconstructed machine's fresh sink. Human/golden
-    // traces are drained once at the end (reset markers must be counted once).
+    // Drain Trace v2 *and* human traces in phases straddling the reboot so
+    // pre-reboot records (including the initial `microcar_boot_gateway`) are
+    // not discarded with the reconstructed machine's fresh sinks.
+    //
+    // `drain_all_traces` does *not* clear sinks: collect human boot/reset
+    // markers only through the post-reboot phase. A later human drain would
+    // re-emit the reconstructed gateway's uncleared reset/boot lines.
     let mut recs: Vec<sim_core::TraceV2> = Vec::new();
+    let mut traces: Vec<String> = Vec::new();
 
     world
         .run_until(REBOOT_AT_US - 1_000)
         .expect("run_until pre-reboot");
     recs.extend(world.drain_trace_v2());
+    traces.extend(world.drain_all_traces());
 
     world
         .run_until(REBOOT_AT_US + REBOOT_DOWNTIME_US + 1_000)
         .expect("run_until through reboot");
     recs.extend(world.drain_trace_v2());
+    traces.extend(world.drain_all_traces());
 
     world.run_until(2_000_000).expect("run_until to end");
     recs.extend(world.drain_trace_v2());
-    let traces = world.drain_all_traces();
 
     assert_heartbeat_reboot_proof(&recs);
     assert_reboot_invariants(&mut world, &traces);
+}
+
+#[test]
+fn gateway_reboot_preserves_flash_resets_volatile_once() {
+    run_once();
 }
 
 #[test]
