@@ -447,7 +447,10 @@ fn assert_bms_evidence_owned(
     // settle, so only the final (steady-state) sample is required to match
     // exactly — mirroring how `bms_can_dispatch.rs` checks `.last()`.
     for &t in &ev.status_temps {
-        assert_ne!(t, other_temp, "{label}: 0x200 temp leaked the other world's value");
+        assert_ne!(
+            t, other_temp,
+            "{label}: 0x200 temp leaked the other world's value"
+        );
     }
     assert_eq!(
         *ev.status_temps.last().unwrap(),
@@ -465,8 +468,14 @@ fn assert_bms_evidence_owned(
         "{label}: final 0x201 reason must be {expected_reason}"
     );
     for &t in &ev.plant_rx_temps {
-        assert_eq!(t, expected_temp, "{label}: 0x500 RX temp must be {expected_temp}");
-        assert_ne!(t, other_temp, "{label}: 0x500 RX temp leaked the other world's value");
+        assert_eq!(
+            t, expected_temp,
+            "{label}: 0x500 RX temp must be {expected_temp}"
+        );
+        assert_ne!(
+            t, other_temp,
+            "{label}: 0x500 RX temp leaked the other world's value"
+        );
     }
 }
 
@@ -811,9 +820,9 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
         barrier.wait().await;
 
         let mut stream = client
-            .run(tonic::Request::new(tokio_stream::wrappers::ReceiverStream::new(
-                req_rx,
-            )))
+            .run(tonic::Request::new(
+                tokio_stream::wrappers::ReceiverStream::new(req_rx),
+            ))
             .await
             .expect("run")
             .into_inner();
@@ -948,8 +957,14 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
         };
         let hash_a_solo = hash_trace_lines(&marker_trace_lines(&solo_a, marker_a));
         let hash_b_solo = hash_trace_lines(&marker_trace_lines(&solo_b, marker_b));
-        assert_ne!(hash_a_solo, FNV_OFFSET_BASIS, "seed {seed}: empty solo A marker traces");
-        assert_ne!(hash_b_solo, FNV_OFFSET_BASIS, "seed {seed}: empty solo B marker traces");
+        assert_ne!(
+            hash_a_solo, FNV_OFFSET_BASIS,
+            "seed {seed}: empty solo A marker traces"
+        );
+        assert_ne!(
+            hash_b_solo, FNV_OFFSET_BASIS,
+            "seed {seed}: empty solo B marker traces"
+        );
         assert_ne!(
             hash_a_solo, hash_b_solo,
             "seed {seed}: distinct markers must yield distinct marker traces"
