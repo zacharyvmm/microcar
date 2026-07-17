@@ -277,30 +277,10 @@ fn run_interleaved(first: &mut World, second: &mut World, duration_ms: u64, slic
 fn two_worlds_gateway_bms_trace_v2_interleave_100x() {
     const DUR_MS: u64 = 400;
     const SLICE_MS: u64 = 100;
-    // Full 100× acceptance is exercised via per-seed subprocesses to avoid
-    // in-process FreeRTOS multi-World heap corruption on destroy. When the
-    // harness binary is invoked with R5_SEED=<n>, only that seed runs.
-    if let Ok(seed_s) = std::env::var("R5_SEED") {
-        let seed: u32 = seed_s.parse().expect("R5_SEED u32");
-        run_trace_v2_seed(seed, DUR_MS, SLICE_MS);
-        return;
-    }
-
-    let exe = std::env::current_exe().expect("current_exe");
+    // Regression for per-Simulator FreeRTOS C-kernel state: all 100
+    // destroy/recreate cycles execute in one process and Worlds drop normally.
     for seed in 0..100u32 {
-        let status = std::process::Command::new(&exe)
-            .env("R5_SEED", seed.to_string())
-            .args([
-                "two_worlds_gateway_bms_trace_v2_interleave_100x",
-                "--exact",
-                "--nocapture",
-            ])
-            .status()
-            .unwrap_or_else(|e| panic!("seed {seed}: spawn failed: {e}"));
-        assert!(
-            status.success(),
-            "seed {seed}: child Trace v2 isolation failed ({status})"
-        );
+        run_trace_v2_seed(seed, DUR_MS, SLICE_MS);
     }
 }
 
@@ -312,16 +292,12 @@ fn run_trace_v2_seed(seed: u32, dur_ms: u64, slice_ms: u64) {
     let hash_a_solo = {
         let mut w = build_gw_bms_plant_world(temp_a);
         run_to_duration(&mut w, dur_ms);
-        let h = hash_world_traces(&mut w);
-        std::mem::forget(w);
-        h
+        hash_world_traces(&mut w)
     };
     let hash_b_solo = {
         let mut w = build_gw_bms_plant_world(temp_b);
         run_to_duration(&mut w, dur_ms);
-        let h = hash_world_traces(&mut w);
-        std::mem::forget(w);
-        h
+        hash_world_traces(&mut w)
     };
     assert_ne!(
         hash_a_solo, FNV_OFFSET_BASIS,
@@ -350,10 +326,6 @@ fn run_trace_v2_seed(seed: u32, dur_ms: u64, slice_ms: u64) {
             hash_b, hash_b_solo,
             "seed {seed} A+B interleaved: B diverged from its solo run"
         );
-        // Skip FreeRTOS GuestRuntime Drop — multi-World destroy corrupts the
-        // shared heap allocator. This child process exits after assertions.
-        std::mem::forget(w_a);
-        std::mem::forget(w_b);
     }
 
     {
@@ -370,14 +342,7 @@ fn run_trace_v2_seed(seed: u32, dur_ms: u64, slice_ms: u64) {
             hash_b, hash_b_solo,
             "seed {seed} B+A reversed: B diverged from its solo run"
         );
-        std::mem::forget(w_a);
-        std::mem::forget(w_b);
     }
-
-    // Exit without running remaining World Drop destructors from solo runs
-    // (already out of scope above, but any leftover guest state is unsafe to
-    // tear down cleanly across 6 FreeRTOS Worlds in one process).
-    std::process::exit(0);
 }
 
 /// Decoded 0x200/0x201/0x500 evidence pulled from one World's Trace v2
@@ -667,7 +632,8 @@ mod grpc {
         (addr, handle)
     }
 
-    fn colliding_peripherals() -> Vec<PeripheralDef> {
+    /// Colliding peripheral *IDs* with session-distinct timer IRQ inputs.
+    fn colliding_peripherals(marker: u8) -> Vec<PeripheralDef> {
         vec![
             PeripheralDef {
                 device: "display".into(),
@@ -686,6 +652,7 @@ mod grpc {
             PeripheralDef {
                 device: "timer".into(),
                 id: 0,
+                timer_irq: timer_irq(marker),
                 ..Default::default()
             },
             PeripheralDef {
@@ -698,18 +665,15 @@ mod grpc {
                 id: 0,
                 ..Default::default()
             },
-            // Ethernet device 0 is not a BoardConfig peripheral type; it is
-            // provisioned via the owned NetworkBank when an eth link is
-            // present. Colliding eth id 0 is asserted via InspectDevices
-            // after the session runs (see scenario eth link below).
         ]
     }
 
     fn session_scenario(marker: u8) -> String {
-        // Encode the session marker in the CAN *ID* (human gRPC traces record
-        // id/len but not payload bytes), so solo/concurrent hashes and
-        // cross-session contamination checks are observable on stream_trace.
         let can_id = 0x700u32 + u32::from(marker);
+        let eth_len = eth_payload_len(marker);
+        // Deterministic ASCII payload; length is the isolation key.
+        let eth_payload: String =
+            std::iter::repeat_n(char::from(b'A' + (marker % 26)), eth_len).collect();
         format!(
             r#"
 name = "r5_grpc_{marker}"
@@ -751,9 +715,15 @@ bus = "vcan0"
 sender = "gateway"
 id = {can_id}
 data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
+
+[[inject]]
+at = 1000
+link = {{ from = 1, to = 4 }}
+data = "{eth_payload}"
 "#,
             marker = marker,
             can_id = can_id,
+            eth_payload = eth_payload,
         )
     }
 
@@ -778,7 +748,7 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
                 .configure_board(ConfigureBoardRequest {
                     session_id: sess.session_id,
                     machine_id: Some(mid),
-                    peripherals: colliding_peripherals(),
+                    peripherals: colliding_peripherals(marker),
                 })
                 .await
                 .expect("configure");
@@ -786,38 +756,285 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
         sess.session_id
     }
 
-    /// FreeRTOS firmware never reaches `all_idle`, so gRPC `Run` must be
-    /// explicitly stopped. Drive both solo and concurrent sessions to the same
-    /// virtual-time deadline so hashes are comparable.
+    /// Virtual-time comparison bound. Product FreeRTOS sessions use explicit
+    /// Stop (not `deadline_ticks`) because jumping `world.now` across FreeRTOS
+    /// wake gaps for deadline fill is unsafe with real firmware; the gRPC
+    /// integration test still covers `deadline_ticks` with generic firmware.
     const RUN_DEADLINE_US: u64 = 80_000;
 
-    async fn run_session_collect_traces(
+    fn touch_xy(marker: u8) -> (u32, u32) {
+        (40 + u32::from(marker), 60 + u32::from(marker) * 2)
+    }
+
+    fn eth_payload_len(marker: u8) -> usize {
+        64 + usize::from(marker)
+    }
+
+    fn adc_value(marker: u8) -> u32 {
+        1000 + u32::from(marker) * 17
+    }
+
+    fn timer_irq(marker: u8) -> u32 {
+        10 + u32::from(marker)
+    }
+
+    /// Per-session semantic evidence for the R5 gRPC isolation gate.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct SessionEvidence {
+        can_marker_lines: Vec<String>,
+        display_hashes: Vec<u64>,
+        touch_x: u32,
+        touch_y: u32,
+        touch_observed_x: u32,
+        touch_observed_y: u32,
+        adc_channel0: u32,
+        timer_irq: u32,
+        eth_pkt_rx_lens: Vec<usize>,
+    }
+
+    impl SessionEvidence {
+        fn canonicalize(&self) -> String {
+            let mut s = String::new();
+            s.push_str(&format!(
+                "touch_in={},{} touch_obs={},{} adc0={} timer_irq={}\n",
+                self.touch_x,
+                self.touch_y,
+                self.touch_observed_x,
+                self.touch_observed_y,
+                self.adc_channel0,
+                self.timer_irq
+            ));
+            for line in &self.can_marker_lines {
+                s.push_str("can:");
+                s.push_str(line);
+                s.push('\n');
+            }
+            for h in &self.display_hashes {
+                s.push_str(&format!("disp:{h:#016x}\n"));
+            }
+            for len in &self.eth_pkt_rx_lens {
+                s.push_str(&format!("eth_rx_len:{len}\n"));
+            }
+            s
+        }
+
+        fn hash(&self) -> u64 {
+            super::hash_lines(&[self.canonicalize()])
+        }
+    }
+
+    fn hash_bytes(bytes: &[u8]) -> u64 {
+        let mut hash = FNV_OFFSET_BASIS;
+        for &b in bytes {
+            hash ^= u64::from(b);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        hash
+    }
+
+    fn canonical_display_hash(frame: &DisplayFrame) -> u64 {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&frame.machine_id.to_le_bytes());
+        buf.extend_from_slice(&frame.device_id.to_le_bytes());
+        buf.extend_from_slice(&frame.width.to_le_bytes());
+        buf.extend_from_slice(&frame.height.to_le_bytes());
+        buf.push(u8::from(frame.full_frame));
+        for r in &frame.dirty_rects {
+            buf.extend_from_slice(&r.x.to_le_bytes());
+            buf.extend_from_slice(&r.y.to_le_bytes());
+            buf.extend_from_slice(&r.w.to_le_bytes());
+            buf.extend_from_slice(&r.h.to_le_bytes());
+            buf.extend_from_slice(&r.data);
+        }
+        hash_bytes(&buf)
+    }
+
+    fn can_marker_lines(traces: &[String], marker: u8) -> Vec<String> {
+        let can_id = 0x700u32 + u32::from(marker);
+        let needle = format!("id={can_id:#06x}");
+        traces
+            .iter()
+            .filter(|l| l.contains(&needle))
+            .cloned()
+            .collect()
+    }
+
+    fn eth_rx_lens(traces: &[String]) -> Vec<usize> {
+        let mut lens = Vec::new();
+        for line in traces {
+            if let Some(rest) = line.split("pkt-rx len=").nth(1) {
+                let num: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+                if let Ok(n) = num.parse::<usize>() {
+                    lens.push(n);
+                }
+            }
+        }
+        lens.sort_unstable();
+        lens
+    }
+
+    async fn wait_session_inspectable(
+        client: &mut SimulatorClient<tonic::transport::Channel>,
+        session_id: u64,
+    ) {
+        // Run workers return the World asynchronously after Stop/End; Inspect
+        // rejects RUNNING. Poll until the World is back in the session.
+        for _ in 0..500 {
+            let state = client
+                .get_status(GetStatusRequest { session_id })
+                .await
+                .map(|r| r.into_inner().state)
+                .unwrap_or_default();
+            if !state.eq_ignore_ascii_case("running") {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        panic!("session {session_id}: still Running after Stop; cannot inspect");
+    }
+
+    async fn collect_evidence(
+        client: &mut SimulatorClient<tonic::transport::Channel>,
+        session_id: u64,
+        marker: u8,
+        traces: &[String],
+        display_hashes: Vec<u64>,
+    ) -> SessionEvidence {
+        wait_session_inspectable(client, session_id).await;
+        let (touch_x, touch_y) = touch_xy(marker);
+        let devices = client
+            .inspect_devices(InspectDevicesRequest {
+                session_id,
+                machine_id: Some(4),
+                device_type: String::new(),
+                device_id: 0,
+            })
+            .await
+            .expect("inspect dashboard")
+            .into_inner()
+            .devices;
+        let touch = devices.iter().find(|d| d.r#type == "touch");
+        let (touch_observed_x, touch_observed_y) = touch
+            .map(|t| (t.touch_last_inject_x, t.touch_last_inject_y))
+            .unwrap_or((0, 0));
+        assert!(
+            touch.is_some_and(|t| t.touch_has_last_inject),
+            "session {session_id}: touch inject must be observable after run"
+        );
+
+        let gw = client
+            .inspect_devices(InspectDevicesRequest {
+                session_id,
+                machine_id: Some(1),
+                device_type: String::new(),
+                device_id: 0,
+            })
+            .await
+            .expect("inspect gateway")
+            .into_inner()
+            .devices;
+        let adc0 = gw
+            .iter()
+            .find(|d| d.r#type == "adc")
+            .and_then(|d| d.adc_channels.first())
+            .map(|c| c.value)
+            .unwrap_or(0);
+        let t_irq = gw
+            .iter()
+            .find(|d| d.r#type == "timer")
+            .map(|d| d.timer_irq)
+            .unwrap_or(0);
+
+        SessionEvidence {
+            can_marker_lines: can_marker_lines(traces, marker),
+            display_hashes,
+            touch_x,
+            touch_y,
+            touch_observed_x,
+            touch_observed_y,
+            adc_channel0: adc0,
+            timer_irq: t_irq,
+            eth_pkt_rx_lens: eth_rx_lens(traces),
+        }
+    }
+
+    struct RunOutcome {
+        traces: Vec<String>,
+        display_hashes: Vec<u64>,
+        last_ts: u64,
+    }
+
+    async fn run_session_to_deadline(
         addr: &str,
         session_id: u64,
-        barrier: Arc<tokio::sync::Barrier>,
-    ) -> Vec<String> {
+        marker: u8,
+        start_barrier: Arc<tokio::sync::Barrier>,
+    ) -> RunOutcome {
         let mut client = SimulatorClient::connect(addr.to_string())
             .await
             .expect("connect for run");
-        let (req_tx, req_rx) = tokio::sync::mpsc::channel::<RunRequest>(8);
+        let (req_tx, req_rx) = tokio::sync::mpsc::channel::<RunRequest>(16);
+        let (touch_x, touch_y) = touch_xy(marker);
         req_tx
             .send(RunRequest {
                 payload: Some(run_request::Payload::Config(RunConfig {
                     session_id,
-                    // 50ms batches: FreeRTOS steps are wall-clock heavy in
-                    // debug builds; 1ms batches cannot reach a 300ms deadline
-                    // before CI timeouts. Stop is only sent *after* a Tick at
-                    // the deadline, so the prior batch's traces are already
-                    // streamed.
                     tick_batch_size: 20_000,
-                    stream_display: false,
+                    stream_display: true,
                     stream_trace: true,
+                    deadline_ticks: 0,
                 })),
             })
             .await
             .expect("send config");
 
-        barrier.wait().await;
+        start_barrier.wait().await;
+
+        // Distinct per-session inputs immediately after both runs are live.
+        req_tx
+            .send(RunRequest {
+                payload: Some(run_request::Payload::Touch(TouchInject {
+                    device_id: 0,
+                    machine_id: Some(4),
+                    events: vec![TouchEvent {
+                        point_id: 1 + u32::from(marker % 8),
+                        x: touch_x,
+                        y: touch_y,
+                        pressure: 128,
+                        event_type: TouchEventType::TouchPress as i32,
+                    }],
+                })),
+            })
+            .await
+            .expect("touch");
+        req_tx
+            .send(RunRequest {
+                payload: Some(run_request::Payload::Adc(AdcInject {
+                    device_id: 0,
+                    channel: 0,
+                    value: adc_value(marker),
+                    machine_id: Some(1),
+                })),
+            })
+            .await
+            .expect("adc");
+        // Distinct framebuffer content so display isolation does not depend on
+        // firmware paint timing within the short virtual deadline.
+        let (fx, fy) = touch_xy(marker);
+        req_tx
+            .send(RunRequest {
+                payload: Some(run_request::Payload::DisplayFill(DisplayFill {
+                    device_id: 0,
+                    x: fx % 300,
+                    y: fy % 220,
+                    w: 16,
+                    h: 16,
+                    color: 0x010000 * u32::from(marker) + 0x000040,
+                    machine_id: Some(4),
+                })),
+            })
+            .await
+            .expect("display fill");
 
         let mut stream = client
             .run(tonic::Request::new(
@@ -828,14 +1045,16 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
             .into_inner();
 
         let mut traces = Vec::new();
+        let mut display_hashes = Vec::new();
         let mut stop_sent = false;
-        let mut saw_tick = false;
         let mut last_ts = 0u64;
         while let Ok(Some(event)) = stream.message().await {
             match event.payload {
                 Some(run_event::Payload::Trace(t)) => traces.push(t.line),
+                Some(run_event::Payload::Display(frame)) => {
+                    display_hashes.push(canonical_display_hash(&frame));
+                }
                 Some(run_event::Payload::Tick(t)) => {
-                    saw_tick = true;
                     last_ts = t.ts;
                     if !stop_sent && t.ts >= RUN_DEADLINE_US {
                         stop_sent = true;
@@ -854,56 +1073,103 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
             }
         }
         assert!(
-            saw_tick,
-            "session {session_id}: expected Tick events from gRPC Run"
-        );
-        assert!(
             last_ts >= RUN_DEADLINE_US,
-            "session {session_id}: stopped too early at ts={last_ts}, need >= {RUN_DEADLINE_US}"
+            "session {session_id}: stopped too early at ts={last_ts}"
         );
-        assert!(
-            !traces.is_empty(),
-            "session {session_id}: expected streamed traces before stop (last_ts={last_ts})"
-        );
-        traces
-    }
-
-    fn hash_trace_lines(lines: &[String]) -> u64 {
-        super::hash_lines(lines)
+        assert!(!traces.is_empty(), "session {session_id}: empty traces");
+        display_hashes.sort_unstable();
+        RunOutcome {
+            traces,
+            display_hashes,
+            last_ts,
+        }
     }
 
     fn traces_contain_marker(lines: &[String], marker: u8) -> bool {
-        let can_id = 0x700u32 + u32::from(marker);
-        let needle = format!("id={can_id:#06x}");
-        lines.iter().any(|l| l.contains(&needle))
+        !can_marker_lines(lines, marker).is_empty()
     }
 
-    /// Human `stream_trace` lines that mention the session's marker CAN ID.
-    /// Full-trace hashes diverge under concurrent FreeRTOS load (batch/stop
-    /// timing), so isolation is proven on the marker-bearing subset plus
-    /// negative checks that the peer marker ID never appears.
-    fn marker_trace_lines(lines: &[String], marker: u8) -> Vec<String> {
-        let can_id = 0x700u32 + u32::from(marker);
-        let needle = format!("id={can_id:#06x}");
-        lines
-            .iter()
-            .filter(|l| l.contains(&needle))
-            .cloned()
-            .collect()
+    fn traces_contain_eth_len(lines: &[String], marker: u8) -> bool {
+        let want = eth_payload_len(marker);
+        eth_rx_lens(lines).contains(&want)
+    }
+
+    fn assert_evidence_isolation(seed: u32, marker: u8, ev: &SessionEvidence, peer_marker: u8) {
+        assert!(
+            !ev.can_marker_lines.is_empty(),
+            "seed {seed}: missing own CAN marker lines"
+        );
+        assert!(
+            !ev.display_hashes.is_empty(),
+            "seed {seed}: expected nonempty display-frame evidence from dashboard/gateway render"
+        );
+        assert_eq!(
+            ev.touch_observed_x, ev.touch_x,
+            "seed {seed}: touch X mismatch"
+        );
+        assert_eq!(
+            ev.touch_observed_y, ev.touch_y,
+            "seed {seed}: touch Y mismatch"
+        );
+        assert_eq!(
+            (ev.touch_x, ev.touch_y),
+            touch_xy(marker),
+            "seed {seed}: touch input must match marker"
+        );
+        assert_eq!(
+            ev.adc_channel0,
+            adc_value(marker),
+            "seed {seed}: ADC channel0 must match session inject"
+        );
+        assert_eq!(
+            ev.timer_irq,
+            timer_irq(marker),
+            "seed {seed}: timer irq must match board configure input"
+        );
+        let want_eth = eth_payload_len(marker);
+        assert!(
+            ev.eth_pkt_rx_lens.contains(&want_eth),
+            "seed {seed}: missing eth pkt-rx len={want_eth}, have {:?}",
+            ev.eth_pkt_rx_lens
+        );
+        let peer_can = format!("id={:#06x}", 0x700u32 + u32::from(peer_marker));
+        assert!(
+            !ev.can_marker_lines.iter().any(|l| l.contains(&peer_can)),
+            "seed {seed}: CAN evidence contains peer {peer_can}"
+        );
+        let peer_eth = eth_payload_len(peer_marker);
+        assert!(
+            !ev.eth_pkt_rx_lens.contains(&peer_eth),
+            "seed {seed}: eth evidence contains peer len {peer_eth}"
+        );
+        let (peer_tx, peer_ty) = touch_xy(peer_marker);
+        assert!(
+            !(ev.touch_observed_x == peer_tx && ev.touch_observed_y == peer_ty),
+            "seed {seed}: touch evidence matches peer coords"
+        );
+        assert_ne!(
+            ev.adc_channel0,
+            adc_value(peer_marker),
+            "seed {seed}: ADC matches peer value"
+        );
+        assert_ne!(
+            ev.timer_irq,
+            timer_irq(peer_marker),
+            "seed {seed}: timer irq matches peer"
+        );
     }
 
     /// One gRPC server hosts two concurrent running sessions with real
-    /// microcar firmware, colliding peripheral IDs, distinct CAN markers,
-    /// and Trace streaming. Concurrent hashes must match solo baselines;
-    /// neither session may observe the other's marker. 100×.
+    /// microcar firmware, colliding peripheral IDs, distinct CAN/Ethernet/
+    /// touch inputs, and deadline-bounded isolation snapshots. 100×.
     #[tokio::test]
     async fn concurrent_grpc_sessions_real_firmware_100x() {
-        // Per-seed subprocess avoids FreeRTOS multi-session heap corruption
-        // across 100 destroy cycles in one process.
+        // Per-seed subprocess keeps FreeRTOS heap pressure bounded across
+        // 100 destroy cycles; each child still destroys sessions normally.
         if let Ok(seed_s) = std::env::var("R5_GRPC_SEED") {
             let seed: u32 = seed_s.parse().expect("R5_GRPC_SEED u32");
             run_concurrent_grpc_seed(seed).await;
-            std::process::exit(0);
+            return;
         }
 
         let exe = std::env::current_exe().expect("current_exe");
@@ -926,10 +1192,21 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
 
     async fn run_concurrent_grpc_seed(seed: u32) {
         let (addr, _handle) = start_server().await;
+        let mut ctrl = SimulatorClient::connect(addr.clone())
+            .await
+            .expect("control connect");
+        let baseline_sessions = ctrl
+            .list_sessions(ListSessionsRequest {})
+            .await
+            .expect("list")
+            .into_inner()
+            .sessions
+            .len();
 
         let marker_a = 0xA0u8.wrapping_add((seed % 16) as u8);
         let marker_b = 0xB0u8.wrapping_add((seed % 16) as u8);
         assert_ne!(marker_a, marker_b);
+        assert_ne!(eth_payload_len(marker_a), eth_payload_len(marker_b));
 
         let solo_a = {
             let mut c = SimulatorClient::connect(addr.clone())
@@ -937,11 +1214,28 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
                 .expect("solo a connect");
             let id = setup_session(&mut c, marker_a).await;
             let barrier = Arc::new(tokio::sync::Barrier::new(1));
-            let traces = run_session_collect_traces(&addr, id, barrier).await;
-            let _ = c
-                .destroy_session(DestroySessionRequest { session_id: id })
-                .await;
-            traces
+            let run = run_session_to_deadline(&addr, id, marker_a, barrier).await;
+            let ev = collect_evidence(
+                &mut c,
+                id,
+                marker_a,
+                &run.traces,
+                run.display_hashes.clone(),
+            )
+            .await;
+            assert_evidence_isolation(seed, marker_a, &ev, marker_b);
+            assert!(
+                traces_contain_marker(&run.traces, marker_a),
+                "seed {seed}: solo A missing own CAN"
+            );
+            assert!(
+                traces_contain_eth_len(&run.traces, marker_a),
+                "seed {seed}: solo A missing eth pkt-rx"
+            );
+            c.destroy_session(DestroySessionRequest { session_id: id })
+                .await
+                .expect("destroy solo a");
+            ev
         };
         let solo_b = {
             let mut c = SimulatorClient::connect(addr.clone())
@@ -949,35 +1243,34 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
                 .expect("solo b connect");
             let id = setup_session(&mut c, marker_b).await;
             let barrier = Arc::new(tokio::sync::Barrier::new(1));
-            let traces = run_session_collect_traces(&addr, id, barrier).await;
-            let _ = c
-                .destroy_session(DestroySessionRequest { session_id: id })
-                .await;
-            traces
+            let run = run_session_to_deadline(&addr, id, marker_b, barrier).await;
+            let ev = collect_evidence(
+                &mut c,
+                id,
+                marker_b,
+                &run.traces,
+                run.display_hashes.clone(),
+            )
+            .await;
+            assert_evidence_isolation(seed, marker_b, &ev, marker_a);
+            c.destroy_session(DestroySessionRequest { session_id: id })
+                .await
+                .expect("destroy solo b");
+            ev
         };
-        let hash_a_solo = hash_trace_lines(&marker_trace_lines(&solo_a, marker_a));
-        let hash_b_solo = hash_trace_lines(&marker_trace_lines(&solo_b, marker_b));
-        assert_ne!(
-            hash_a_solo, FNV_OFFSET_BASIS,
-            "seed {seed}: empty solo A marker traces"
-        );
-        assert_ne!(
-            hash_b_solo, FNV_OFFSET_BASIS,
-            "seed {seed}: empty solo B marker traces"
-        );
+
+        let hash_a_solo = solo_a.hash();
+        let hash_b_solo = solo_b.hash();
         assert_ne!(
             hash_a_solo, hash_b_solo,
-            "seed {seed}: distinct markers must yield distinct marker traces"
+            "seed {seed}: distinct sessions must yield distinct isolation evidence"
         );
 
-        let mut setup = SimulatorClient::connect(addr.clone())
-            .await
-            .expect("setup connect");
-        let id_a = setup_session(&mut setup, marker_a).await;
-        let id_b = setup_session(&mut setup, marker_b).await;
+        let id_a = setup_session(&mut ctrl, marker_a).await;
+        let id_b = setup_session(&mut ctrl, marker_b).await;
 
         for (sid, label) in [(id_a, "A"), (id_b, "B")] {
-            let devices = setup
+            let devices = ctrl
                 .inspect_devices(InspectDevicesRequest {
                     session_id: sid,
                     machine_id: Some(1),
@@ -991,51 +1284,153 @@ data = [{marker}, {marker}, 0, 0, 0, 0, 0, 0]
             let types: Vec<&str> = devices.iter().map(|d| d.r#type.as_str()).collect();
             for need in ["display", "touch", "timer", "adc", "can"] {
                 assert!(
-                    types.iter().any(|t| *t == need),
+                    types.contains(&need),
                     "seed {seed} session {label}: missing device {need}, have {types:?}"
                 );
             }
         }
 
-        let barrier = Arc::new(tokio::sync::Barrier::new(2));
-        let (traces_a, traces_b) = tokio::join!(
-            run_session_collect_traces(&addr, id_a, Arc::clone(&barrier)),
-            run_session_collect_traces(&addr, id_b, Arc::clone(&barrier)),
+        let start_barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let overlap = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let overlap_flag = Arc::clone(&overlap);
+        let addr_poll = addr.clone();
+        let poller = tokio::spawn(async move {
+            let mut poll = SimulatorClient::connect(addr_poll)
+                .await
+                .expect("overlap poller");
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
+            loop {
+                let sa = poll
+                    .get_status(GetStatusRequest { session_id: id_a })
+                    .await
+                    .map(|r| r.into_inner().state)
+                    .unwrap_or_default();
+                let sb = poll
+                    .get_status(GetStatusRequest { session_id: id_b })
+                    .await
+                    .map(|r| r.into_inner().state)
+                    .unwrap_or_default();
+                let a_run = sa.eq_ignore_ascii_case("running");
+                let b_run = sb.eq_ignore_ascii_case("running");
+                if a_run && b_run {
+                    overlap_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                    return;
+                }
+                let a_done = sa.eq_ignore_ascii_case("paused")
+                    || sa.eq_ignore_ascii_case("done")
+                    || sa.eq_ignore_ascii_case("error");
+                let b_done = sb.eq_ignore_ascii_case("paused")
+                    || sb.eq_ignore_ascii_case("done")
+                    || sb.eq_ignore_ascii_case("error");
+                if (a_done || b_done) && !overlap_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                    panic!("seed {seed}: reached terminal state before overlap (A={sa} B={sb})");
+                }
+                if tokio::time::Instant::now() > deadline {
+                    panic!("seed {seed}: timed out waiting for overlap (A={sa} B={sb})");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        });
+
+        let (run_a, run_b) = tokio::join!(
+            run_session_to_deadline(&addr, id_a, marker_a, Arc::clone(&start_barrier)),
+            run_session_to_deadline(&addr, id_b, marker_b, start_barrier),
+        );
+        poller.await.expect("overlap poller join");
+        assert!(
+            overlap.load(std::sync::atomic::Ordering::SeqCst),
+            "seed {seed}: both sessions must be Running simultaneously"
+        );
+        assert!(
+            run_a.last_ts >= RUN_DEADLINE_US && run_b.last_ts >= RUN_DEADLINE_US,
+            "seed {seed}: both runs must reach deadline"
         );
 
-        let hash_a = hash_trace_lines(&marker_trace_lines(&traces_a, marker_a));
-        let hash_b = hash_trace_lines(&marker_trace_lines(&traces_b, marker_b));
+        let ev_a = collect_evidence(
+            &mut ctrl,
+            id_a,
+            marker_a,
+            &run_a.traces,
+            run_a.display_hashes.clone(),
+        )
+        .await;
+        let ev_b = collect_evidence(
+            &mut ctrl,
+            id_b,
+            marker_b,
+            &run_b.traces,
+            run_b.display_hashes.clone(),
+        )
+        .await;
+        assert_evidence_isolation(seed, marker_a, &ev_a, marker_b);
+        assert_evidence_isolation(seed, marker_b, &ev_b, marker_a);
+
         assert_eq!(
-            hash_a, hash_a_solo,
-            "seed {seed}: concurrent A marker traces diverged from solo"
+            ev_a.hash(),
+            hash_a_solo,
+            "seed {seed}: concurrent A evidence diverged from solo"
         );
         assert_eq!(
-            hash_b, hash_b_solo,
-            "seed {seed}: concurrent B marker traces diverged from solo"
+            ev_b.hash(),
+            hash_b_solo,
+            "seed {seed}: concurrent B evidence diverged from solo"
         );
 
+        // Negative peer checks on raw streams (in addition to evidence struct).
         assert!(
-            traces_contain_marker(&traces_a, marker_a),
-            "seed {seed}: session A must observe its own marker"
+            traces_contain_marker(&run_a.traces, marker_a)
+                && !traces_contain_marker(&run_a.traces, marker_b),
+            "seed {seed}: A CAN isolation failed"
         );
         assert!(
-            traces_contain_marker(&traces_b, marker_b),
-            "seed {seed}: session B must observe its own marker"
+            traces_contain_marker(&run_b.traces, marker_b)
+                && !traces_contain_marker(&run_b.traces, marker_a),
+            "seed {seed}: B CAN isolation failed"
         );
         assert!(
-            !traces_contain_marker(&traces_a, marker_b),
-            "seed {seed}: session A must not observe marker B"
+            traces_contain_eth_len(&run_a.traces, marker_a)
+                && !traces_contain_eth_len(&run_a.traces, marker_b),
+            "seed {seed}: A Ethernet isolation failed"
         );
         assert!(
-            !traces_contain_marker(&traces_b, marker_a),
-            "seed {seed}: session B must not observe marker A"
+            traces_contain_eth_len(&run_b.traces, marker_b)
+                && !traces_contain_eth_len(&run_b.traces, marker_a),
+            "seed {seed}: B Ethernet isolation failed"
         );
+        assert_ne!(
+            ev_a.display_hashes, ev_b.display_hashes,
+            "seed {seed}: display hashes must differ across sessions"
+        );
+        for h in &ev_a.display_hashes {
+            assert!(
+                !ev_b.display_hashes.contains(h),
+                "seed {seed}: A display hash leaked into B"
+            );
+        }
+        for h in &ev_b.display_hashes {
+            assert!(
+                !ev_a.display_hashes.contains(h),
+                "seed {seed}: B display hash leaked into A"
+            );
+        }
 
-        let _ = setup
-            .destroy_session(DestroySessionRequest { session_id: id_a })
-            .await;
-        let _ = setup
-            .destroy_session(DestroySessionRequest { session_id: id_b })
-            .await;
+        ctrl.destroy_session(DestroySessionRequest { session_id: id_a })
+            .await
+            .expect("destroy A");
+        ctrl.destroy_session(DestroySessionRequest { session_id: id_b })
+            .await
+            .expect("destroy B");
+
+        let after = ctrl
+            .list_sessions(ListSessionsRequest {})
+            .await
+            .expect("list after")
+            .into_inner()
+            .sessions
+            .len();
+        assert_eq!(
+            after, baseline_sessions,
+            "seed {seed}: sessions leaked (baseline={baseline_sessions} after={after})"
+        );
     }
 }
