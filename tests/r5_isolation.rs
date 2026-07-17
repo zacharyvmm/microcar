@@ -756,8 +756,7 @@ data = "{eth_payload}"
         sess.session_id
     }
 
-    /// Batch size for gRPC run stepping; timer runtime fields in evidence are
-    /// quantized to this boundary so solo and concurrent runs match.
+    /// Batch size for gRPC run stepping.
     const RUN_TICK_BATCH: u64 = 5_000;
 
     /// Virtual-time comparison bound enforced via `RunConfig.deadline_ticks`.
@@ -809,22 +808,6 @@ data = "{eth_payload}"
     }
 
     impl SessionEvidence {
-        fn quantize_timer_last_fire(&self) -> u64 {
-            // Coarser than RUN_TICK_BATCH so solo vs concurrent scheduling slop
-            // (up to one batch) lands in the same evidence bucket.
-            let quantum = RUN_TICK_BATCH * 2;
-            self.timer_last_fire_tick / quantum * quantum
-        }
-
-        fn quantize_timer_deadline(&self) -> u64 {
-            if self.timer_armed {
-                self.quantize_timer_last_fire()
-                    .saturating_add(self.timer_period)
-            } else {
-                0
-            }
-        }
-
         fn canonicalize(&self) -> String {
             let mut s = String::new();
             s.push_str(&format!(
@@ -837,10 +820,10 @@ data = "{eth_payload}"
                 self.touch_observed_y,
                 self.adc_channel0,
                 self.timer_irq,
-                self.quantize_timer_deadline(),
+                self.timer_deadline,
                 self.timer_period,
                 self.timer_fire_count,
-                self.quantize_timer_last_fire(),
+                self.timer_last_fire_tick,
                 self.timer_armed,
             ));
             for line in &self.can_marker_lines {
@@ -857,38 +840,13 @@ data = "{eth_payload}"
             s
         }
 
-        /// Hash for solo-vs-concurrent reproduction: timer runtime counters may
-        /// differ by one batch or one periodic fire at the pause boundary.
+        /// Hash for solo-vs-concurrent reproduction (includes timer runtime fields).
         fn repro_hash(&self) -> u64 {
-            let mut s = String::new();
-            s.push_str(&format!(
-                "touch_in={},{} touch_obs={},{} adc0={} timer_irq={} \
-                 timer_period={} timer_armed={}\n",
-                self.touch_x,
-                self.touch_y,
-                self.touch_observed_x,
-                self.touch_observed_y,
-                self.adc_channel0,
-                self.timer_irq,
-                self.timer_period,
-                self.timer_armed,
-            ));
-            for line in &self.can_marker_lines {
-                s.push_str("can:");
-                s.push_str(line);
-                s.push('\n');
-            }
-            for h in &self.display_hashes {
-                s.push_str(&format!("disp:{h:#016x}\n"));
-            }
-            for len in &self.eth_pkt_rx_lens {
-                s.push_str(&format!("eth_rx_len:{len}\n"));
-            }
-            super::hash_lines(&[s])
+            super::hash_lines(&[self.canonicalize()])
         }
 
         fn hash(&self) -> u64 {
-            super::hash_lines(&[self.canonicalize()])
+            self.repro_hash()
         }
     }
 
@@ -1297,9 +1255,9 @@ data = "{eth_payload}"
             concurrent.timer_period, solo.timer_period,
             "seed {seed}: {label} timer_period != solo"
         );
-        assert!(
-            concurrent.timer_fire_count.abs_diff(solo.timer_fire_count) <= 1,
-            "seed {seed}: {label} timer_fire_count != solo within boundary slop \
+        assert_eq!(
+            concurrent.timer_fire_count, solo.timer_fire_count,
+            "seed {seed}: {label} timer_fire_count != solo \
              (concurrent={} solo={})",
             concurrent.timer_fire_count,
             solo.timer_fire_count
@@ -1308,19 +1266,16 @@ data = "{eth_payload}"
             concurrent.timer_armed, solo.timer_armed,
             "seed {seed}: {label} timer_armed != solo"
         );
-        assert!(
-            concurrent
-                .timer_last_fire_tick
-                .abs_diff(solo.timer_last_fire_tick)
-                <= RUN_TICK_BATCH * 2,
-            "seed {seed}: {label} timer_last_fire_tick != solo within batch slop \
+        assert_eq!(
+            concurrent.timer_last_fire_tick, solo.timer_last_fire_tick,
+            "seed {seed}: {label} timer_last_fire_tick != solo \
              (concurrent={} solo={})",
             concurrent.timer_last_fire_tick,
             solo.timer_last_fire_tick
         );
-        assert!(
-            concurrent.timer_deadline.abs_diff(solo.timer_deadline) <= RUN_TICK_BATCH * 2,
-            "seed {seed}: {label} timer_deadline != solo within batch slop \
+        assert_eq!(
+            concurrent.timer_deadline, solo.timer_deadline,
+            "seed {seed}: {label} timer_deadline != solo \
              (concurrent={} solo={})",
             concurrent.timer_deadline,
             solo.timer_deadline
