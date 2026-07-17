@@ -9,9 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Temporary pin to costar#7 head (TimerArm + timer inspect fields) pending merge.
-  # After costar#7 merges, retarget to main or the merge commit SHA.
-  COSTAR_REF: 1c63f3e9d604381e419e055a68ce7c0ba6000e81
+  # Temporary pin to costar dogfood-milestone-4 head with inject warmup.
+  COSTAR_REF: 1f35b3b1eb6a4d77df4290cf9d7c7b93b8b19cc2
 
 jobs:
   build-and-test:
