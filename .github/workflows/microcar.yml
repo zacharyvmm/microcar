@@ -9,8 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Pin to the costar#8 merge commit on main (R4 lifecycle hotfix).
-  COSTAR_REF: 1bf31d9609c2415c480e012eddfcfe1b073498dc
+  # Pin to the costar#11 merge commit on main (R4 lifecycle closeout).
+  COSTAR_REF: a8bd9b3c04eb4a0ae58742e8e749579626ed6b9e
 
 jobs:
   build-and-test:

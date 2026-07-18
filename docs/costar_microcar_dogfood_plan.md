@@ -1,12 +1,12 @@
 # costar + microcar Dogfood: Remaining-Work Agent Guide
 
-Last audited against the code: 2026-07-18, after `costar#8` merge
-`1bf31d9609c2415c480e012eddfcfe1b073498dc` (R4 lifecycle hotfix) with R4/R5
-paired microcar gates green.
+Last audited against the code: 2026-07-18. R5 is `DONE`. R4 is `IN PROGRESS`
+pending the final `costar#11` merge (generation vs scenario_revision split,
+deadline evidence flush, Windows CI) and a Microcar pin to that merge commit.
 
 This file is the execution contract for the next implementation PRs. It has been
-trimmed so agents do **not** re-implement the R0/R1/R2/R3-core/R4/R5 work already
-landed. The next PR should start with R6 in Section 6.
+trimmed so agents do **not** re-implement the R0/R1/R2/R3-core/R5 work already
+landed. Do not advance to R6 until R4 is marked `DONE` after paired validation.
 
 `docs/BLOCKERS.md`, `UNBLOCKING.md`, and `HANDOFF.md` contain useful history,
 but some of their completion claims do not match the current code. When they
@@ -79,7 +79,7 @@ and report changed files plus exact command results. Do not mark the packet
 complete if an acceptance item is skipped or replaced by trace-only evidence.
 ```
 
-For the next PR, use:
+For the next PR after R4 closeout, use:
 
 ```text
 Implement packet R6 from docs/costar_microcar_dogfood_plan.md and no later
@@ -89,9 +89,8 @@ and report changed files plus exact command results. Do not mark the packet
 complete if an acceptance item is skipped or replaced by trace-only evidence.
 ```
 
-R4 and R5 are `DONE`. Do not reopen their evidence design unless an R6 API
-change requires it. Paired costar revision: `1bf31d9609c2415c480e012eddfcfe1b073498dc`
-(`costar#8`).
+R5 is `DONE`. R4 remains `IN PROGRESS` until the final `costar#11` merge commit
+is pinned and paired Microcar R4/R5 gates pass against it.
 
 ## 4. Definition of Done for Every Packet
 
@@ -136,7 +135,7 @@ Status meanings:
 | NetworkBank core isolation | DONE | Per-machine NetworkBank is scoped via execution context; World Ethernet RX/TX for `ETH_DEVICES[0]` is banked and covered by 100x A/B World isolation tests; SimNetDevice and SmoltcpBridge objects are bank-local; destroy/recreate yields no stale core bank state; panic restores prior context. |
 | NetworkBank host/TCP hardening | DONE | Host FD register/block/wake/deregister routes through the active `NetworkBank`; bank destroy/recreate clears fds/readiness/blocked task IDs; fragmented TcpBridge streams are isolated across banks; legacy TLS fallback remains for single-simulator paths. |
 | JSON-RPC per-session locking | DONE | `sim-runner` uses `BTreeMap<u64, Arc<Mutex<Session>>>`; map lock is lookup-only; TTL exempts Running/Paused; cleanup ≤30s + create/list; Stop → Done; session-limit / TTL-exempt / failed-sibling tests pass. |
-| Restart/control-plane residuals (R4) | DONE | costar#8 lifecycle hotfix: firmware factories survive reset/clone/keyframe; destroy rejects Running; atomic Run checkout; factory-panic world return; sparse cooperative batch progress; paired reboot 100× + R5 gates green against `1bf31d9609c2415c480e012eddfcfe1b073498dc`. |
+| Restart/control-plane residuals (R4) | IN PROGRESS | costar#8 landed base lifecycle; costar#11 adds generation/scenario_revision split, deadline-batch flush, and Windows CI fixes. Pin Microcar to the costar#11 merge commit and rerun paired reboot/isolation gates before marking DONE. |
 | Duplicate-world/session isolation gate (R5) | DONE | World Trace v2 interleave 100×; BMS plant-frame isolation; gateway `boot_at` CAN delivery; concurrent gRPC sessions with colliding IDs prove CAN/display/touch/timer/ADC/Ethernet isolation vs solo baselines with peer negatives, 100× (`tests/r5_isolation.rs`). |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | Live diagnostics | SCAFFOLD | BMS now consumes `MC_MSG_PLANT_SENSORS` (0x500) into live state; gateway still returns `UNSUPPORTED` for live BMS selectors; diagnostics tool does not yet issue/assemble protocol requests. |
@@ -169,16 +168,15 @@ R1 GuestRuntime time/task identity
 R2 per-instance C firmware state
 R3 core NetworkBank activation and Ethernet device-0 isolation
 R3H host/TCP NetworkBank hardening
-R4 control-plane and restart residuals (costar#8)
 R5 duplicate-world/session isolation gate
 ```
 
-Remaining order (R4 and R5 closed; next packet is R6):
+Remaining order (R4 open until costar#11 merge + paired pin; R5 closed):
 
 ```text
-R4 control-plane and restart residuals          ← DONE (costar#8 + paired gates)
+R4 control-plane and restart residuals          ← IN PROGRESS (await costar#11)
 R5 duplicate-world/session isolation gate       ← DONE
-R6 diagnostics                                  ← next
+R6 diagnostics                                  ← next after R4 DONE
 R7 charging  (may run with R6 if gateway_ecu ownership is coordinated)
 R8 telematics (may run with R6/R7)
 R6 + R7 ───────────────── R9 OTA
@@ -187,7 +185,8 @@ R6 + R8 + R10 ─────────── R11 debug corpus + predicates
 R6..R11 ───────────────── R12 soak + CI + final documentation
 ```
 
-**Paired costar revision:** `1bf31d9609c2415c480e012eddfcfe1b073498dc` (`costar#8`).
+**Paired costar revision (temporary):** open `costar#11` head until merge; final
+Microcar pin must be the costar#11 merge commit on `main`, not `costar#8`.
 
 **R4/R5 keep-green regressions (do not waive):**
 
@@ -284,9 +283,9 @@ host-poller code.
 
 ### R4 — Finish control-plane and restart residuals
 
-**Status: DONE** (2026-07-18) — closed by `costar#8` merge
-`1bf31d9609c2415c480e012eddfcfe1b073498dc` plus paired microcar reboot 100× and
-R5 isolation gates. No R4 lifecycle acceptance waivers remain.
+**Status: IN PROGRESS** — `costar#8` landed the base lifecycle hotfix; `costar#11`
+must merge with green Windows CI (generation vs scenario_revision, deadline
+evidence flush) and Microcar must pin that merge commit before R4 is `DONE`.
 
 **Goal:** both control planes have the same lock/lifecycle behavior, and the
 microcar reboot fixture proves firmware recovery rather than reset markers.
