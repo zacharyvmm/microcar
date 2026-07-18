@@ -1,11 +1,12 @@
 # costar + microcar Dogfood: Remaining-Work Agent Guide
 
-Last audited against the code: 2026-07-14, after `microcar#3` / `costar#6`.
+Last audited against the code: 2026-07-18, after `costar#8` merge
+`1bf31d9609c2415c480e012eddfcfe1b073498dc` (R4 lifecycle hotfix) with R4/R5
+paired microcar gates green.
 
 This file is the execution contract for the next implementation PRs. It has been
-trimmed so agents do **not** re-implement the R0/R1/R2/R3-core work already
-landed in the current milestone-3 PRs. The next PR should start with the first
-remaining packet in Section 6.
+trimmed so agents do **not** re-implement the R0/R1/R2/R3-core/R4/R5 work already
+landed. The next PR should start with R6 in Section 6.
 
 `docs/BLOCKERS.md`, `UNBLOCKING.md`, and `HANDOFF.md` contain useful history,
 but some of their completion claims do not match the current code. When they
@@ -81,15 +82,16 @@ complete if an acceptance item is skipped or replaced by trace-only evidence.
 For the next PR, use:
 
 ```text
-Finish remaining R4/R5 closeout from docs/costar_microcar_dogfood_plan.md.
-Do not begin R6 until every R4 and R5 acceptance item passes with no waivers.
-Verify against the paired costar revision, preserve legacy fixtures/goldens,
-update the Section 5 status rows only when gates are genuinely complete, and
-report changed files plus exact command results.
+Implement packet R6 from docs/costar_microcar_dogfood_plan.md and no later
+packet. Verify its prerequisites against the current code, preserve legacy
+fixtures/goldens, meet every acceptance item, update the Section 5 status row,
+and report changed files plus exact command results. Do not mark the packet
+complete if an acceptance item is skipped or replaced by trace-only evidence.
 ```
 
-Previously this section pointed at R6; that prompt is disabled until R4/R5 are
-`DONE`.
+R4 and R5 are `DONE`. Do not reopen their evidence design unless an R6 API
+change requires it. Paired costar revision: `1bf31d9609c2415c480e012eddfcfe1b073498dc`
+(`costar#8`).
 
 ## 4. Definition of Done for Every Packet
 
@@ -134,7 +136,7 @@ Status meanings:
 | NetworkBank core isolation | DONE | Per-machine NetworkBank is scoped via execution context; World Ethernet RX/TX for `ETH_DEVICES[0]` is banked and covered by 100x A/B World isolation tests; SimNetDevice and SmoltcpBridge objects are bank-local; destroy/recreate yields no stale core bank state; panic restores prior context. |
 | NetworkBank host/TCP hardening | DONE | Host FD register/block/wake/deregister routes through the active `NetworkBank`; bank destroy/recreate clears fds/readiness/blocked task IDs; fragmented TcpBridge streams are isolated across banks; legacy TLS fallback remains for single-simulator paths. |
 | JSON-RPC per-session locking | DONE | `sim-runner` uses `BTreeMap<u64, Arc<Mutex<Session>>>`; map lock is lookup-only; TTL exempts Running/Paused; cleanup ≤30s + create/list; Stop → Done; session-limit / TTL-exempt / failed-sibling tests pass. |
-| Restart/control-plane residuals (R4) | IN PROGRESS | gRPC `failed_session_returns_world_and_sibling_runs` with panicking test firmware; JSON-RPC sibling Error isolation test; `b3_gateway_reboot_downtime` + `tests/gateway_reboot_downtime.rs` (100× flash/RTOS/volatile/sibling). |
+| Restart/control-plane residuals (R4) | DONE | costar#8 lifecycle hotfix: firmware factories survive reset/clone/keyframe; destroy rejects Running; atomic Run checkout; factory-panic world return; sparse cooperative batch progress; paired reboot 100× + R5 gates green against `1bf31d9609c2415c480e012eddfcfe1b073498dc`. |
 | Duplicate-world/session isolation gate (R5) | DONE | World Trace v2 interleave 100×; BMS plant-frame isolation; gateway `boot_at` CAN delivery; concurrent gRPC sessions with colliding IDs prove CAN/display/touch/timer/ADC/Ethernet isolation vs solo baselines with peer negatives, 100× (`tests/r5_isolation.rs`). |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
 | Live diagnostics | SCAFFOLD | BMS now consumes `MC_MSG_PLANT_SENSORS` (0x500) into live state; gateway still returns `UNSUPPORTED` for live BMS selectors; diagnostics tool does not yet issue/assemble protocol requests. |
@@ -167,14 +169,16 @@ R1 GuestRuntime time/task identity
 R2 per-instance C firmware state
 R3 core NetworkBank activation and Ethernet device-0 isolation
 R3H host/TCP NetworkBank hardening
+R4 control-plane and restart residuals (costar#8)
+R5 duplicate-world/session isolation gate
 ```
 
-Remaining order (R5 closed; finish R4 reboot 100× soak before R6):
+Remaining order (R4 and R5 closed; next packet is R6):
 
 ```text
-R4 control-plane and restart residuals          ← IN PROGRESS (reboot 100× soak)
+R4 control-plane and restart residuals          ← DONE (costar#8 + paired gates)
 R5 duplicate-world/session isolation gate       ← DONE
-R6 diagnostics
+R6 diagnostics                                  ← next
 R7 charging  (may run with R6 if gateway_ecu ownership is coordinated)
 R8 telematics (may run with R6/R7)
 R6 + R7 ───────────────── R9 OTA
@@ -183,15 +187,17 @@ R6 + R8 + R10 ─────────── R11 debug corpus + predicates
 R6..R11 ───────────────── R12 soak + CI + final documentation
 ```
 
-**R4/R5 remaining blockers (do not waive):**
+**Paired costar revision:** `1bf31d9609c2415c480e012eddfcfe1b073498dc` (`costar#8`).
 
-- Plain JSON-RPC `sim.run` TCP disconnect → `Paused` (costar) — implemented; keep green under full gates
-- `session.destroy` rejects active Running workers (`SESSION_IN_USE`) — implemented; keep green
-- Exact generic Ethernet isolation negative assertions — implemented; keep green
-- FreeRTOS multi-world / multi-thread kernel isolation — per-Simulator C context snapshots + process-wide activation lock; world-level Drop/recreate green; concurrent gRPC `Running` overlap green
-- Full gRPC device evidence matrix (CAN/display/touch/timer/ADC/Ethernet) with solo baselines, peer negatives, and 100× parent — implemented in `tests/r5_isolation.rs`
-- Sibling powertrain uptime continuity across gateway reboot — strengthened; keep the 100× reboot gate green
-- Dogfood plan statuses consistent (this section)
+**R4/R5 keep-green regressions (do not waive):**
+
+- Plain JSON-RPC `sim.run` TCP disconnect → `Paused` (costar)
+- `session.destroy` rejects active Running workers (`SESSION_IN_USE` / gRPC `FailedPrecondition`)
+- Exact generic Ethernet isolation negative assertions
+- FreeRTOS multi-world / multi-thread kernel isolation
+- Full gRPC device evidence matrix in `tests/r5_isolation.rs`
+- Sibling powertrain uptime continuity across gateway reboot (`tests/gateway_reboot_downtime.rs` 100×)
+- Firmware factories preserved across gRPC reset/clone/keyframe; factory panic returns world as Error; sparse unbounded gRPC Run makes progress
 
 R6 and R7 may run concurrently after R5 if agents coordinate ownership of
 `gateway_ecu/src/main.c`; otherwise run them sequentially. R8 may run in parallel
@@ -278,7 +284,9 @@ host-poller code.
 
 ### R4 — Finish control-plane and restart residuals
 
-**Status: IN PROGRESS** (2026-07-17) — remaining: gRPC product FreeRTOS worker SIGSEGV (`pxCurrentTCB`); finish reboot 100×; do not mark DONE until all acceptance items pass with no waivers.
+**Status: DONE** (2026-07-18) — closed by `costar#8` merge
+`1bf31d9609c2415c480e012eddfcfe1b073498dc` plus paired microcar reboot 100× and
+R5 isolation gates. No R4 lifecycle acceptance waivers remain.
 
 **Goal:** both control planes have the same lock/lifecycle behavior, and the
 microcar reboot fixture proves firmware recovery rather than reset markers.
@@ -320,7 +328,7 @@ microcar reboot fixture proves firmware recovery rather than reset markers.
   inspectable in `Error`.
 - The microcar reboot test passes 100 repetitions.
 
-**May run with:** none; finish the control-plane gate before R5.
+**May run with:** none (complete).
 
 ### R5 — Full duplicate-world/session isolation gate
 
