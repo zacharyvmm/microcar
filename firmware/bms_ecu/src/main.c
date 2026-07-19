@@ -146,9 +146,9 @@ uint8_t bms_calibration_done(bms_ctx_t *ctx)
 
 // ── Message handlers ──────────────────────────────────────────────────────
 
-/// Process BMS status frame (0x300) from the plant.
+/// Process a plant sensor frame (0x500) into live BMS state.
 /// Format: [soc, volt_hi, volt_lo, temp_hi, temp_lo, current_hi, current_lo]
-static void handle_bms_status(bms_ctx_t *ctx, const mc_can_frame_t *frame)
+static void handle_plant_sensors(bms_ctx_t *ctx, const mc_can_frame_t *frame)
 {
     if (frame->len < 7) return;
 
@@ -191,8 +191,12 @@ static void handle_bms_status(bms_ctx_t *ctx, const mc_can_frame_t *frame)
 static void dispatch_frame(bms_ctx_t *ctx, const mc_can_frame_t *frame)
 {
     switch (frame->id) {
-    case MC_MSG_BMS_STATUS:
-        handle_bms_status(ctx, frame);
+    case MC_MSG_PLANT_SENSORS: /* plant → BMS sensor path (0x500) — the only
+                                 * plant-decoder input. MC_MSG_BMS_STATUS
+                                 * (0x200) is this ECU's own output and uses a
+                                 * different wire layout; it must never be fed
+                                 * back through the plant decoder. */
+        handle_plant_sensors(ctx, frame);
         break;
     default:
         break;

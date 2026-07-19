@@ -1,11 +1,12 @@
 # costar + microcar Dogfood: Remaining-Work Agent Guide
 
-Last audited against the code: 2026-07-14, after `microcar#3` / `costar#6`.
+Last audited against the code: 2026-07-18, after `costar#11` merge
+`a8bd9b3c04eb4a0ae58742e8e749579626ed6b9e` with paired Microcar R4/R5 gates
+green (CI run https://github.com/zacharyvmm/microcar/actions/runs/29659950966).
 
 This file is the execution contract for the next implementation PRs. It has been
-trimmed so agents do **not** re-implement the R0/R1/R2/R3-core work already
-landed in the current milestone-3 PRs. The next PR should start with the first
-remaining packet in Section 6.
+trimmed so agents do **not** re-implement the R0/R1/R2/R3-core/R4/R5 work already
+landed. The next PR should start with R6 in Section 6.
 
 `docs/BLOCKERS.md`, `UNBLOCKING.md`, and `HANDOFF.md` contain useful history,
 but some of their completion claims do not match the current code. When they
@@ -81,13 +82,16 @@ complete if an acceptance item is skipped or replaced by trace-only evidence.
 For the next PR, use:
 
 ```text
-Implement packet R3H from docs/costar_microcar_dogfood_plan.md and no later
-packet. Verify the R0/R1/R2/R3-core prerequisites against the current code,
-preserve legacy fixtures/goldens, meet every acceptance item, update the Section
-5 status row, and report changed files plus exact command results. Do not mark
-R3H complete if host FD isolation or fragmented TCP isolation is skipped or
-replaced by trace-only evidence.
+Implement packet R6 from docs/costar_microcar_dogfood_plan.md and no later
+packet. Verify its prerequisites against the current code, preserve legacy
+fixtures/goldens, meet every acceptance item, update the Section 5 status row,
+and report changed files plus exact command results. Do not mark the packet
+complete if an acceptance item is skipped or replaced by trace-only evidence.
 ```
+
+R4 and R5 are `DONE`. Do not reopen their evidence design unless an R6 API
+change requires it. Paired costar revision: `a8bd9b3c04eb4a0ae58742e8e749579626ed6b9e`
+(`costar#11`). No R4 lifecycle acceptance waivers remain.
 
 ## 4. Definition of Done for Every Packet
 
@@ -130,11 +134,12 @@ Status meanings:
 | Per-machine time and task identity | DONE | `GuestRuntime` accessors (`active_now`, `active_task_id`, etc.) are wired through C ABI paths; global atomics are legacy fallback only. |
 | C firmware instance isolation | DONE | All eight ECUs use `sim_instance_state` with unique keys; mutable ECU state has moved into per-instance contexts. |
 | NetworkBank core isolation | DONE | Per-machine NetworkBank is scoped via execution context; World Ethernet RX/TX for `ETH_DEVICES[0]` is banked and covered by 100x A/B World isolation tests; SimNetDevice and SmoltcpBridge objects are bank-local; destroy/recreate yields no stale core bank state; panic restores prior context. |
-| NetworkBank host/TCP hardening | TODO | Host FD poller/readiness routing through NetworkBank and real fragmented TCP stream isolation are not complete. This is the next packet: R3H. |
-| JSON-RPC per-session locking | SCAFFOLD | `sim-runner/src/serve.rs` still stores `BTreeMap<u64, Session>` under one global mutex. |
-| Restart/control-plane residuals | SCAFFOLD | gRPC has core session bounds, but the remaining cross-control-plane outcome parity, panic/error sibling test, and stronger microcar reboot fixture are not complete. |
+| NetworkBank host/TCP hardening | DONE | Host FD register/block/wake/deregister routes through the active `NetworkBank`; bank destroy/recreate clears fds/readiness/blocked task IDs; fragmented TcpBridge streams are isolated across banks; legacy TLS fallback remains for single-simulator paths. |
+| JSON-RPC per-session locking | DONE | `sim-runner` uses `BTreeMap<u64, Arc<Mutex<Session>>>`; map lock is lookup-only; TTL exempts Running/Paused; cleanup ≤30s + create/list; Stop → Done; session-limit / TTL-exempt / failed-sibling tests pass. |
+| Restart/control-plane residuals (R4) | DONE | costar#11 merge `a8bd9b3c04eb4a0ae58742e8e749579626ed6b9e`: generation vs scenario_revision, deadline-batch flush, Windows CI green; paired Microcar reboot 100× + R5 gates green. No R4 lifecycle acceptance waivers remain. |
+| Duplicate-world/session isolation gate (R5) | DONE | World Trace v2 interleave 100×; BMS plant-frame isolation; gateway `boot_at` CAN delivery; concurrent gRPC sessions with colliding IDs prove CAN/display/touch/timer/ADC/Ethernet isolation vs solo baselines with peer negatives, 100× (`tests/r5_isolation.rs`). |
 | Protocol IDs/payload structs and external-actor validation | DONE | Stage C IDs and packed structs exist; validation has tests. |
-| Live diagnostics | SCAFFOLD | BMS emits sequenced status but dispatches the wrong input ID; gateway returns `UNSUPPORTED` for live BMS; tool does not issue/assemble selectors. |
+| Live diagnostics | SCAFFOLD | BMS now consumes `MC_MSG_PLANT_SENSORS` (0x500) into live state; gateway still returns `UNSUPPORTED` for live BMS selectors; diagnostics tool does not yet issue/assemble protocol requests. |
 | Charging | CORE ONLY | C FSM and battery signed-current method exist. Rust FSM mirror is a one-test stub; firmware and plant CAN loop are not wired. |
 | OTA persistence model | CORE ONLY | The 32-byte metadata model and Rust mirror exist. Gateway still runs an in-RAM timed script, and OTA tool uses incompatible local message definitions. |
 | Dashboard | CORE ONLY | C renderer and FreeRTOS display task exist. The authoritative gRPC test uses synthetic Rust firmware, not microcar firmware; Zephyr and product-session coverage are incomplete. |
@@ -163,22 +168,45 @@ R0 ECU classification
 R1 GuestRuntime time/task identity
 R2 per-instance C firmware state
 R3 core NetworkBank activation and Ethernet device-0 isolation
+R3H host/TCP NetworkBank hardening
+R4 control-plane and restart residuals (costar#11)
+R5 duplicate-world/session isolation gate
 ```
 
-Remaining order:
+Remaining order (R4 and R5 closed; next packet is R6):
 
 ```text
-R3H host/TCP NetworkBank hardening
-  └─ R4 control-plane and restart residuals
-      └─ R5 duplicate-world/session isolation gate
-          ├─ R6 diagnostics
-          ├─ R7 charging
-          └─ R8 telematics
+R4 control-plane and restart residuals          ← DONE (costar#11 + paired gates)
+R5 duplicate-world/session isolation gate       ← DONE
+R6 diagnostics                                  ← next
+R7 charging  (may run with R6 if gateway_ecu ownership is coordinated)
+R8 telematics (may run with R6/R7)
 R6 + R7 ───────────────── R9 OTA
 R5 + R6/R7/R9 as inputs ─ R10 cockpit
 R6 + R8 + R10 ─────────── R11 debug corpus + predicates
 R6..R11 ───────────────── R12 soak + CI + final documentation
 ```
+
+**Paired costar revision:** `a8bd9b3c04eb4a0ae58742e8e749579626ed6b9e` (`costar#11`).
+
+**Paired validation (2026-07-18):**
+
+- Final Costar merge SHA: `a8bd9b3c04eb4a0ae58742e8e749579626ed6b9e`
+- Microcar CI: https://github.com/zacharyvmm/microcar/actions/runs/29659950966
+- Commands: `cargo test --workspace` (Costar then Microcar in CI); focused BMS,
+  reboot once/100×/TOML, and R5 isolation gates
+- Ignored tests / waivers: none for R4 lifecycle acceptance
+- Statement: No R4 lifecycle acceptance waivers remain.
+
+**R4/R5 keep-green regressions (do not waive):**
+
+- Plain JSON-RPC `sim.run` TCP disconnect → `Paused` (costar)
+- `session.destroy` rejects active Running workers (`SESSION_IN_USE` / gRPC `FailedPrecondition`)
+- Exact generic Ethernet isolation negative assertions
+- FreeRTOS multi-world / multi-thread kernel isolation
+- Full gRPC device evidence matrix in `tests/r5_isolation.rs`
+- Sibling powertrain uptime continuity across gateway reboot (`tests/gateway_reboot_downtime.rs` 100×)
+- Firmware factories preserved across gRPC reset/clone/keyframe; factory panic returns world as Error; sparse unbounded gRPC Run makes progress
 
 R6 and R7 may run concurrently after R5 if agents coordinate ownership of
 `gateway_ecu/src/main.c`; otherwise run them sequentially. R8 may run in parallel
@@ -187,6 +215,8 @@ both R6 and R7 because OTA admission depends on fresh BMS state and charging
 state. R10 should follow the real vehicle states it displays.
 
 ### R3H — Harden NetworkBank host FD and TCP stream isolation
+
+**Status: DONE** (2026-07-17)
 
 **Goal:** network device 0, TCP framing, and host poller state are isolated and
 destroyed with their owning machine/session, not merely the in-process Ethernet
@@ -263,6 +293,10 @@ host-poller code.
 
 ### R4 — Finish control-plane and restart residuals
 
+**Status: DONE** (2026-07-18) — closed by `costar#11` merge
+`a8bd9b3c04eb4a0ae58742e8e749579626ed6b9e` plus paired Microcar reboot 100× and
+R5 isolation gates against that pin. No R4 lifecycle acceptance waivers remain.
+
 **Goal:** both control planes have the same lock/lifecycle behavior, and the
 microcar reboot fixture proves firmware recovery rather than reset markers.
 
@@ -303,9 +337,13 @@ microcar reboot fixture proves firmware recovery rather than reset markers.
   inspectable in `Error`.
 - The microcar reboot test passes 100 repetitions.
 
-**May run with:** none; finish the control-plane gate before R5.
+**May run with:** none (complete).
 
 ### R5 — Full duplicate-world/session isolation gate
+
+**Status: DONE** (2026-07-17) — world Trace v2 interleave 100×; concurrent gRPC
+sessions with colliding device IDs prove CAN/display/touch/timer/ADC/Ethernet
+isolation against solo baselines with peer negatives, 100× parent gate.
 
 **Goal:** close the infrastructure gate before product lanes claim real
 concurrent isolation.
@@ -318,7 +356,7 @@ concurrent isolation.
   status/limits without cross-observation.
 - Two concurrent gRPC sessions load real microcar firmware, configure the same
   display/touch/timer/ADC/CAN/Ethernet device IDs, inject different inputs, and
-  reproduce their solo hashes, 100 times.
+  reproduce their solo semantic evidence hashes, 100 times.
 - Reboot resets selected C/device/network volatile state while preserving only
   selected persistent devices and every sibling state.
 - Frames arriving before `boot_at` are absent; a frame at `boot_at` is received
