@@ -14,1114 +14,1114 @@
 [machine.1]            0 user-u32 "worker_start" = 0
 [machine.1]            0 task-resume id=2 reason=scheduler
 [machine.1]            0 task-yield id=2 reason=Idle
-[machine.1]            1 task-resume id=1 reason=scheduler
-[machine.1]            1 task-created id=5 name="worker"
-[machine.1]            1 task-yield id=1 reason=RtosPortYield
-[machine.1]            1 task-resume id=5 reason=scheduler
-[machine.1]            1 task-yield id=5 reason=RtosPortYield
-[machine.1]            1 user-u32 "worker_start" = 1
-[machine.1]            1 task-resume id=2 reason=scheduler
-[machine.1]            1 task-yield id=2 reason=Idle
-[machine.1]            2 task-resume id=1 reason=scheduler
-[machine.1]            2 task-created id=6 name="worker"
-[machine.1]            2 task-yield id=1 reason=RtosPortYield
-[machine.1]            2 task-resume id=6 reason=scheduler
-[machine.1]            2 task-yield id=6 reason=RtosPortYield
-[machine.1]            2 user-u32 "worker_start" = 2
-[machine.1]            2 task-resume id=2 reason=scheduler
-[machine.1]            2 task-yield id=2 reason=Idle
-[machine.1]            3 task-resume id=1 reason=scheduler
-[machine.1]            3 task-created id=7 name="worker"
-[machine.1]            3 task-yield id=1 reason=RtosPortYield
-[machine.1]            3 task-resume id=7 reason=scheduler
-[machine.1]            3 task-yield id=7 reason=RtosPortYield
-[machine.1]            3 user-u32 "worker_start" = 3
-[machine.1]            3 task-resume id=2 reason=scheduler
-[machine.1]            3 task-yield id=2 reason=Idle
-[machine.1]            4 task-resume id=1 reason=scheduler
-[machine.1]            4 task-created id=8 name="worker"
-[machine.1]            4 task-yield id=1 reason=RtosPortYield
-[machine.1]            4 task-resume id=8 reason=scheduler
-[machine.1]            4 task-yield id=8 reason=RtosPortYield
-[machine.1]            4 user-u32 "worker_start" = 4
-[machine.1]            4 task-resume id=2 reason=scheduler
-[machine.1]            4 task-yield id=2 reason=Idle
-[machine.1]            5 task-resume id=1 reason=scheduler
-[machine.1]            5 task-created id=9 name="worker"
-[machine.1]            5 task-yield id=1 reason=RtosPortYield
-[machine.1]            5 task-resume id=5 reason=scheduler
-[machine.1]            5 task-yield id=5 reason=RtosPortYield
-[machine.1]            5 user-u32 "worker_done" = 1
-[machine.1]            5 task-resume id=9 reason=scheduler
-[machine.1]            5 task-yield id=9 reason=RtosPortYield
-[machine.1]            5 user-u32 "worker_start" = 5
-[machine.1]            5 task-resume id=2 reason=scheduler
-[machine.1]            5 task-yield id=2 reason=Idle
-[machine.1]            6 task-resume id=1 reason=scheduler
-[machine.1]            6 task-created id=10 name="worker"
-[machine.1]            6 task-yield id=1 reason=RtosPortYield
-[machine.1]            6 task-resume id=10 reason=scheduler
-[machine.1]            6 task-yield id=10 reason=RtosPortYield
-[machine.1]            6 user-u32 "worker_start" = 6
-[machine.1]            6 task-resume id=2 reason=scheduler
-[machine.1]            6 task-yield id=2 reason=Idle
-[machine.1]            7 task-resume id=1 reason=scheduler
-[machine.1]            7 task-created id=11 name="worker"
-[machine.1]            7 task-yield id=1 reason=RtosPortYield
-[machine.1]            7 task-resume id=10 reason=scheduler
-[machine.1]            7 task-yield id=10 reason=RtosPortYield
-[machine.1]            7 user-u32 "worker_done" = 6
-[machine.1]            7 task-resume id=11 reason=scheduler
-[machine.1]            7 task-yield id=11 reason=RtosPortYield
-[machine.1]            7 user-u32 "worker_start" = 7
-[machine.1]            7 task-resume id=2 reason=scheduler
-[machine.1]            7 task-yield id=2 reason=Idle
-[machine.1]            8 task-resume id=1 reason=scheduler
-[machine.1]            8 task-created id=12 name="worker"
-[machine.1]            8 task-yield id=1 reason=RtosPortYield
-[machine.1]            8 task-resume id=12 reason=scheduler
-[machine.1]            8 task-yield id=12 reason=RtosPortYield
-[machine.1]            8 user-u32 "worker_start" = 8
-[machine.1]            8 task-resume id=2 reason=scheduler
-[machine.1]            8 task-yield id=2 reason=Idle
-[machine.1]            9 task-resume id=1 reason=scheduler
-[machine.1]            9 task-created id=13 name="worker"
-[machine.1]            9 task-yield id=1 reason=RtosPortYield
-[machine.1]            9 task-resume id=11 reason=scheduler
-[machine.1]            9 task-yield id=11 reason=RtosPortYield
-[machine.1]            9 user-u32 "worker_done" = 7
-[machine.1]            9 task-resume id=13 reason=scheduler
-[machine.1]            9 task-yield id=13 reason=RtosPortYield
-[machine.1]            9 user-u32 "worker_start" = 9
-[machine.1]            9 task-resume id=2 reason=scheduler
-[machine.1]            9 task-yield id=2 reason=Idle
-[machine.1]           10 task-resume id=1 reason=scheduler
-[machine.1]           10 task-created id=14 name="worker"
-[machine.1]           10 task-yield id=1 reason=RtosPortYield
-[machine.1]           10 task-resume id=14 reason=scheduler
-[machine.1]           10 task-yield id=14 reason=RtosPortYield
-[machine.1]           10 user-u32 "worker_start" = 10
-[machine.1]           10 task-resume id=2 reason=scheduler
-[machine.1]           10 task-yield id=2 reason=Idle
-[machine.1]           11 task-resume id=1 reason=scheduler
-[machine.1]           11 task-created id=15 name="worker"
-[machine.1]           11 task-yield id=1 reason=RtosPortYield
-[machine.1]           11 task-resume id=8 reason=scheduler
-[machine.1]           11 task-yield id=8 reason=RtosPortYield
-[machine.1]           11 user-u32 "worker_done" = 4
-[machine.1]           11 task-resume id=15 reason=scheduler
-[machine.1]           11 task-yield id=15 reason=RtosPortYield
-[machine.1]           11 user-u32 "worker_start" = 11
-[machine.1]           11 task-resume id=2 reason=scheduler
-[machine.1]           11 task-yield id=2 reason=Idle
-[machine.1]           12 task-resume id=1 reason=scheduler
-[machine.1]           12 task-created id=16 name="worker"
-[machine.1]           12 task-yield id=1 reason=RtosPortYield
-[machine.1]           12 task-resume id=16 reason=scheduler
-[machine.1]           12 task-yield id=16 reason=RtosPortYield
-[machine.1]           12 user-u32 "worker_start" = 12
-[machine.1]           12 task-resume id=2 reason=scheduler
-[machine.1]           12 task-yield id=2 reason=Idle
-[machine.1]           13 task-resume id=1 reason=scheduler
-[machine.1]           13 task-created id=17 name="worker"
-[machine.1]           13 task-yield id=1 reason=RtosPortYield
-[machine.1]           13 task-resume id=17 reason=scheduler
-[machine.1]           13 task-yield id=17 reason=RtosPortYield
-[machine.1]           13 user-u32 "worker_start" = 13
-[machine.1]           13 task-resume id=2 reason=scheduler
-[machine.1]           13 task-yield id=2 reason=Idle
-[machine.1]           14 task-resume id=1 reason=scheduler
-[machine.1]           14 task-created id=18 name="worker"
-[machine.1]           14 task-yield id=1 reason=RtosPortYield
-[machine.1]           14 task-resume id=18 reason=scheduler
-[machine.1]           14 task-yield id=18 reason=RtosPortYield
-[machine.1]           14 user-u32 "worker_start" = 14
-[machine.1]           14 task-resume id=2 reason=scheduler
-[machine.1]           14 task-yield id=2 reason=Idle
-[machine.1]           15 task-resume id=1 reason=scheduler
-[machine.1]           15 task-created id=19 name="worker"
-[machine.1]           15 task-yield id=1 reason=RtosPortYield
-[machine.1]           15 task-resume id=4 reason=scheduler
-[machine.1]           15 task-yield id=4 reason=RtosPortYield
-[machine.1]           15 user-u32 "worker_done" = 0
-[machine.1]           15 task-resume id=6 reason=scheduler
-[machine.1]           15 task-yield id=6 reason=RtosPortYield
-[machine.1]           15 user-u32 "worker_done" = 2
-[machine.1]           15 task-resume id=14 reason=scheduler
-[machine.1]           15 task-yield id=14 reason=RtosPortYield
-[machine.1]           15 user-u32 "worker_done" = 10
-[machine.1]           15 task-resume id=16 reason=scheduler
-[machine.1]           15 task-yield id=16 reason=RtosPortYield
-[machine.1]           15 user-u32 "worker_done" = 12
-[machine.1]           15 task-resume id=19 reason=scheduler
-[machine.1]           15 task-yield id=19 reason=RtosPortYield
-[machine.1]           15 user-u32 "worker_start" = 15
-[machine.1]           15 task-resume id=2 reason=scheduler
-[machine.1]           15 task-yield id=2 reason=Idle
-[machine.1]           16 task-resume id=1 reason=scheduler
-[machine.1]           16 task-created id=20 name="worker"
-[machine.1]           16 task-yield id=1 reason=RtosPortYield
-[machine.1]           16 task-resume id=20 reason=scheduler
-[machine.1]           16 task-yield id=20 reason=RtosPortYield
-[machine.1]           16 user-u32 "worker_start" = 16
-[machine.1]           16 task-resume id=2 reason=scheduler
-[machine.1]           16 task-yield id=2 reason=Idle
-[machine.1]           17 task-resume id=1 reason=scheduler
-[machine.1]           17 task-created id=21 name="worker"
-[machine.1]           17 task-yield id=1 reason=RtosPortYield
-[machine.1]           17 task-resume id=7 reason=scheduler
-[machine.1]           17 task-yield id=7 reason=RtosPortYield
-[machine.1]           17 user-u32 "worker_done" = 3
-[machine.1]           17 task-resume id=15 reason=scheduler
-[machine.1]           17 task-yield id=15 reason=RtosPortYield
-[machine.1]           17 user-u32 "worker_done" = 11
-[machine.1]           17 task-resume id=21 reason=scheduler
-[machine.1]           17 task-yield id=21 reason=RtosPortYield
-[machine.1]           17 user-u32 "worker_start" = 17
-[machine.1]           17 task-resume id=2 reason=scheduler
-[machine.1]           17 task-yield id=2 reason=Idle
-[machine.1]           18 task-resume id=1 reason=scheduler
-[machine.1]           18 task-created id=22 name="worker"
-[machine.1]           18 task-yield id=1 reason=RtosPortYield
-[machine.1]           18 task-resume id=22 reason=scheduler
-[machine.1]           18 task-yield id=22 reason=RtosPortYield
-[machine.1]           18 user-u32 "worker_start" = 18
-[machine.1]           18 task-resume id=2 reason=scheduler
-[machine.1]           18 task-yield id=2 reason=Idle
-[machine.1]           19 task-resume id=1 reason=scheduler
-[machine.1]           19 task-created id=23 name="worker"
-[machine.1]           19 task-yield id=1 reason=RtosPortYield
-[machine.1]           19 task-resume id=12 reason=scheduler
-[machine.1]           19 task-yield id=12 reason=RtosPortYield
-[machine.1]           19 user-u32 "worker_done" = 8
-[machine.1]           19 task-resume id=22 reason=scheduler
-[machine.1]           19 task-yield id=22 reason=RtosPortYield
-[machine.1]           19 user-u32 "worker_done" = 18
-[machine.1]           19 task-resume id=23 reason=scheduler
-[machine.1]           19 task-yield id=23 reason=RtosPortYield
-[machine.1]           19 user-u32 "worker_start" = 19
-[machine.1]           19 task-resume id=2 reason=scheduler
-[machine.1]           19 task-yield id=2 reason=Idle
-[machine.1]           20 task-resume id=1 reason=scheduler
-[machine.1]           20 task-created id=24 name="worker"
-[machine.1]           20 task-yield id=1 reason=RtosPortYield
-[machine.1]           20 task-resume id=24 reason=scheduler
-[machine.1]           20 task-yield id=24 reason=RtosPortYield
-[machine.1]           20 user-u32 "worker_start" = 20
-[machine.1]           20 task-resume id=2 reason=scheduler
-[machine.1]           20 task-yield id=2 reason=Idle
-[machine.1]           21 task-resume id=1 reason=scheduler
-[machine.1]           21 task-created id=25 name="worker"
-[machine.1]           21 task-yield id=1 reason=RtosPortYield
-[machine.1]           21 task-resume id=19 reason=scheduler
-[machine.1]           21 task-yield id=19 reason=RtosPortYield
-[machine.1]           21 user-u32 "worker_done" = 15
-[machine.1]           21 task-resume id=25 reason=scheduler
-[machine.1]           21 task-yield id=25 reason=RtosPortYield
-[machine.1]           21 user-u32 "worker_start" = 21
-[machine.1]           21 task-resume id=2 reason=scheduler
-[machine.1]           21 task-yield id=2 reason=Idle
-[machine.1]           22 task-resume id=1 reason=scheduler
-[machine.1]           22 task-created id=26 name="worker"
-[machine.1]           22 task-yield id=1 reason=RtosPortYield
-[machine.1]           22 task-resume id=26 reason=scheduler
-[machine.1]           22 task-yield id=26 reason=RtosPortYield
-[machine.1]           22 user-u32 "worker_start" = 22
-[machine.1]           22 task-resume id=2 reason=scheduler
-[machine.1]           22 task-yield id=2 reason=Idle
-[machine.1]           23 task-resume id=1 reason=scheduler
-[machine.1]           23 task-created id=27 name="worker"
-[machine.1]           23 task-yield id=1 reason=RtosPortYield
-[machine.1]           23 task-resume id=18 reason=scheduler
-[machine.1]           23 task-yield id=18 reason=RtosPortYield
-[machine.1]           23 user-u32 "worker_done" = 14
-[machine.1]           23 task-resume id=27 reason=scheduler
-[machine.1]           23 task-yield id=27 reason=RtosPortYield
-[machine.1]           23 user-u32 "worker_start" = 23
-[machine.1]           23 task-resume id=2 reason=scheduler
-[machine.1]           23 task-yield id=2 reason=Idle
-[machine.1]           24 task-resume id=1 reason=scheduler
-[machine.1]           24 task-created id=28 name="worker"
-[machine.1]           24 task-yield id=1 reason=RtosPortYield
-[machine.1]           24 task-resume id=28 reason=scheduler
-[machine.1]           24 task-yield id=28 reason=RtosPortYield
-[machine.1]           24 user-u32 "worker_start" = 24
-[machine.1]           24 task-resume id=2 reason=scheduler
-[machine.1]           24 task-yield id=2 reason=Idle
-[machine.1]           25 task-resume id=1 reason=scheduler
-[machine.1]           25 task-created id=29 name="worker"
-[machine.1]           25 task-yield id=1 reason=RtosPortYield
-[machine.1]           25 task-resume id=9 reason=scheduler
-[machine.1]           25 task-yield id=9 reason=RtosPortYield
-[machine.1]           25 user-u32 "worker_done" = 5
-[machine.1]           25 task-resume id=13 reason=scheduler
-[machine.1]           25 task-yield id=13 reason=RtosPortYield
-[machine.1]           25 user-u32 "worker_done" = 9
-[machine.1]           25 task-resume id=17 reason=scheduler
-[machine.1]           25 task-yield id=17 reason=RtosPortYield
-[machine.1]           25 user-u32 "worker_done" = 13
-[machine.1]           25 task-resume id=29 reason=scheduler
-[machine.1]           25 task-yield id=29 reason=RtosPortYield
-[machine.1]           25 user-u32 "worker_start" = 25
-[machine.1]           25 task-resume id=2 reason=scheduler
-[machine.1]           25 task-yield id=2 reason=Idle
-[machine.1]           26 task-resume id=1 reason=scheduler
-[machine.1]           26 task-created id=30 name="worker"
-[machine.1]           26 task-yield id=1 reason=RtosPortYield
-[machine.1]           26 task-resume id=30 reason=scheduler
-[machine.1]           26 task-yield id=30 reason=RtosPortYield
-[machine.1]           26 user-u32 "worker_start" = 26
-[machine.1]           26 task-resume id=2 reason=scheduler
-[machine.1]           26 task-yield id=2 reason=Idle
-[machine.1]           27 task-resume id=1 reason=scheduler
-[machine.1]           27 task-created id=31 name="worker"
-[machine.1]           27 task-yield id=1 reason=RtosPortYield
-[machine.1]           27 task-resume id=26 reason=scheduler
-[machine.1]           27 task-yield id=26 reason=RtosPortYield
-[machine.1]           27 user-u32 "worker_done" = 22
-[machine.1]           27 task-resume id=31 reason=scheduler
-[machine.1]           27 task-yield id=31 reason=RtosPortYield
-[machine.1]           27 user-u32 "worker_start" = 27
-[machine.1]           27 task-resume id=2 reason=scheduler
-[machine.1]           27 task-yield id=2 reason=Idle
-[machine.1]           28 task-resume id=1 reason=scheduler
-[machine.1]           28 task-created id=32 name="worker"
-[machine.1]           28 task-yield id=1 reason=RtosPortYield
-[machine.1]           28 task-resume id=32 reason=scheduler
-[machine.1]           28 task-yield id=32 reason=RtosPortYield
-[machine.1]           28 user-u32 "worker_start" = 28
-[machine.1]           28 task-resume id=2 reason=scheduler
-[machine.1]           28 task-yield id=2 reason=Idle
-[machine.1]           29 task-resume id=1 reason=scheduler
-[machine.1]           29 task-created id=33 name="worker"
-[machine.1]           29 task-yield id=1 reason=RtosPortYield
-[machine.1]           29 task-resume id=23 reason=scheduler
-[machine.1]           29 task-yield id=23 reason=RtosPortYield
-[machine.1]           29 user-u32 "worker_done" = 19
-[machine.1]           29 task-resume id=33 reason=scheduler
-[machine.1]           29 task-yield id=33 reason=RtosPortYield
-[machine.1]           29 user-u32 "worker_start" = 29
-[machine.1]           29 task-resume id=2 reason=scheduler
-[machine.1]           29 task-yield id=2 reason=Idle
-[machine.1]           30 task-resume id=1 reason=scheduler
-[machine.1]           30 task-created id=34 name="worker"
-[machine.1]           30 task-yield id=1 reason=RtosPortYield
-[machine.1]           30 task-resume id=34 reason=scheduler
-[machine.1]           30 task-yield id=34 reason=RtosPortYield
-[machine.1]           30 user-u32 "worker_start" = 30
-[machine.1]           30 task-resume id=2 reason=scheduler
-[machine.1]           30 task-yield id=2 reason=Idle
-[machine.1]           31 task-resume id=1 reason=scheduler
-[machine.1]           31 task-created id=35 name="worker"
-[machine.1]           31 task-yield id=1 reason=RtosPortYield
-[machine.1]           31 task-resume id=20 reason=scheduler
-[machine.1]           31 task-yield id=20 reason=RtosPortYield
-[machine.1]           31 user-u32 "worker_done" = 16
-[machine.1]           31 task-resume id=24 reason=scheduler
-[machine.1]           31 task-yield id=24 reason=RtosPortYield
-[machine.1]           31 user-u32 "worker_done" = 20
-[machine.1]           31 task-resume id=30 reason=scheduler
-[machine.1]           31 task-yield id=30 reason=RtosPortYield
-[machine.1]           31 user-u32 "worker_done" = 26
-[machine.1]           31 task-resume id=32 reason=scheduler
-[machine.1]           31 task-yield id=32 reason=RtosPortYield
-[machine.1]           31 user-u32 "worker_done" = 28
-[machine.1]           31 task-resume id=34 reason=scheduler
-[machine.1]           31 task-yield id=34 reason=RtosPortYield
-[machine.1]           31 user-u32 "worker_done" = 30
-[machine.1]           31 task-resume id=35 reason=scheduler
-[machine.1]           31 task-yield id=35 reason=RtosPortYield
-[machine.1]           31 user-u32 "worker_start" = 31
-[machine.1]           31 task-resume id=2 reason=scheduler
-[machine.1]           31 task-yield id=2 reason=Idle
-[machine.1]           32 task-resume id=1 reason=scheduler
-[machine.1]           32 task-created id=36 name="worker"
-[machine.1]           32 task-yield id=1 reason=RtosPortYield
-[machine.1]           32 task-resume id=36 reason=scheduler
-[machine.1]           32 task-yield id=36 reason=RtosPortYield
-[machine.1]           32 user-u32 "worker_start" = 32
-[machine.1]           32 task-resume id=2 reason=scheduler
-[machine.1]           32 task-yield id=2 reason=Idle
-[machine.1]           33 task-resume id=1 reason=scheduler
-[machine.1]           33 task-created id=37 name="worker"
-[machine.1]           33 task-yield id=1 reason=RtosPortYield
-[machine.1]           33 task-resume id=21 reason=scheduler
-[machine.1]           33 task-yield id=21 reason=RtosPortYield
-[machine.1]           33 user-u32 "worker_done" = 17
-[machine.1]           33 task-resume id=31 reason=scheduler
-[machine.1]           33 task-yield id=31 reason=RtosPortYield
-[machine.1]           33 user-u32 "worker_done" = 27
-[machine.1]           33 task-resume id=37 reason=scheduler
-[machine.1]           33 task-yield id=37 reason=RtosPortYield
-[machine.1]           33 user-u32 "worker_start" = 33
-[machine.1]           33 task-resume id=2 reason=scheduler
-[machine.1]           33 task-yield id=2 reason=Idle
-[machine.1]           34 task-resume id=1 reason=scheduler
-[machine.1]           34 task-created id=38 name="worker"
-[machine.1]           34 task-yield id=1 reason=RtosPortYield
-[machine.1]           34 task-resume id=38 reason=scheduler
-[machine.1]           34 task-yield id=38 reason=RtosPortYield
-[machine.1]           34 user-u32 "worker_start" = 34
-[machine.1]           34 task-resume id=2 reason=scheduler
-[machine.1]           34 task-yield id=2 reason=Idle
-[machine.1]           35 task-resume id=1 reason=scheduler
-[machine.1]           35 task-created id=39 name="worker"
-[machine.1]           35 task-yield id=1 reason=RtosPortYield
-[machine.1]           35 task-resume id=36 reason=scheduler
-[machine.1]           35 task-yield id=36 reason=RtosPortYield
-[machine.1]           35 user-u32 "worker_done" = 32
-[machine.1]           35 task-resume id=39 reason=scheduler
-[machine.1]           35 task-yield id=39 reason=RtosPortYield
-[machine.1]           35 user-u32 "worker_start" = 35
-[machine.1]           35 task-resume id=2 reason=scheduler
-[machine.1]           35 task-yield id=2 reason=Idle
-[machine.1]           36 task-resume id=1 reason=scheduler
-[machine.1]           36 task-created id=40 name="worker"
-[machine.1]           36 task-yield id=1 reason=RtosPortYield
-[machine.1]           36 task-resume id=40 reason=scheduler
-[machine.1]           36 task-yield id=40 reason=RtosPortYield
-[machine.1]           36 user-u32 "worker_start" = 36
-[machine.1]           36 task-resume id=2 reason=scheduler
-[machine.1]           36 task-yield id=2 reason=Idle
-[machine.1]           37 task-resume id=1 reason=scheduler
-[machine.1]           37 task-created id=41 name="worker"
-[machine.1]           37 task-yield id=1 reason=RtosPortYield
-[machine.1]           37 task-resume id=25 reason=scheduler
-[machine.1]           37 task-yield id=25 reason=RtosPortYield
-[machine.1]           37 user-u32 "worker_done" = 21
-[machine.1]           37 task-resume id=27 reason=scheduler
-[machine.1]           37 task-yield id=27 reason=RtosPortYield
-[machine.1]           37 user-u32 "worker_done" = 23
-[machine.1]           37 task-resume id=37 reason=scheduler
-[machine.1]           37 task-yield id=37 reason=RtosPortYield
-[machine.1]           37 user-u32 "worker_done" = 33
-[machine.1]           37 task-resume id=41 reason=scheduler
-[machine.1]           37 task-yield id=41 reason=RtosPortYield
-[machine.1]           37 user-u32 "worker_start" = 37
-[machine.1]           37 task-resume id=2 reason=scheduler
-[machine.1]           37 task-yield id=2 reason=Idle
-[machine.1]           38 task-resume id=1 reason=scheduler
-[machine.1]           38 task-created id=42 name="worker"
-[machine.1]           38 task-yield id=1 reason=RtosPortYield
-[machine.1]           38 task-resume id=42 reason=scheduler
-[machine.1]           38 task-yield id=42 reason=RtosPortYield
-[machine.1]           38 user-u32 "worker_start" = 38
-[machine.1]           38 task-resume id=2 reason=scheduler
-[machine.1]           38 task-yield id=2 reason=Idle
-[machine.1]           39 task-resume id=1 reason=scheduler
-[machine.1]           39 task-created id=43 name="worker"
-[machine.1]           39 task-yield id=1 reason=RtosPortYield
-[machine.1]           39 task-resume id=40 reason=scheduler
-[machine.1]           39 task-yield id=40 reason=RtosPortYield
-[machine.1]           39 user-u32 "worker_done" = 36
-[machine.1]           39 task-resume id=43 reason=scheduler
-[machine.1]           39 task-yield id=43 reason=RtosPortYield
-[machine.1]           39 user-u32 "worker_start" = 39
-[machine.1]           39 task-resume id=2 reason=scheduler
-[machine.1]           39 task-yield id=2 reason=Idle
-[machine.1]           40 task-resume id=1 reason=scheduler
-[machine.1]           40 task-created id=44 name="worker"
-[machine.1]           40 task-yield id=1 reason=RtosPortYield
-[machine.1]           40 task-resume id=44 reason=scheduler
-[machine.1]           40 task-yield id=44 reason=RtosPortYield
-[machine.1]           40 user-u32 "worker_start" = 40
-[machine.1]           40 task-resume id=2 reason=scheduler
-[machine.1]           40 task-yield id=2 reason=Idle
-[machine.1]           41 task-resume id=1 reason=scheduler
-[machine.1]           41 task-created id=45 name="worker"
-[machine.1]           41 task-yield id=1 reason=RtosPortYield
-[machine.1]           41 task-resume id=29 reason=scheduler
-[machine.1]           41 task-yield id=29 reason=RtosPortYield
-[machine.1]           41 user-u32 "worker_done" = 25
-[machine.1]           41 task-resume id=45 reason=scheduler
-[machine.1]           41 task-yield id=45 reason=RtosPortYield
-[machine.1]           41 user-u32 "worker_start" = 41
-[machine.1]           41 task-resume id=2 reason=scheduler
-[machine.1]           41 task-yield id=2 reason=Idle
-[machine.1]           42 task-resume id=1 reason=scheduler
-[machine.1]           42 task-created id=46 name="worker"
-[machine.1]           42 task-yield id=1 reason=RtosPortYield
-[machine.1]           42 task-resume id=46 reason=scheduler
-[machine.1]           42 task-yield id=46 reason=RtosPortYield
-[machine.1]           42 user-u32 "worker_start" = 42
-[machine.1]           42 task-resume id=2 reason=scheduler
-[machine.1]           42 task-yield id=2 reason=Idle
-[machine.1]           43 task-resume id=1 reason=scheduler
-[machine.1]           43 task-created id=47 name="worker"
-[machine.1]           43 task-yield id=1 reason=RtosPortYield
-[machine.1]           43 task-resume id=28 reason=scheduler
-[machine.1]           43 task-yield id=28 reason=RtosPortYield
-[machine.1]           43 user-u32 "worker_done" = 24
-[machine.1]           43 task-resume id=44 reason=scheduler
-[machine.1]           43 task-yield id=44 reason=RtosPortYield
-[machine.1]           43 user-u32 "worker_done" = 40
-[machine.1]           43 task-resume id=47 reason=scheduler
-[machine.1]           43 task-yield id=47 reason=RtosPortYield
-[machine.1]           43 user-u32 "worker_start" = 43
-[machine.1]           43 task-resume id=2 reason=scheduler
-[machine.1]           43 task-yield id=2 reason=Idle
-[machine.1]           44 task-resume id=1 reason=scheduler
-[machine.1]           44 task-created id=48 name="worker"
-[machine.1]           44 task-yield id=1 reason=RtosPortYield
-[machine.1]           44 task-resume id=48 reason=scheduler
-[machine.1]           44 task-yield id=48 reason=RtosPortYield
-[machine.1]           44 user-u32 "worker_start" = 44
-[machine.1]           44 task-resume id=2 reason=scheduler
-[machine.1]           44 task-yield id=2 reason=Idle
-[machine.1]           45 task-resume id=1 reason=scheduler
-[machine.1]           45 task-created id=49 name="worker"
-[machine.1]           45 task-yield id=1 reason=RtosPortYield
-[machine.1]           45 task-resume id=33 reason=scheduler
-[machine.1]           45 task-yield id=33 reason=RtosPortYield
-[machine.1]           45 user-u32 "worker_done" = 29
-[machine.1]           45 task-resume id=35 reason=scheduler
-[machine.1]           45 task-yield id=35 reason=RtosPortYield
-[machine.1]           45 user-u32 "worker_done" = 31
-[machine.1]           45 task-resume id=49 reason=scheduler
-[machine.1]           45 task-yield id=49 reason=RtosPortYield
-[machine.1]           45 user-u32 "worker_start" = 45
-[machine.1]           45 task-resume id=2 reason=scheduler
-[machine.1]           45 task-yield id=2 reason=Idle
-[machine.1]           46 task-resume id=1 reason=scheduler
-[machine.1]           46 task-created id=50 name="worker"
-[machine.1]           46 task-yield id=1 reason=RtosPortYield
-[machine.1]           46 task-resume id=50 reason=scheduler
-[machine.1]           46 task-yield id=50 reason=RtosPortYield
-[machine.1]           46 user-u32 "worker_start" = 46
-[machine.1]           46 task-resume id=2 reason=scheduler
-[machine.1]           46 task-yield id=2 reason=Idle
-[machine.1]           47 task-resume id=1 reason=scheduler
-[machine.1]           47 task-created id=51 name="worker"
-[machine.1]           47 task-yield id=1 reason=RtosPortYield
-[machine.1]           47 task-resume id=46 reason=scheduler
-[machine.1]           47 task-yield id=46 reason=RtosPortYield
-[machine.1]           47 user-u32 "worker_done" = 42
-[machine.1]           47 task-resume id=50 reason=scheduler
-[machine.1]           47 task-yield id=50 reason=RtosPortYield
-[machine.1]           47 user-u32 "worker_done" = 46
-[machine.1]           47 task-resume id=51 reason=scheduler
-[machine.1]           47 task-yield id=51 reason=RtosPortYield
-[machine.1]           47 user-u32 "worker_start" = 47
-[machine.1]           47 task-resume id=2 reason=scheduler
-[machine.1]           47 task-yield id=2 reason=Idle
-[machine.1]           48 task-resume id=1 reason=scheduler
-[machine.1]           48 task-created id=52 name="worker"
-[machine.1]           48 task-yield id=1 reason=RtosPortYield
-[machine.1]           48 task-resume id=52 reason=scheduler
-[machine.1]           48 task-yield id=52 reason=RtosPortYield
-[machine.1]           48 user-u32 "worker_start" = 48
-[machine.1]           48 task-resume id=2 reason=scheduler
-[machine.1]           48 task-yield id=2 reason=Idle
-[machine.1]           49 task-resume id=1 reason=scheduler
-[machine.1]           49 task-created id=53 name="worker"
-[machine.1]           49 task-yield id=1 reason=RtosPortYield
-[machine.1]           49 task-resume id=43 reason=scheduler
-[machine.1]           49 task-yield id=43 reason=RtosPortYield
-[machine.1]           49 user-u32 "worker_done" = 39
-[machine.1]           49 task-resume id=51 reason=scheduler
-[machine.1]           49 task-yield id=51 reason=RtosPortYield
-[machine.1]           49 user-u32 "worker_done" = 47
-[machine.1]           49 task-resume id=53 reason=scheduler
-[machine.1]           49 task-yield id=53 reason=RtosPortYield
-[machine.1]           49 user-u32 "worker_start" = 49
-[machine.1]           49 task-resume id=2 reason=scheduler
-[machine.1]           49 task-yield id=2 reason=Idle
-[machine.1]           50 task-resume id=1 reason=scheduler
-[machine.1]           50 task-created id=54 name="worker"
-[machine.1]           50 task-yield id=1 reason=RtosPortYield
-[machine.1]           50 task-resume id=54 reason=scheduler
-[machine.1]           50 task-yield id=54 reason=RtosPortYield
-[machine.1]           50 user-u32 "worker_start" = 50
-[machine.1]           50 task-resume id=2 reason=scheduler
-[machine.1]           50 task-yield id=2 reason=Idle
-[machine.1]           51 task-resume id=1 reason=scheduler
-[machine.1]           51 task-created id=55 name="worker"
-[machine.1]           51 task-yield id=1 reason=RtosPortYield
-[machine.1]           51 task-resume id=38 reason=scheduler
-[machine.1]           51 task-yield id=38 reason=RtosPortYield
-[machine.1]           51 user-u32 "worker_done" = 34
-[machine.1]           51 task-resume id=55 reason=scheduler
-[machine.1]           51 task-yield id=55 reason=RtosPortYield
-[machine.1]           51 user-u32 "worker_start" = 51
-[machine.1]           51 task-resume id=2 reason=scheduler
-[machine.1]           51 task-yield id=2 reason=Idle
-[machine.1]           52 task-resume id=1 reason=scheduler
-[machine.1]           52 task-created id=56 name="worker"
-[machine.1]           52 task-yield id=1 reason=RtosPortYield
-[machine.1]           52 task-resume id=56 reason=scheduler
-[machine.1]           52 task-yield id=56 reason=RtosPortYield
-[machine.1]           52 user-u32 "worker_start" = 52
-[machine.1]           52 task-resume id=2 reason=scheduler
-[machine.1]           52 task-yield id=2 reason=Idle
-[machine.1]           53 task-resume id=1 reason=scheduler
-[machine.1]           53 task-created id=57 name="worker"
-[machine.1]           53 task-yield id=1 reason=RtosPortYield
-[machine.1]           53 task-resume id=39 reason=scheduler
-[machine.1]           53 task-yield id=39 reason=RtosPortYield
-[machine.1]           53 user-u32 "worker_done" = 35
-[machine.1]           53 task-resume id=41 reason=scheduler
-[machine.1]           53 task-yield id=41 reason=RtosPortYield
-[machine.1]           53 user-u32 "worker_done" = 37
-[machine.1]           53 task-resume id=49 reason=scheduler
-[machine.1]           53 task-yield id=49 reason=RtosPortYield
-[machine.1]           53 user-u32 "worker_done" = 45
-[machine.1]           53 task-resume id=57 reason=scheduler
-[machine.1]           53 task-yield id=57 reason=RtosPortYield
-[machine.1]           53 user-u32 "worker_start" = 53
-[machine.1]           53 task-resume id=2 reason=scheduler
-[machine.1]           53 task-yield id=2 reason=Idle
-[machine.1]           54 task-resume id=1 reason=scheduler
-[machine.1]           54 task-created id=58 name="worker"
-[machine.1]           54 task-yield id=1 reason=RtosPortYield
-[machine.1]           54 task-resume id=58 reason=scheduler
-[machine.1]           54 task-yield id=58 reason=RtosPortYield
-[machine.1]           54 user-u32 "worker_start" = 54
-[machine.1]           54 task-resume id=2 reason=scheduler
-[machine.1]           54 task-yield id=2 reason=Idle
-[machine.1]           55 task-resume id=1 reason=scheduler
-[machine.1]           55 task-created id=59 name="worker"
-[machine.1]           55 task-yield id=1 reason=RtosPortYield
-[machine.1]           55 task-resume id=42 reason=scheduler
-[machine.1]           55 task-yield id=42 reason=RtosPortYield
-[machine.1]           55 user-u32 "worker_done" = 38
-[machine.1]           55 task-resume id=48 reason=scheduler
-[machine.1]           55 task-yield id=48 reason=RtosPortYield
-[machine.1]           55 user-u32 "worker_done" = 44
-[machine.1]           55 task-resume id=56 reason=scheduler
-[machine.1]           55 task-yield id=56 reason=RtosPortYield
-[machine.1]           55 user-u32 "worker_done" = 52
-[machine.1]           55 task-resume id=58 reason=scheduler
-[machine.1]           55 task-yield id=58 reason=RtosPortYield
-[machine.1]           55 user-u32 "worker_done" = 54
-[machine.1]           55 task-resume id=59 reason=scheduler
-[machine.1]           55 task-yield id=59 reason=RtosPortYield
-[machine.1]           55 user-u32 "worker_start" = 55
-[machine.1]           55 task-resume id=2 reason=scheduler
-[machine.1]           55 task-yield id=2 reason=Idle
-[machine.1]           56 task-resume id=1 reason=scheduler
-[machine.1]           56 task-created id=60 name="worker"
-[machine.1]           56 task-yield id=1 reason=RtosPortYield
-[machine.1]           56 task-resume id=60 reason=scheduler
-[machine.1]           56 task-yield id=60 reason=RtosPortYield
-[machine.1]           56 user-u32 "worker_start" = 56
-[machine.1]           56 task-resume id=2 reason=scheduler
-[machine.1]           56 task-yield id=2 reason=Idle
-[machine.1]           57 task-resume id=1 reason=scheduler
-[machine.1]           57 task-created id=61 name="worker"
-[machine.1]           57 task-yield id=1 reason=RtosPortYield
-[machine.1]           57 task-resume id=53 reason=scheduler
-[machine.1]           57 task-yield id=53 reason=RtosPortYield
-[machine.1]           57 user-u32 "worker_done" = 49
-[machine.1]           57 task-resume id=61 reason=scheduler
-[machine.1]           57 task-yield id=61 reason=RtosPortYield
-[machine.1]           57 user-u32 "worker_start" = 57
-[machine.1]           57 task-resume id=2 reason=scheduler
-[machine.1]           57 task-yield id=2 reason=Idle
-[machine.1]           58 task-resume id=1 reason=scheduler
-[machine.1]           58 task-created id=62 name="worker"
-[machine.1]           58 task-yield id=1 reason=RtosPortYield
-[machine.1]           58 task-resume id=62 reason=scheduler
-[machine.1]           58 task-yield id=62 reason=RtosPortYield
-[machine.1]           58 user-u32 "worker_start" = 58
-[machine.1]           58 task-resume id=2 reason=scheduler
-[machine.1]           58 task-yield id=2 reason=Idle
-[machine.1]           59 task-resume id=1 reason=scheduler
-[machine.1]           59 task-created id=63 name="worker"
-[machine.1]           59 task-yield id=1 reason=RtosPortYield
-[machine.1]           59 task-resume id=63 reason=scheduler
-[machine.1]           59 task-yield id=63 reason=RtosPortYield
-[machine.1]           59 user-u32 "worker_start" = 59
-[machine.1]           59 task-resume id=2 reason=scheduler
-[machine.1]           59 task-yield id=2 reason=Idle
-[machine.1]           60 task-resume id=1 reason=scheduler
-[machine.1]           60 task-created id=64 name="worker"
-[machine.1]           60 task-yield id=1 reason=RtosPortYield
-[machine.1]           60 task-resume id=64 reason=scheduler
-[machine.1]           60 task-yield id=64 reason=RtosPortYield
-[machine.1]           60 user-u32 "worker_start" = 60
-[machine.1]           60 task-resume id=2 reason=scheduler
-[machine.1]           60 task-yield id=2 reason=Idle
-[machine.1]           61 task-resume id=1 reason=scheduler
-[machine.1]           61 task-created id=65 name="worker"
-[machine.1]           61 task-yield id=1 reason=RtosPortYield
-[machine.1]           61 task-resume id=45 reason=scheduler
-[machine.1]           61 task-yield id=45 reason=RtosPortYield
-[machine.1]           61 user-u32 "worker_done" = 41
-[machine.1]           61 task-resume id=47 reason=scheduler
-[machine.1]           61 task-yield id=47 reason=RtosPortYield
-[machine.1]           61 user-u32 "worker_done" = 43
-[machine.1]           61 task-resume id=65 reason=scheduler
-[machine.1]           61 task-yield id=65 reason=RtosPortYield
-[machine.1]           61 user-u32 "worker_start" = 61
-[machine.1]           61 task-resume id=2 reason=scheduler
-[machine.1]           61 task-yield id=2 reason=Idle
-[machine.1]           62 task-resume id=1 reason=scheduler
-[machine.1]           62 task-created id=66 name="worker"
-[machine.1]           62 task-yield id=1 reason=RtosPortYield
-[machine.1]           62 task-resume id=66 reason=scheduler
-[machine.1]           62 task-yield id=66 reason=RtosPortYield
-[machine.1]           62 user-u32 "worker_start" = 62
-[machine.1]           62 task-resume id=2 reason=scheduler
-[machine.1]           62 task-yield id=2 reason=Idle
-[machine.1]           63 task-resume id=1 reason=scheduler
-[machine.1]           63 task-created id=67 name="worker"
-[machine.1]           63 task-yield id=1 reason=RtosPortYield
-[machine.1]           63 task-resume id=60 reason=scheduler
-[machine.1]           63 task-yield id=60 reason=RtosPortYield
-[machine.1]           63 user-u32 "worker_done" = 56
-[machine.1]           63 task-resume id=67 reason=scheduler
-[machine.1]           63 task-yield id=67 reason=RtosPortYield
-[machine.1]           63 user-u32 "worker_start" = 63
-[machine.1]           63 task-resume id=2 reason=scheduler
-[machine.1]           63 task-yield id=2 reason=Idle
-[machine.1]           64 task-resume id=1 reason=scheduler
-[machine.1]           64 task-created id=68 name="worker"
-[machine.1]           64 task-yield id=1 reason=RtosPortYield
-[machine.1]           64 task-resume id=68 reason=scheduler
-[machine.1]           64 task-yield id=68 reason=RtosPortYield
-[machine.1]           64 user-u32 "worker_start" = 64
-[machine.1]           64 task-resume id=2 reason=scheduler
-[machine.1]           64 task-yield id=2 reason=Idle
-[machine.1]           65 task-resume id=1 reason=scheduler
-[machine.1]           65 task-created id=69 name="worker"
-[machine.1]           65 task-yield id=1 reason=RtosPortYield
-[machine.1]           65 task-resume id=63 reason=scheduler
-[machine.1]           65 task-yield id=63 reason=RtosPortYield
-[machine.1]           65 user-u32 "worker_done" = 59
-[machine.1]           65 task-resume id=65 reason=scheduler
-[machine.1]           65 task-yield id=65 reason=RtosPortYield
-[machine.1]           65 user-u32 "worker_done" = 61
-[machine.1]           65 task-resume id=69 reason=scheduler
-[machine.1]           65 task-yield id=69 reason=RtosPortYield
-[machine.1]           65 user-u32 "worker_start" = 65
-[machine.1]           65 task-resume id=2 reason=scheduler
-[machine.1]           65 task-yield id=2 reason=Idle
-[machine.1]           66 task-resume id=1 reason=scheduler
-[machine.1]           66 task-created id=70 name="worker"
-[machine.1]           66 task-yield id=1 reason=RtosPortYield
-[machine.1]           66 task-resume id=70 reason=scheduler
-[machine.1]           66 task-yield id=70 reason=RtosPortYield
-[machine.1]           66 user-u32 "worker_start" = 66
-[machine.1]           66 task-resume id=2 reason=scheduler
-[machine.1]           66 task-yield id=2 reason=Idle
-[machine.1]           67 task-resume id=1 reason=scheduler
-[machine.1]           67 task-created id=71 name="worker"
-[machine.1]           67 task-yield id=1 reason=RtosPortYield
-[machine.1]           67 task-resume id=52 reason=scheduler
-[machine.1]           67 task-yield id=52 reason=RtosPortYield
-[machine.1]           67 user-u32 "worker_done" = 48
-[machine.1]           67 task-resume id=54 reason=scheduler
-[machine.1]           67 task-yield id=54 reason=RtosPortYield
-[machine.1]           67 user-u32 "worker_done" = 50
-[machine.1]           67 task-resume id=62 reason=scheduler
-[machine.1]           67 task-yield id=62 reason=RtosPortYield
-[machine.1]           67 user-u32 "worker_done" = 58
-[machine.1]           67 task-resume id=71 reason=scheduler
-[machine.1]           67 task-yield id=71 reason=RtosPortYield
-[machine.1]           67 user-u32 "worker_start" = 67
-[machine.1]           67 task-resume id=2 reason=scheduler
-[machine.1]           67 task-yield id=2 reason=Idle
-[machine.1]           68 task-resume id=1 reason=scheduler
-[machine.1]           68 task-created id=72 name="worker"
-[machine.1]           68 task-yield id=1 reason=RtosPortYield
-[machine.1]           68 task-resume id=72 reason=scheduler
-[machine.1]           68 task-yield id=72 reason=RtosPortYield
-[machine.1]           68 user-u32 "worker_start" = 68
-[machine.1]           68 task-resume id=2 reason=scheduler
-[machine.1]           68 task-yield id=2 reason=Idle
-[machine.1]           69 task-resume id=1 reason=scheduler
-[machine.1]           69 task-created id=73 name="worker"
-[machine.1]           69 task-yield id=1 reason=RtosPortYield
-[machine.1]           69 task-resume id=55 reason=scheduler
-[machine.1]           69 task-yield id=55 reason=RtosPortYield
-[machine.1]           69 user-u32 "worker_done" = 51
-[machine.1]           69 task-resume id=57 reason=scheduler
-[machine.1]           69 task-yield id=57 reason=RtosPortYield
-[machine.1]           69 user-u32 "worker_done" = 53
-[machine.1]           69 task-resume id=59 reason=scheduler
-[machine.1]           69 task-yield id=59 reason=RtosPortYield
-[machine.1]           69 user-u32 "worker_done" = 55
-[machine.1]           69 task-resume id=61 reason=scheduler
-[machine.1]           69 task-yield id=61 reason=RtosPortYield
-[machine.1]           69 user-u32 "worker_done" = 57
-[machine.1]           69 task-resume id=73 reason=scheduler
-[machine.1]           69 task-yield id=73 reason=RtosPortYield
-[machine.1]           69 user-u32 "worker_start" = 69
-[machine.1]           69 task-resume id=2 reason=scheduler
-[machine.1]           69 task-yield id=2 reason=Idle
-[machine.1]           70 task-resume id=1 reason=scheduler
-[machine.1]           70 task-created id=74 name="worker"
-[machine.1]           70 task-yield id=1 reason=RtosPortYield
-[machine.1]           70 task-resume id=74 reason=scheduler
-[machine.1]           70 task-yield id=74 reason=RtosPortYield
-[machine.1]           70 user-u32 "worker_start" = 70
-[machine.1]           70 task-resume id=2 reason=scheduler
-[machine.1]           70 task-yield id=2 reason=Idle
-[machine.1]           71 task-resume id=1 reason=scheduler
-[machine.1]           71 task-created id=75 name="worker"
-[machine.1]           71 task-yield id=1 reason=RtosPortYield
-[machine.1]           71 task-resume id=64 reason=scheduler
-[machine.1]           71 task-yield id=64 reason=RtosPortYield
-[machine.1]           71 user-u32 "worker_done" = 60
-[machine.1]           71 task-resume id=70 reason=scheduler
-[machine.1]           71 task-yield id=70 reason=RtosPortYield
-[machine.1]           71 user-u32 "worker_done" = 66
-[machine.1]           71 task-resume id=74 reason=scheduler
-[machine.1]           71 task-yield id=74 reason=RtosPortYield
-[machine.1]           71 user-u32 "worker_done" = 70
-[machine.1]           71 task-resume id=75 reason=scheduler
-[machine.1]           71 task-yield id=75 reason=RtosPortYield
-[machine.1]           71 user-u32 "worker_start" = 71
-[machine.1]           71 task-resume id=2 reason=scheduler
-[machine.1]           71 task-yield id=2 reason=Idle
-[machine.1]           72 task-resume id=1 reason=scheduler
-[machine.1]           72 task-created id=76 name="worker"
-[machine.1]           72 task-yield id=1 reason=RtosPortYield
-[machine.1]           72 task-resume id=76 reason=scheduler
-[machine.1]           72 task-yield id=76 reason=RtosPortYield
-[machine.1]           72 user-u32 "worker_start" = 72
-[machine.1]           72 task-resume id=2 reason=scheduler
-[machine.1]           72 task-yield id=2 reason=Idle
-[machine.1]           73 task-resume id=1 reason=scheduler
-[machine.1]           73 task-created id=77 name="worker"
-[machine.1]           73 task-yield id=1 reason=RtosPortYield
-[machine.1]           73 task-resume id=77 reason=scheduler
-[machine.1]           73 task-yield id=77 reason=RtosPortYield
-[machine.1]           73 user-u32 "worker_start" = 73
-[machine.1]           73 task-resume id=2 reason=scheduler
-[machine.1]           73 task-yield id=2 reason=Idle
-[machine.1]           74 task-resume id=1 reason=scheduler
-[machine.1]           74 task-created id=78 name="worker"
-[machine.1]           74 task-yield id=1 reason=RtosPortYield
-[machine.1]           74 task-resume id=78 reason=scheduler
-[machine.1]           74 task-yield id=78 reason=RtosPortYield
-[machine.1]           74 user-u32 "worker_start" = 74
-[machine.1]           74 task-resume id=2 reason=scheduler
-[machine.1]           74 task-yield id=2 reason=Idle
-[machine.1]           75 task-resume id=1 reason=scheduler
-[machine.1]           75 task-created id=79 name="worker"
-[machine.1]           75 task-yield id=1 reason=RtosPortYield
-[machine.1]           75 task-resume id=66 reason=scheduler
-[machine.1]           75 task-yield id=66 reason=RtosPortYield
-[machine.1]           75 user-u32 "worker_done" = 62
-[machine.1]           75 task-resume id=68 reason=scheduler
-[machine.1]           75 task-yield id=68 reason=RtosPortYield
-[machine.1]           75 user-u32 "worker_done" = 64
-[machine.1]           75 task-resume id=79 reason=scheduler
-[machine.1]           75 task-yield id=79 reason=RtosPortYield
-[machine.1]           75 user-u32 "worker_start" = 75
-[machine.1]           75 task-resume id=2 reason=scheduler
-[machine.1]           75 task-yield id=2 reason=Idle
-[machine.1]           76 task-resume id=1 reason=scheduler
-[machine.1]           76 task-created id=80 name="worker"
-[machine.1]           76 task-yield id=1 reason=RtosPortYield
-[machine.1]           76 task-resume id=80 reason=scheduler
-[machine.1]           76 task-yield id=80 reason=RtosPortYield
-[machine.1]           76 user-u32 "worker_start" = 76
-[machine.1]           76 task-resume id=2 reason=scheduler
-[machine.1]           76 task-yield id=2 reason=Idle
-[machine.1]           77 task-resume id=1 reason=scheduler
-[machine.1]           77 task-created id=81 name="worker"
-[machine.1]           77 task-yield id=1 reason=RtosPortYield
-[machine.1]           77 task-resume id=73 reason=scheduler
-[machine.1]           77 task-yield id=73 reason=RtosPortYield
-[machine.1]           77 user-u32 "worker_done" = 69
-[machine.1]           77 task-resume id=81 reason=scheduler
-[machine.1]           77 task-yield id=81 reason=RtosPortYield
-[machine.1]           77 user-u32 "worker_start" = 77
-[machine.1]           77 task-resume id=2 reason=scheduler
-[machine.1]           77 task-yield id=2 reason=Idle
-[machine.1]           78 task-resume id=1 reason=scheduler
-[machine.1]           78 task-created id=82 name="worker"
-[machine.1]           78 task-yield id=1 reason=RtosPortYield
-[machine.1]           78 task-resume id=82 reason=scheduler
-[machine.1]           78 task-yield id=82 reason=RtosPortYield
-[machine.1]           78 user-u32 "worker_start" = 78
-[machine.1]           78 task-resume id=2 reason=scheduler
-[machine.1]           78 task-yield id=2 reason=Idle
-[machine.1]           79 task-resume id=1 reason=scheduler
-[machine.1]           79 task-created id=83 name="worker"
-[machine.1]           79 task-yield id=1 reason=RtosPortYield
-[machine.1]           79 task-resume id=72 reason=scheduler
-[machine.1]           79 task-yield id=72 reason=RtosPortYield
-[machine.1]           79 user-u32 "worker_done" = 68
-[machine.1]           79 task-resume id=76 reason=scheduler
-[machine.1]           79 task-yield id=76 reason=RtosPortYield
-[machine.1]           79 user-u32 "worker_done" = 72
-[machine.1]           79 task-resume id=83 reason=scheduler
-[machine.1]           79 task-yield id=83 reason=RtosPortYield
-[machine.1]           79 user-u32 "worker_start" = 79
-[machine.1]           79 task-resume id=2 reason=scheduler
-[machine.1]           79 task-yield id=2 reason=Idle
-[machine.1]           80 task-resume id=1 reason=scheduler
-[machine.1]           80 task-created id=84 name="worker"
-[machine.1]           80 task-yield id=1 reason=RtosPortYield
-[machine.1]           80 task-resume id=84 reason=scheduler
-[machine.1]           80 task-yield id=84 reason=RtosPortYield
-[machine.1]           80 user-u32 "worker_start" = 80
-[machine.1]           80 task-resume id=2 reason=scheduler
-[machine.1]           80 task-yield id=2 reason=Idle
-[machine.1]           81 task-resume id=1 reason=scheduler
-[machine.1]           81 task-created id=85 name="worker"
-[machine.1]           81 task-yield id=1 reason=RtosPortYield
-[machine.1]           81 task-resume id=67 reason=scheduler
-[machine.1]           81 task-yield id=67 reason=RtosPortYield
-[machine.1]           81 user-u32 "worker_done" = 63
-[machine.1]           81 task-resume id=79 reason=scheduler
-[machine.1]           81 task-yield id=79 reason=RtosPortYield
-[machine.1]           81 user-u32 "worker_done" = 75
-[machine.1]           81 task-resume id=85 reason=scheduler
-[machine.1]           81 task-yield id=85 reason=RtosPortYield
-[machine.1]           81 user-u32 "worker_start" = 81
-[machine.1]           81 task-resume id=2 reason=scheduler
-[machine.1]           81 task-yield id=2 reason=Idle
-[machine.1]           82 task-resume id=1 reason=scheduler
-[machine.1]           82 task-created id=86 name="worker"
-[machine.1]           82 task-yield id=1 reason=RtosPortYield
-[machine.1]           82 task-resume id=86 reason=scheduler
-[machine.1]           82 task-yield id=86 reason=RtosPortYield
-[machine.1]           82 user-u32 "worker_start" = 82
-[machine.1]           82 task-resume id=2 reason=scheduler
-[machine.1]           82 task-yield id=2 reason=Idle
-[machine.1]           83 task-resume id=1 reason=scheduler
-[machine.1]           83 task-created id=87 name="worker"
-[machine.1]           83 task-yield id=1 reason=RtosPortYield
-[machine.1]           83 task-resume id=78 reason=scheduler
-[machine.1]           83 task-yield id=78 reason=RtosPortYield
-[machine.1]           83 user-u32 "worker_done" = 74
-[machine.1]           83 task-resume id=82 reason=scheduler
-[machine.1]           83 task-yield id=82 reason=RtosPortYield
-[machine.1]           83 user-u32 "worker_done" = 78
-[machine.1]           83 task-resume id=87 reason=scheduler
-[machine.1]           83 task-yield id=87 reason=RtosPortYield
-[machine.1]           83 user-u32 "worker_start" = 83
-[machine.1]           83 task-resume id=2 reason=scheduler
-[machine.1]           83 task-yield id=2 reason=Idle
-[machine.1]           84 task-resume id=1 reason=scheduler
-[machine.1]           84 task-created id=88 name="worker"
-[machine.1]           84 task-yield id=1 reason=RtosPortYield
-[machine.1]           84 task-resume id=88 reason=scheduler
-[machine.1]           84 task-yield id=88 reason=RtosPortYield
-[machine.1]           84 user-u32 "worker_start" = 84
-[machine.1]           84 task-resume id=2 reason=scheduler
-[machine.1]           84 task-yield id=2 reason=Idle
-[machine.1]           85 task-resume id=1 reason=scheduler
-[machine.1]           85 task-created id=89 name="worker"
-[machine.1]           85 task-yield id=1 reason=RtosPortYield
-[machine.1]           85 task-resume id=69 reason=scheduler
-[machine.1]           85 task-yield id=69 reason=RtosPortYield
-[machine.1]           85 user-u32 "worker_done" = 65
-[machine.1]           85 task-resume id=71 reason=scheduler
-[machine.1]           85 task-yield id=71 reason=RtosPortYield
-[machine.1]           85 user-u32 "worker_done" = 67
-[machine.1]           85 task-resume id=83 reason=scheduler
-[machine.1]           85 task-yield id=83 reason=RtosPortYield
-[machine.1]           85 user-u32 "worker_done" = 79
-[machine.1]           85 task-resume id=85 reason=scheduler
-[machine.1]           85 task-yield id=85 reason=RtosPortYield
-[machine.1]           85 user-u32 "worker_done" = 81
-[machine.1]           85 task-resume id=89 reason=scheduler
-[machine.1]           85 task-yield id=89 reason=RtosPortYield
-[machine.1]           85 user-u32 "worker_start" = 85
-[machine.1]           85 task-resume id=2 reason=scheduler
-[machine.1]           85 task-yield id=2 reason=Idle
-[machine.1]           86 task-resume id=1 reason=scheduler
-[machine.1]           86 task-created id=90 name="worker"
-[machine.1]           86 task-yield id=1 reason=RtosPortYield
-[machine.1]           86 task-resume id=90 reason=scheduler
-[machine.1]           86 task-yield id=90 reason=RtosPortYield
-[machine.1]           86 user-u32 "worker_start" = 86
-[machine.1]           86 task-resume id=2 reason=scheduler
-[machine.1]           86 task-yield id=2 reason=Idle
-[machine.1]           87 task-resume id=1 reason=scheduler
-[machine.1]           87 task-created id=91 name="worker"
-[machine.1]           87 task-yield id=1 reason=RtosPortYield
-[machine.1]           87 task-resume id=80 reason=scheduler
-[machine.1]           87 task-yield id=80 reason=RtosPortYield
-[machine.1]           87 user-u32 "worker_done" = 76
-[machine.1]           87 task-resume id=91 reason=scheduler
-[machine.1]           87 task-yield id=91 reason=RtosPortYield
-[machine.1]           87 user-u32 "worker_start" = 87
-[machine.1]           87 task-resume id=2 reason=scheduler
-[machine.1]           87 task-yield id=2 reason=Idle
-[machine.1]           88 task-resume id=1 reason=scheduler
-[machine.1]           88 task-created id=92 name="worker"
-[machine.1]           88 task-yield id=1 reason=RtosPortYield
-[machine.1]           88 task-resume id=92 reason=scheduler
-[machine.1]           88 task-yield id=92 reason=RtosPortYield
-[machine.1]           88 user-u32 "worker_start" = 88
-[machine.1]           88 task-resume id=2 reason=scheduler
-[machine.1]           88 task-yield id=2 reason=Idle
-[machine.1]           89 task-resume id=1 reason=scheduler
-[machine.1]           89 task-created id=93 name="worker"
-[machine.1]           89 task-yield id=1 reason=RtosPortYield
-[machine.1]           89 task-resume id=75 reason=scheduler
-[machine.1]           89 task-yield id=75 reason=RtosPortYield
-[machine.1]           89 user-u32 "worker_done" = 71
-[machine.1]           89 task-resume id=81 reason=scheduler
-[machine.1]           89 task-yield id=81 reason=RtosPortYield
-[machine.1]           89 user-u32 "worker_done" = 77
-[machine.1]           89 task-resume id=87 reason=scheduler
-[machine.1]           89 task-yield id=87 reason=RtosPortYield
-[machine.1]           89 user-u32 "worker_done" = 83
-[machine.1]           89 task-resume id=89 reason=scheduler
-[machine.1]           89 task-yield id=89 reason=RtosPortYield
-[machine.1]           89 user-u32 "worker_done" = 85
-[machine.1]           89 task-resume id=91 reason=scheduler
-[machine.1]           89 task-yield id=91 reason=RtosPortYield
-[machine.1]           89 user-u32 "worker_done" = 87
-[machine.1]           89 task-resume id=93 reason=scheduler
-[machine.1]           89 task-yield id=93 reason=RtosPortYield
-[machine.1]           89 user-u32 "worker_start" = 89
-[machine.1]           89 task-resume id=2 reason=scheduler
-[machine.1]           89 task-yield id=2 reason=Idle
-[machine.1]           90 task-resume id=1 reason=scheduler
-[machine.1]           90 task-created id=94 name="worker"
-[machine.1]           90 task-yield id=1 reason=RtosPortYield
-[machine.1]           90 task-resume id=94 reason=scheduler
-[machine.1]           90 task-yield id=94 reason=RtosPortYield
-[machine.1]           90 user-u32 "worker_start" = 90
-[machine.1]           90 task-resume id=2 reason=scheduler
-[machine.1]           90 task-yield id=2 reason=Idle
-[machine.1]           91 task-resume id=1 reason=scheduler
-[machine.1]           91 task-created id=95 name="worker"
-[machine.1]           91 task-yield id=1 reason=RtosPortYield
-[machine.1]           91 task-resume id=95 reason=scheduler
-[machine.1]           91 task-yield id=95 reason=RtosPortYield
-[machine.1]           91 user-u32 "worker_start" = 91
-[machine.1]           91 task-resume id=2 reason=scheduler
-[machine.1]           91 task-yield id=2 reason=Idle
-[machine.1]           92 task-resume id=1 reason=scheduler
-[machine.1]           92 task-created id=96 name="worker"
-[machine.1]           92 task-yield id=1 reason=RtosPortYield
-[machine.1]           92 task-resume id=96 reason=scheduler
-[machine.1]           92 task-yield id=96 reason=RtosPortYield
-[machine.1]           92 user-u32 "worker_start" = 92
-[machine.1]           92 task-resume id=2 reason=scheduler
-[machine.1]           92 task-yield id=2 reason=Idle
-[machine.1]           93 task-resume id=1 reason=scheduler
-[machine.1]           93 task-created id=97 name="worker"
-[machine.1]           93 task-yield id=1 reason=RtosPortYield
-[machine.1]           93 task-resume id=77 reason=scheduler
-[machine.1]           93 task-yield id=77 reason=RtosPortYield
-[machine.1]           93 user-u32 "worker_done" = 73
-[machine.1]           93 task-resume id=95 reason=scheduler
-[machine.1]           93 task-yield id=95 reason=RtosPortYield
-[machine.1]           93 user-u32 "worker_done" = 91
-[machine.1]           93 task-resume id=97 reason=scheduler
-[machine.1]           93 task-yield id=97 reason=RtosPortYield
-[machine.1]           93 user-u32 "worker_start" = 93
-[machine.1]           93 task-resume id=2 reason=scheduler
-[machine.1]           93 task-yield id=2 reason=Idle
-[machine.1]           94 task-resume id=1 reason=scheduler
-[machine.1]           94 task-created id=98 name="worker"
-[machine.1]           94 task-yield id=1 reason=RtosPortYield
-[machine.1]           94 task-resume id=98 reason=scheduler
-[machine.1]           94 task-yield id=98 reason=RtosPortYield
-[machine.1]           94 user-u32 "worker_start" = 94
-[machine.1]           94 task-resume id=2 reason=scheduler
-[machine.1]           94 task-yield id=2 reason=Idle
-[machine.1]           95 task-resume id=1 reason=scheduler
-[machine.1]           95 task-created id=99 name="worker"
-[machine.1]           95 task-yield id=1 reason=RtosPortYield
-[machine.1]           95 task-resume id=86 reason=scheduler
-[machine.1]           95 task-yield id=86 reason=RtosPortYield
-[machine.1]           95 user-u32 "worker_done" = 82
-[machine.1]           95 task-resume id=94 reason=scheduler
-[machine.1]           95 task-yield id=94 reason=RtosPortYield
-[machine.1]           95 user-u32 "worker_done" = 90
-[machine.1]           95 task-resume id=96 reason=scheduler
-[machine.1]           95 task-yield id=96 reason=RtosPortYield
-[machine.1]           95 user-u32 "worker_done" = 92
-[machine.1]           95 task-resume id=99 reason=scheduler
-[machine.1]           95 task-yield id=99 reason=RtosPortYield
-[machine.1]           95 user-u32 "worker_start" = 95
-[machine.1]           95 task-resume id=2 reason=scheduler
-[machine.1]           95 task-yield id=2 reason=Idle
-[machine.1]           96 task-resume id=1 reason=scheduler
-[machine.1]           96 task-created id=100 name="worker"
-[machine.1]           96 task-yield id=1 reason=RtosPortYield
-[machine.1]           96 task-resume id=100 reason=scheduler
-[machine.1]           96 task-yield id=100 reason=RtosPortYield
-[machine.1]           96 user-u32 "worker_start" = 96
-[machine.1]           96 task-resume id=2 reason=scheduler
-[machine.1]           96 task-yield id=2 reason=Idle
-[machine.1]           97 task-resume id=1 reason=scheduler
-[machine.1]           97 task-created id=101 name="worker"
-[machine.1]           97 task-yield id=1 reason=RtosPortYield
-[machine.1]           97 task-resume id=97 reason=scheduler
-[machine.1]           97 task-yield id=97 reason=RtosPortYield
-[machine.1]           97 user-u32 "worker_done" = 93
-[machine.1]           97 task-resume id=101 reason=scheduler
-[machine.1]           97 task-yield id=101 reason=RtosPortYield
-[machine.1]           97 user-u32 "worker_start" = 97
-[machine.1]           97 task-resume id=2 reason=scheduler
-[machine.1]           97 task-yield id=2 reason=Idle
-[machine.1]           98 task-resume id=1 reason=scheduler
-[machine.1]           98 task-created id=102 name="worker"
-[machine.1]           98 task-yield id=1 reason=RtosPortYield
-[machine.1]           98 task-resume id=102 reason=scheduler
-[machine.1]           98 task-yield id=102 reason=RtosPortYield
-[machine.1]           98 user-u32 "worker_start" = 98
-[machine.1]           98 task-resume id=2 reason=scheduler
-[machine.1]           98 task-yield id=2 reason=Idle
-[machine.1]           99 task-resume id=1 reason=scheduler
-[machine.1]           99 task-created id=103 name="worker"
-[machine.1]           99 task-yield id=1 reason=RtosPortYield
-[machine.1]           99 task-resume id=84 reason=scheduler
-[machine.1]           99 task-yield id=84 reason=RtosPortYield
-[machine.1]           99 user-u32 "worker_done" = 80
-[machine.1]           99 task-resume id=88 reason=scheduler
-[machine.1]           99 task-yield id=88 reason=RtosPortYield
-[machine.1]           99 user-u32 "worker_done" = 84
-[machine.1]           99 task-resume id=90 reason=scheduler
-[machine.1]           99 task-yield id=90 reason=RtosPortYield
-[machine.1]           99 user-u32 "worker_done" = 86
-[machine.1]           99 task-resume id=102 reason=scheduler
-[machine.1]           99 task-yield id=102 reason=RtosPortYield
-[machine.1]           99 user-u32 "worker_done" = 98
-[machine.1]           99 task-resume id=103 reason=scheduler
-[machine.1]           99 task-yield id=103 reason=RtosPortYield
-[machine.1]           99 user-u32 "worker_start" = 99
-[machine.1]           99 task-resume id=2 reason=scheduler
-[machine.1]           99 task-yield id=2 reason=Idle
-[machine.1]          100 task-resume id=1 reason=scheduler
-[machine.1]          100 task-yield id=1 reason=RtosPortYield
-[machine.1]          100 task-resume id=2 reason=scheduler
-[machine.1]          100 task-yield id=2 reason=Idle
-[machine.1]          101 task-resume id=99 reason=scheduler
-[machine.1]          101 task-yield id=99 reason=RtosPortYield
-[machine.1]          101 user-u32 "worker_done" = 95
-[machine.1]          101 task-resume id=101 reason=scheduler
-[machine.1]          101 task-yield id=101 reason=RtosPortYield
-[machine.1]          101 user-u32 "worker_done" = 97
-[machine.1]          101 task-resume id=2 reason=scheduler
-[machine.1]          101 task-yield id=2 reason=Idle
-[machine.1]          103 task-resume id=98 reason=scheduler
-[machine.1]          103 task-yield id=98 reason=RtosPortYield
-[machine.1]          103 user-u32 "worker_done" = 94
-[machine.1]          103 task-resume id=2 reason=scheduler
-[machine.1]          103 task-yield id=2 reason=Idle
-[machine.1]          105 task-resume id=93 reason=scheduler
-[machine.1]          105 task-yield id=93 reason=RtosPortYield
-[machine.1]          105 user-u32 "worker_done" = 89
-[machine.1]          105 task-resume id=103 reason=scheduler
-[machine.1]          105 task-yield id=103 reason=RtosPortYield
-[machine.1]          105 user-u32 "worker_done" = 99
-[machine.1]          105 task-resume id=2 reason=scheduler
-[machine.1]          105 task-yield id=2 reason=Idle
-[machine.1]          107 task-resume id=92 reason=scheduler
-[machine.1]          107 task-yield id=92 reason=RtosPortYield
-[machine.1]          107 user-u32 "worker_done" = 88
-[machine.1]          107 task-resume id=2 reason=scheduler
-[machine.1]          107 task-yield id=2 reason=Idle
-[machine.1]          115 task-resume id=100 reason=scheduler
-[machine.1]          115 task-yield id=100 reason=RtosPortYield
-[machine.1]          115 user-u32 "worker_done" = 96
-[machine.1]          115 task-resume id=2 reason=scheduler
-[machine.1]          115 task-yield id=2 reason=Idle
-[machine.1]          600 task-resume id=1 reason=scheduler
-[machine.1]          600 task-yield id=1 reason=RtosPortYield
-[machine.1]          600 user-u32 "stress_create_done" = 100
-[machine.1]          600 task-resume id=2 reason=scheduler
-[machine.1]          600 task-yield id=2 reason=Idle
+[machine.1]         1000 task-resume id=1 reason=scheduler
+[machine.1]         1000 task-created id=5 name="worker"
+[machine.1]         1000 task-yield id=1 reason=RtosPortYield
+[machine.1]         1000 task-resume id=5 reason=scheduler
+[machine.1]         1000 task-yield id=5 reason=RtosPortYield
+[machine.1]         1000 user-u32 "worker_start" = 1
+[machine.1]         1000 task-resume id=2 reason=scheduler
+[machine.1]         1000 task-yield id=2 reason=Idle
+[machine.1]         2000 task-resume id=1 reason=scheduler
+[machine.1]         2000 task-created id=6 name="worker"
+[machine.1]         2000 task-yield id=1 reason=RtosPortYield
+[machine.1]         2000 task-resume id=6 reason=scheduler
+[machine.1]         2000 task-yield id=6 reason=RtosPortYield
+[machine.1]         2000 user-u32 "worker_start" = 2
+[machine.1]         2000 task-resume id=2 reason=scheduler
+[machine.1]         2000 task-yield id=2 reason=Idle
+[machine.1]         3000 task-resume id=1 reason=scheduler
+[machine.1]         3000 task-created id=7 name="worker"
+[machine.1]         3000 task-yield id=1 reason=RtosPortYield
+[machine.1]         3000 task-resume id=7 reason=scheduler
+[machine.1]         3000 task-yield id=7 reason=RtosPortYield
+[machine.1]         3000 user-u32 "worker_start" = 3
+[machine.1]         3000 task-resume id=2 reason=scheduler
+[machine.1]         3000 task-yield id=2 reason=Idle
+[machine.1]         4000 task-resume id=1 reason=scheduler
+[machine.1]         4000 task-created id=8 name="worker"
+[machine.1]         4000 task-yield id=1 reason=RtosPortYield
+[machine.1]         4000 task-resume id=8 reason=scheduler
+[machine.1]         4000 task-yield id=8 reason=RtosPortYield
+[machine.1]         4000 user-u32 "worker_start" = 4
+[machine.1]         4000 task-resume id=2 reason=scheduler
+[machine.1]         4000 task-yield id=2 reason=Idle
+[machine.1]         5000 task-resume id=1 reason=scheduler
+[machine.1]         5000 task-created id=9 name="worker"
+[machine.1]         5000 task-yield id=1 reason=RtosPortYield
+[machine.1]         5000 task-resume id=5 reason=scheduler
+[machine.1]         5000 task-yield id=5 reason=RtosPortYield
+[machine.1]         5000 user-u32 "worker_done" = 1
+[machine.1]         5000 task-resume id=9 reason=scheduler
+[machine.1]         5000 task-yield id=9 reason=RtosPortYield
+[machine.1]         5000 user-u32 "worker_start" = 5
+[machine.1]         5000 task-resume id=2 reason=scheduler
+[machine.1]         5000 task-yield id=2 reason=Idle
+[machine.1]         6000 task-resume id=1 reason=scheduler
+[machine.1]         6000 task-created id=10 name="worker"
+[machine.1]         6000 task-yield id=1 reason=RtosPortYield
+[machine.1]         6000 task-resume id=10 reason=scheduler
+[machine.1]         6000 task-yield id=10 reason=RtosPortYield
+[machine.1]         6000 user-u32 "worker_start" = 6
+[machine.1]         6000 task-resume id=2 reason=scheduler
+[machine.1]         6000 task-yield id=2 reason=Idle
+[machine.1]         7000 task-resume id=1 reason=scheduler
+[machine.1]         7000 task-created id=11 name="worker"
+[machine.1]         7000 task-yield id=1 reason=RtosPortYield
+[machine.1]         7000 task-resume id=10 reason=scheduler
+[machine.1]         7000 task-yield id=10 reason=RtosPortYield
+[machine.1]         7000 user-u32 "worker_done" = 6
+[machine.1]         7000 task-resume id=11 reason=scheduler
+[machine.1]         7000 task-yield id=11 reason=RtosPortYield
+[machine.1]         7000 user-u32 "worker_start" = 7
+[machine.1]         7000 task-resume id=2 reason=scheduler
+[machine.1]         7000 task-yield id=2 reason=Idle
+[machine.1]         8000 task-resume id=1 reason=scheduler
+[machine.1]         8000 task-created id=12 name="worker"
+[machine.1]         8000 task-yield id=1 reason=RtosPortYield
+[machine.1]         8000 task-resume id=12 reason=scheduler
+[machine.1]         8000 task-yield id=12 reason=RtosPortYield
+[machine.1]         8000 user-u32 "worker_start" = 8
+[machine.1]         8000 task-resume id=2 reason=scheduler
+[machine.1]         8000 task-yield id=2 reason=Idle
+[machine.1]         9000 task-resume id=1 reason=scheduler
+[machine.1]         9000 task-created id=13 name="worker"
+[machine.1]         9000 task-yield id=1 reason=RtosPortYield
+[machine.1]         9000 task-resume id=11 reason=scheduler
+[machine.1]         9000 task-yield id=11 reason=RtosPortYield
+[machine.1]         9000 user-u32 "worker_done" = 7
+[machine.1]         9000 task-resume id=13 reason=scheduler
+[machine.1]         9000 task-yield id=13 reason=RtosPortYield
+[machine.1]         9000 user-u32 "worker_start" = 9
+[machine.1]         9000 task-resume id=2 reason=scheduler
+[machine.1]         9000 task-yield id=2 reason=Idle
+[machine.1]        10000 task-resume id=1 reason=scheduler
+[machine.1]        10000 task-created id=14 name="worker"
+[machine.1]        10000 task-yield id=1 reason=RtosPortYield
+[machine.1]        10000 task-resume id=14 reason=scheduler
+[machine.1]        10000 task-yield id=14 reason=RtosPortYield
+[machine.1]        10000 user-u32 "worker_start" = 10
+[machine.1]        10000 task-resume id=2 reason=scheduler
+[machine.1]        10000 task-yield id=2 reason=Idle
+[machine.1]        11000 task-resume id=1 reason=scheduler
+[machine.1]        11000 task-created id=15 name="worker"
+[machine.1]        11000 task-yield id=1 reason=RtosPortYield
+[machine.1]        11000 task-resume id=8 reason=scheduler
+[machine.1]        11000 task-yield id=8 reason=RtosPortYield
+[machine.1]        11000 user-u32 "worker_done" = 4
+[machine.1]        11000 task-resume id=15 reason=scheduler
+[machine.1]        11000 task-yield id=15 reason=RtosPortYield
+[machine.1]        11000 user-u32 "worker_start" = 11
+[machine.1]        11000 task-resume id=2 reason=scheduler
+[machine.1]        11000 task-yield id=2 reason=Idle
+[machine.1]        12000 task-resume id=1 reason=scheduler
+[machine.1]        12000 task-created id=16 name="worker"
+[machine.1]        12000 task-yield id=1 reason=RtosPortYield
+[machine.1]        12000 task-resume id=16 reason=scheduler
+[machine.1]        12000 task-yield id=16 reason=RtosPortYield
+[machine.1]        12000 user-u32 "worker_start" = 12
+[machine.1]        12000 task-resume id=2 reason=scheduler
+[machine.1]        12000 task-yield id=2 reason=Idle
+[machine.1]        13000 task-resume id=1 reason=scheduler
+[machine.1]        13000 task-created id=17 name="worker"
+[machine.1]        13000 task-yield id=1 reason=RtosPortYield
+[machine.1]        13000 task-resume id=17 reason=scheduler
+[machine.1]        13000 task-yield id=17 reason=RtosPortYield
+[machine.1]        13000 user-u32 "worker_start" = 13
+[machine.1]        13000 task-resume id=2 reason=scheduler
+[machine.1]        13000 task-yield id=2 reason=Idle
+[machine.1]        14000 task-resume id=1 reason=scheduler
+[machine.1]        14000 task-created id=18 name="worker"
+[machine.1]        14000 task-yield id=1 reason=RtosPortYield
+[machine.1]        14000 task-resume id=18 reason=scheduler
+[machine.1]        14000 task-yield id=18 reason=RtosPortYield
+[machine.1]        14000 user-u32 "worker_start" = 14
+[machine.1]        14000 task-resume id=2 reason=scheduler
+[machine.1]        14000 task-yield id=2 reason=Idle
+[machine.1]        15000 task-resume id=1 reason=scheduler
+[machine.1]        15000 task-created id=19 name="worker"
+[machine.1]        15000 task-yield id=1 reason=RtosPortYield
+[machine.1]        15000 task-resume id=4 reason=scheduler
+[machine.1]        15000 task-yield id=4 reason=RtosPortYield
+[machine.1]        15000 user-u32 "worker_done" = 0
+[machine.1]        15000 task-resume id=6 reason=scheduler
+[machine.1]        15000 task-yield id=6 reason=RtosPortYield
+[machine.1]        15000 user-u32 "worker_done" = 2
+[machine.1]        15000 task-resume id=14 reason=scheduler
+[machine.1]        15000 task-yield id=14 reason=RtosPortYield
+[machine.1]        15000 user-u32 "worker_done" = 10
+[machine.1]        15000 task-resume id=16 reason=scheduler
+[machine.1]        15000 task-yield id=16 reason=RtosPortYield
+[machine.1]        15000 user-u32 "worker_done" = 12
+[machine.1]        15000 task-resume id=19 reason=scheduler
+[machine.1]        15000 task-yield id=19 reason=RtosPortYield
+[machine.1]        15000 user-u32 "worker_start" = 15
+[machine.1]        15000 task-resume id=2 reason=scheduler
+[machine.1]        15000 task-yield id=2 reason=Idle
+[machine.1]        16000 task-resume id=1 reason=scheduler
+[machine.1]        16000 task-created id=20 name="worker"
+[machine.1]        16000 task-yield id=1 reason=RtosPortYield
+[machine.1]        16000 task-resume id=20 reason=scheduler
+[machine.1]        16000 task-yield id=20 reason=RtosPortYield
+[machine.1]        16000 user-u32 "worker_start" = 16
+[machine.1]        16000 task-resume id=2 reason=scheduler
+[machine.1]        16000 task-yield id=2 reason=Idle
+[machine.1]        17000 task-resume id=1 reason=scheduler
+[machine.1]        17000 task-created id=21 name="worker"
+[machine.1]        17000 task-yield id=1 reason=RtosPortYield
+[machine.1]        17000 task-resume id=7 reason=scheduler
+[machine.1]        17000 task-yield id=7 reason=RtosPortYield
+[machine.1]        17000 user-u32 "worker_done" = 3
+[machine.1]        17000 task-resume id=15 reason=scheduler
+[machine.1]        17000 task-yield id=15 reason=RtosPortYield
+[machine.1]        17000 user-u32 "worker_done" = 11
+[machine.1]        17000 task-resume id=21 reason=scheduler
+[machine.1]        17000 task-yield id=21 reason=RtosPortYield
+[machine.1]        17000 user-u32 "worker_start" = 17
+[machine.1]        17000 task-resume id=2 reason=scheduler
+[machine.1]        17000 task-yield id=2 reason=Idle
+[machine.1]        18000 task-resume id=1 reason=scheduler
+[machine.1]        18000 task-created id=22 name="worker"
+[machine.1]        18000 task-yield id=1 reason=RtosPortYield
+[machine.1]        18000 task-resume id=22 reason=scheduler
+[machine.1]        18000 task-yield id=22 reason=RtosPortYield
+[machine.1]        18000 user-u32 "worker_start" = 18
+[machine.1]        18000 task-resume id=2 reason=scheduler
+[machine.1]        18000 task-yield id=2 reason=Idle
+[machine.1]        19000 task-resume id=1 reason=scheduler
+[machine.1]        19000 task-created id=23 name="worker"
+[machine.1]        19000 task-yield id=1 reason=RtosPortYield
+[machine.1]        19000 task-resume id=12 reason=scheduler
+[machine.1]        19000 task-yield id=12 reason=RtosPortYield
+[machine.1]        19000 user-u32 "worker_done" = 8
+[machine.1]        19000 task-resume id=22 reason=scheduler
+[machine.1]        19000 task-yield id=22 reason=RtosPortYield
+[machine.1]        19000 user-u32 "worker_done" = 18
+[machine.1]        19000 task-resume id=23 reason=scheduler
+[machine.1]        19000 task-yield id=23 reason=RtosPortYield
+[machine.1]        19000 user-u32 "worker_start" = 19
+[machine.1]        19000 task-resume id=2 reason=scheduler
+[machine.1]        19000 task-yield id=2 reason=Idle
+[machine.1]        20000 task-resume id=1 reason=scheduler
+[machine.1]        20000 task-created id=24 name="worker"
+[machine.1]        20000 task-yield id=1 reason=RtosPortYield
+[machine.1]        20000 task-resume id=24 reason=scheduler
+[machine.1]        20000 task-yield id=24 reason=RtosPortYield
+[machine.1]        20000 user-u32 "worker_start" = 20
+[machine.1]        20000 task-resume id=2 reason=scheduler
+[machine.1]        20000 task-yield id=2 reason=Idle
+[machine.1]        21000 task-resume id=1 reason=scheduler
+[machine.1]        21000 task-created id=25 name="worker"
+[machine.1]        21000 task-yield id=1 reason=RtosPortYield
+[machine.1]        21000 task-resume id=19 reason=scheduler
+[machine.1]        21000 task-yield id=19 reason=RtosPortYield
+[machine.1]        21000 user-u32 "worker_done" = 15
+[machine.1]        21000 task-resume id=25 reason=scheduler
+[machine.1]        21000 task-yield id=25 reason=RtosPortYield
+[machine.1]        21000 user-u32 "worker_start" = 21
+[machine.1]        21000 task-resume id=2 reason=scheduler
+[machine.1]        21000 task-yield id=2 reason=Idle
+[machine.1]        22000 task-resume id=1 reason=scheduler
+[machine.1]        22000 task-created id=26 name="worker"
+[machine.1]        22000 task-yield id=1 reason=RtosPortYield
+[machine.1]        22000 task-resume id=26 reason=scheduler
+[machine.1]        22000 task-yield id=26 reason=RtosPortYield
+[machine.1]        22000 user-u32 "worker_start" = 22
+[machine.1]        22000 task-resume id=2 reason=scheduler
+[machine.1]        22000 task-yield id=2 reason=Idle
+[machine.1]        23000 task-resume id=1 reason=scheduler
+[machine.1]        23000 task-created id=27 name="worker"
+[machine.1]        23000 task-yield id=1 reason=RtosPortYield
+[machine.1]        23000 task-resume id=18 reason=scheduler
+[machine.1]        23000 task-yield id=18 reason=RtosPortYield
+[machine.1]        23000 user-u32 "worker_done" = 14
+[machine.1]        23000 task-resume id=27 reason=scheduler
+[machine.1]        23000 task-yield id=27 reason=RtosPortYield
+[machine.1]        23000 user-u32 "worker_start" = 23
+[machine.1]        23000 task-resume id=2 reason=scheduler
+[machine.1]        23000 task-yield id=2 reason=Idle
+[machine.1]        24000 task-resume id=1 reason=scheduler
+[machine.1]        24000 task-created id=28 name="worker"
+[machine.1]        24000 task-yield id=1 reason=RtosPortYield
+[machine.1]        24000 task-resume id=28 reason=scheduler
+[machine.1]        24000 task-yield id=28 reason=RtosPortYield
+[machine.1]        24000 user-u32 "worker_start" = 24
+[machine.1]        24000 task-resume id=2 reason=scheduler
+[machine.1]        24000 task-yield id=2 reason=Idle
+[machine.1]        25000 task-resume id=1 reason=scheduler
+[machine.1]        25000 task-created id=29 name="worker"
+[machine.1]        25000 task-yield id=1 reason=RtosPortYield
+[machine.1]        25000 task-resume id=9 reason=scheduler
+[machine.1]        25000 task-yield id=9 reason=RtosPortYield
+[machine.1]        25000 user-u32 "worker_done" = 5
+[machine.1]        25000 task-resume id=13 reason=scheduler
+[machine.1]        25000 task-yield id=13 reason=RtosPortYield
+[machine.1]        25000 user-u32 "worker_done" = 9
+[machine.1]        25000 task-resume id=17 reason=scheduler
+[machine.1]        25000 task-yield id=17 reason=RtosPortYield
+[machine.1]        25000 user-u32 "worker_done" = 13
+[machine.1]        25000 task-resume id=29 reason=scheduler
+[machine.1]        25000 task-yield id=29 reason=RtosPortYield
+[machine.1]        25000 user-u32 "worker_start" = 25
+[machine.1]        25000 task-resume id=2 reason=scheduler
+[machine.1]        25000 task-yield id=2 reason=Idle
+[machine.1]        26000 task-resume id=1 reason=scheduler
+[machine.1]        26000 task-created id=30 name="worker"
+[machine.1]        26000 task-yield id=1 reason=RtosPortYield
+[machine.1]        26000 task-resume id=30 reason=scheduler
+[machine.1]        26000 task-yield id=30 reason=RtosPortYield
+[machine.1]        26000 user-u32 "worker_start" = 26
+[machine.1]        26000 task-resume id=2 reason=scheduler
+[machine.1]        26000 task-yield id=2 reason=Idle
+[machine.1]        27000 task-resume id=1 reason=scheduler
+[machine.1]        27000 task-created id=31 name="worker"
+[machine.1]        27000 task-yield id=1 reason=RtosPortYield
+[machine.1]        27000 task-resume id=26 reason=scheduler
+[machine.1]        27000 task-yield id=26 reason=RtosPortYield
+[machine.1]        27000 user-u32 "worker_done" = 22
+[machine.1]        27000 task-resume id=31 reason=scheduler
+[machine.1]        27000 task-yield id=31 reason=RtosPortYield
+[machine.1]        27000 user-u32 "worker_start" = 27
+[machine.1]        27000 task-resume id=2 reason=scheduler
+[machine.1]        27000 task-yield id=2 reason=Idle
+[machine.1]        28000 task-resume id=1 reason=scheduler
+[machine.1]        28000 task-created id=32 name="worker"
+[machine.1]        28000 task-yield id=1 reason=RtosPortYield
+[machine.1]        28000 task-resume id=32 reason=scheduler
+[machine.1]        28000 task-yield id=32 reason=RtosPortYield
+[machine.1]        28000 user-u32 "worker_start" = 28
+[machine.1]        28000 task-resume id=2 reason=scheduler
+[machine.1]        28000 task-yield id=2 reason=Idle
+[machine.1]        29000 task-resume id=1 reason=scheduler
+[machine.1]        29000 task-created id=33 name="worker"
+[machine.1]        29000 task-yield id=1 reason=RtosPortYield
+[machine.1]        29000 task-resume id=23 reason=scheduler
+[machine.1]        29000 task-yield id=23 reason=RtosPortYield
+[machine.1]        29000 user-u32 "worker_done" = 19
+[machine.1]        29000 task-resume id=33 reason=scheduler
+[machine.1]        29000 task-yield id=33 reason=RtosPortYield
+[machine.1]        29000 user-u32 "worker_start" = 29
+[machine.1]        29000 task-resume id=2 reason=scheduler
+[machine.1]        29000 task-yield id=2 reason=Idle
+[machine.1]        30000 task-resume id=1 reason=scheduler
+[machine.1]        30000 task-created id=34 name="worker"
+[machine.1]        30000 task-yield id=1 reason=RtosPortYield
+[machine.1]        30000 task-resume id=34 reason=scheduler
+[machine.1]        30000 task-yield id=34 reason=RtosPortYield
+[machine.1]        30000 user-u32 "worker_start" = 30
+[machine.1]        30000 task-resume id=2 reason=scheduler
+[machine.1]        30000 task-yield id=2 reason=Idle
+[machine.1]        31000 task-resume id=1 reason=scheduler
+[machine.1]        31000 task-created id=35 name="worker"
+[machine.1]        31000 task-yield id=1 reason=RtosPortYield
+[machine.1]        31000 task-resume id=20 reason=scheduler
+[machine.1]        31000 task-yield id=20 reason=RtosPortYield
+[machine.1]        31000 user-u32 "worker_done" = 16
+[machine.1]        31000 task-resume id=24 reason=scheduler
+[machine.1]        31000 task-yield id=24 reason=RtosPortYield
+[machine.1]        31000 user-u32 "worker_done" = 20
+[machine.1]        31000 task-resume id=30 reason=scheduler
+[machine.1]        31000 task-yield id=30 reason=RtosPortYield
+[machine.1]        31000 user-u32 "worker_done" = 26
+[machine.1]        31000 task-resume id=32 reason=scheduler
+[machine.1]        31000 task-yield id=32 reason=RtosPortYield
+[machine.1]        31000 user-u32 "worker_done" = 28
+[machine.1]        31000 task-resume id=34 reason=scheduler
+[machine.1]        31000 task-yield id=34 reason=RtosPortYield
+[machine.1]        31000 user-u32 "worker_done" = 30
+[machine.1]        31000 task-resume id=35 reason=scheduler
+[machine.1]        31000 task-yield id=35 reason=RtosPortYield
+[machine.1]        31000 user-u32 "worker_start" = 31
+[machine.1]        31000 task-resume id=2 reason=scheduler
+[machine.1]        31000 task-yield id=2 reason=Idle
+[machine.1]        32000 task-resume id=1 reason=scheduler
+[machine.1]        32000 task-created id=36 name="worker"
+[machine.1]        32000 task-yield id=1 reason=RtosPortYield
+[machine.1]        32000 task-resume id=36 reason=scheduler
+[machine.1]        32000 task-yield id=36 reason=RtosPortYield
+[machine.1]        32000 user-u32 "worker_start" = 32
+[machine.1]        32000 task-resume id=2 reason=scheduler
+[machine.1]        32000 task-yield id=2 reason=Idle
+[machine.1]        33000 task-resume id=1 reason=scheduler
+[machine.1]        33000 task-created id=37 name="worker"
+[machine.1]        33000 task-yield id=1 reason=RtosPortYield
+[machine.1]        33000 task-resume id=21 reason=scheduler
+[machine.1]        33000 task-yield id=21 reason=RtosPortYield
+[machine.1]        33000 user-u32 "worker_done" = 17
+[machine.1]        33000 task-resume id=31 reason=scheduler
+[machine.1]        33000 task-yield id=31 reason=RtosPortYield
+[machine.1]        33000 user-u32 "worker_done" = 27
+[machine.1]        33000 task-resume id=37 reason=scheduler
+[machine.1]        33000 task-yield id=37 reason=RtosPortYield
+[machine.1]        33000 user-u32 "worker_start" = 33
+[machine.1]        33000 task-resume id=2 reason=scheduler
+[machine.1]        33000 task-yield id=2 reason=Idle
+[machine.1]        34000 task-resume id=1 reason=scheduler
+[machine.1]        34000 task-created id=38 name="worker"
+[machine.1]        34000 task-yield id=1 reason=RtosPortYield
+[machine.1]        34000 task-resume id=38 reason=scheduler
+[machine.1]        34000 task-yield id=38 reason=RtosPortYield
+[machine.1]        34000 user-u32 "worker_start" = 34
+[machine.1]        34000 task-resume id=2 reason=scheduler
+[machine.1]        34000 task-yield id=2 reason=Idle
+[machine.1]        35000 task-resume id=1 reason=scheduler
+[machine.1]        35000 task-created id=39 name="worker"
+[machine.1]        35000 task-yield id=1 reason=RtosPortYield
+[machine.1]        35000 task-resume id=36 reason=scheduler
+[machine.1]        35000 task-yield id=36 reason=RtosPortYield
+[machine.1]        35000 user-u32 "worker_done" = 32
+[machine.1]        35000 task-resume id=39 reason=scheduler
+[machine.1]        35000 task-yield id=39 reason=RtosPortYield
+[machine.1]        35000 user-u32 "worker_start" = 35
+[machine.1]        35000 task-resume id=2 reason=scheduler
+[machine.1]        35000 task-yield id=2 reason=Idle
+[machine.1]        36000 task-resume id=1 reason=scheduler
+[machine.1]        36000 task-created id=40 name="worker"
+[machine.1]        36000 task-yield id=1 reason=RtosPortYield
+[machine.1]        36000 task-resume id=40 reason=scheduler
+[machine.1]        36000 task-yield id=40 reason=RtosPortYield
+[machine.1]        36000 user-u32 "worker_start" = 36
+[machine.1]        36000 task-resume id=2 reason=scheduler
+[machine.1]        36000 task-yield id=2 reason=Idle
+[machine.1]        37000 task-resume id=1 reason=scheduler
+[machine.1]        37000 task-created id=41 name="worker"
+[machine.1]        37000 task-yield id=1 reason=RtosPortYield
+[machine.1]        37000 task-resume id=25 reason=scheduler
+[machine.1]        37000 task-yield id=25 reason=RtosPortYield
+[machine.1]        37000 user-u32 "worker_done" = 21
+[machine.1]        37000 task-resume id=27 reason=scheduler
+[machine.1]        37000 task-yield id=27 reason=RtosPortYield
+[machine.1]        37000 user-u32 "worker_done" = 23
+[machine.1]        37000 task-resume id=37 reason=scheduler
+[machine.1]        37000 task-yield id=37 reason=RtosPortYield
+[machine.1]        37000 user-u32 "worker_done" = 33
+[machine.1]        37000 task-resume id=41 reason=scheduler
+[machine.1]        37000 task-yield id=41 reason=RtosPortYield
+[machine.1]        37000 user-u32 "worker_start" = 37
+[machine.1]        37000 task-resume id=2 reason=scheduler
+[machine.1]        37000 task-yield id=2 reason=Idle
+[machine.1]        38000 task-resume id=1 reason=scheduler
+[machine.1]        38000 task-created id=42 name="worker"
+[machine.1]        38000 task-yield id=1 reason=RtosPortYield
+[machine.1]        38000 task-resume id=42 reason=scheduler
+[machine.1]        38000 task-yield id=42 reason=RtosPortYield
+[machine.1]        38000 user-u32 "worker_start" = 38
+[machine.1]        38000 task-resume id=2 reason=scheduler
+[machine.1]        38000 task-yield id=2 reason=Idle
+[machine.1]        39000 task-resume id=1 reason=scheduler
+[machine.1]        39000 task-created id=43 name="worker"
+[machine.1]        39000 task-yield id=1 reason=RtosPortYield
+[machine.1]        39000 task-resume id=40 reason=scheduler
+[machine.1]        39000 task-yield id=40 reason=RtosPortYield
+[machine.1]        39000 user-u32 "worker_done" = 36
+[machine.1]        39000 task-resume id=43 reason=scheduler
+[machine.1]        39000 task-yield id=43 reason=RtosPortYield
+[machine.1]        39000 user-u32 "worker_start" = 39
+[machine.1]        39000 task-resume id=2 reason=scheduler
+[machine.1]        39000 task-yield id=2 reason=Idle
+[machine.1]        40000 task-resume id=1 reason=scheduler
+[machine.1]        40000 task-created id=44 name="worker"
+[machine.1]        40000 task-yield id=1 reason=RtosPortYield
+[machine.1]        40000 task-resume id=44 reason=scheduler
+[machine.1]        40000 task-yield id=44 reason=RtosPortYield
+[machine.1]        40000 user-u32 "worker_start" = 40
+[machine.1]        40000 task-resume id=2 reason=scheduler
+[machine.1]        40000 task-yield id=2 reason=Idle
+[machine.1]        41000 task-resume id=1 reason=scheduler
+[machine.1]        41000 task-created id=45 name="worker"
+[machine.1]        41000 task-yield id=1 reason=RtosPortYield
+[machine.1]        41000 task-resume id=29 reason=scheduler
+[machine.1]        41000 task-yield id=29 reason=RtosPortYield
+[machine.1]        41000 user-u32 "worker_done" = 25
+[machine.1]        41000 task-resume id=45 reason=scheduler
+[machine.1]        41000 task-yield id=45 reason=RtosPortYield
+[machine.1]        41000 user-u32 "worker_start" = 41
+[machine.1]        41000 task-resume id=2 reason=scheduler
+[machine.1]        41000 task-yield id=2 reason=Idle
+[machine.1]        42000 task-resume id=1 reason=scheduler
+[machine.1]        42000 task-created id=46 name="worker"
+[machine.1]        42000 task-yield id=1 reason=RtosPortYield
+[machine.1]        42000 task-resume id=46 reason=scheduler
+[machine.1]        42000 task-yield id=46 reason=RtosPortYield
+[machine.1]        42000 user-u32 "worker_start" = 42
+[machine.1]        42000 task-resume id=2 reason=scheduler
+[machine.1]        42000 task-yield id=2 reason=Idle
+[machine.1]        43000 task-resume id=1 reason=scheduler
+[machine.1]        43000 task-created id=47 name="worker"
+[machine.1]        43000 task-yield id=1 reason=RtosPortYield
+[machine.1]        43000 task-resume id=28 reason=scheduler
+[machine.1]        43000 task-yield id=28 reason=RtosPortYield
+[machine.1]        43000 user-u32 "worker_done" = 24
+[machine.1]        43000 task-resume id=44 reason=scheduler
+[machine.1]        43000 task-yield id=44 reason=RtosPortYield
+[machine.1]        43000 user-u32 "worker_done" = 40
+[machine.1]        43000 task-resume id=47 reason=scheduler
+[machine.1]        43000 task-yield id=47 reason=RtosPortYield
+[machine.1]        43000 user-u32 "worker_start" = 43
+[machine.1]        43000 task-resume id=2 reason=scheduler
+[machine.1]        43000 task-yield id=2 reason=Idle
+[machine.1]        44000 task-resume id=1 reason=scheduler
+[machine.1]        44000 task-created id=48 name="worker"
+[machine.1]        44000 task-yield id=1 reason=RtosPortYield
+[machine.1]        44000 task-resume id=48 reason=scheduler
+[machine.1]        44000 task-yield id=48 reason=RtosPortYield
+[machine.1]        44000 user-u32 "worker_start" = 44
+[machine.1]        44000 task-resume id=2 reason=scheduler
+[machine.1]        44000 task-yield id=2 reason=Idle
+[machine.1]        45000 task-resume id=1 reason=scheduler
+[machine.1]        45000 task-created id=49 name="worker"
+[machine.1]        45000 task-yield id=1 reason=RtosPortYield
+[machine.1]        45000 task-resume id=33 reason=scheduler
+[machine.1]        45000 task-yield id=33 reason=RtosPortYield
+[machine.1]        45000 user-u32 "worker_done" = 29
+[machine.1]        45000 task-resume id=35 reason=scheduler
+[machine.1]        45000 task-yield id=35 reason=RtosPortYield
+[machine.1]        45000 user-u32 "worker_done" = 31
+[machine.1]        45000 task-resume id=49 reason=scheduler
+[machine.1]        45000 task-yield id=49 reason=RtosPortYield
+[machine.1]        45000 user-u32 "worker_start" = 45
+[machine.1]        45000 task-resume id=2 reason=scheduler
+[machine.1]        45000 task-yield id=2 reason=Idle
+[machine.1]        46000 task-resume id=1 reason=scheduler
+[machine.1]        46000 task-created id=50 name="worker"
+[machine.1]        46000 task-yield id=1 reason=RtosPortYield
+[machine.1]        46000 task-resume id=50 reason=scheduler
+[machine.1]        46000 task-yield id=50 reason=RtosPortYield
+[machine.1]        46000 user-u32 "worker_start" = 46
+[machine.1]        46000 task-resume id=2 reason=scheduler
+[machine.1]        46000 task-yield id=2 reason=Idle
+[machine.1]        47000 task-resume id=1 reason=scheduler
+[machine.1]        47000 task-created id=51 name="worker"
+[machine.1]        47000 task-yield id=1 reason=RtosPortYield
+[machine.1]        47000 task-resume id=46 reason=scheduler
+[machine.1]        47000 task-yield id=46 reason=RtosPortYield
+[machine.1]        47000 user-u32 "worker_done" = 42
+[machine.1]        47000 task-resume id=50 reason=scheduler
+[machine.1]        47000 task-yield id=50 reason=RtosPortYield
+[machine.1]        47000 user-u32 "worker_done" = 46
+[machine.1]        47000 task-resume id=51 reason=scheduler
+[machine.1]        47000 task-yield id=51 reason=RtosPortYield
+[machine.1]        47000 user-u32 "worker_start" = 47
+[machine.1]        47000 task-resume id=2 reason=scheduler
+[machine.1]        47000 task-yield id=2 reason=Idle
+[machine.1]        48000 task-resume id=1 reason=scheduler
+[machine.1]        48000 task-created id=52 name="worker"
+[machine.1]        48000 task-yield id=1 reason=RtosPortYield
+[machine.1]        48000 task-resume id=52 reason=scheduler
+[machine.1]        48000 task-yield id=52 reason=RtosPortYield
+[machine.1]        48000 user-u32 "worker_start" = 48
+[machine.1]        48000 task-resume id=2 reason=scheduler
+[machine.1]        48000 task-yield id=2 reason=Idle
+[machine.1]        49000 task-resume id=1 reason=scheduler
+[machine.1]        49000 task-created id=53 name="worker"
+[machine.1]        49000 task-yield id=1 reason=RtosPortYield
+[machine.1]        49000 task-resume id=43 reason=scheduler
+[machine.1]        49000 task-yield id=43 reason=RtosPortYield
+[machine.1]        49000 user-u32 "worker_done" = 39
+[machine.1]        49000 task-resume id=51 reason=scheduler
+[machine.1]        49000 task-yield id=51 reason=RtosPortYield
+[machine.1]        49000 user-u32 "worker_done" = 47
+[machine.1]        49000 task-resume id=53 reason=scheduler
+[machine.1]        49000 task-yield id=53 reason=RtosPortYield
+[machine.1]        49000 user-u32 "worker_start" = 49
+[machine.1]        49000 task-resume id=2 reason=scheduler
+[machine.1]        49000 task-yield id=2 reason=Idle
+[machine.1]        50000 task-resume id=1 reason=scheduler
+[machine.1]        50000 task-created id=54 name="worker"
+[machine.1]        50000 task-yield id=1 reason=RtosPortYield
+[machine.1]        50000 task-resume id=54 reason=scheduler
+[machine.1]        50000 task-yield id=54 reason=RtosPortYield
+[machine.1]        50000 user-u32 "worker_start" = 50
+[machine.1]        50000 task-resume id=2 reason=scheduler
+[machine.1]        50000 task-yield id=2 reason=Idle
+[machine.1]        51000 task-resume id=1 reason=scheduler
+[machine.1]        51000 task-created id=55 name="worker"
+[machine.1]        51000 task-yield id=1 reason=RtosPortYield
+[machine.1]        51000 task-resume id=38 reason=scheduler
+[machine.1]        51000 task-yield id=38 reason=RtosPortYield
+[machine.1]        51000 user-u32 "worker_done" = 34
+[machine.1]        51000 task-resume id=55 reason=scheduler
+[machine.1]        51000 task-yield id=55 reason=RtosPortYield
+[machine.1]        51000 user-u32 "worker_start" = 51
+[machine.1]        51000 task-resume id=2 reason=scheduler
+[machine.1]        51000 task-yield id=2 reason=Idle
+[machine.1]        52000 task-resume id=1 reason=scheduler
+[machine.1]        52000 task-created id=56 name="worker"
+[machine.1]        52000 task-yield id=1 reason=RtosPortYield
+[machine.1]        52000 task-resume id=56 reason=scheduler
+[machine.1]        52000 task-yield id=56 reason=RtosPortYield
+[machine.1]        52000 user-u32 "worker_start" = 52
+[machine.1]        52000 task-resume id=2 reason=scheduler
+[machine.1]        52000 task-yield id=2 reason=Idle
+[machine.1]        53000 task-resume id=1 reason=scheduler
+[machine.1]        53000 task-created id=57 name="worker"
+[machine.1]        53000 task-yield id=1 reason=RtosPortYield
+[machine.1]        53000 task-resume id=39 reason=scheduler
+[machine.1]        53000 task-yield id=39 reason=RtosPortYield
+[machine.1]        53000 user-u32 "worker_done" = 35
+[machine.1]        53000 task-resume id=41 reason=scheduler
+[machine.1]        53000 task-yield id=41 reason=RtosPortYield
+[machine.1]        53000 user-u32 "worker_done" = 37
+[machine.1]        53000 task-resume id=49 reason=scheduler
+[machine.1]        53000 task-yield id=49 reason=RtosPortYield
+[machine.1]        53000 user-u32 "worker_done" = 45
+[machine.1]        53000 task-resume id=57 reason=scheduler
+[machine.1]        53000 task-yield id=57 reason=RtosPortYield
+[machine.1]        53000 user-u32 "worker_start" = 53
+[machine.1]        53000 task-resume id=2 reason=scheduler
+[machine.1]        53000 task-yield id=2 reason=Idle
+[machine.1]        54000 task-resume id=1 reason=scheduler
+[machine.1]        54000 task-created id=58 name="worker"
+[machine.1]        54000 task-yield id=1 reason=RtosPortYield
+[machine.1]        54000 task-resume id=58 reason=scheduler
+[machine.1]        54000 task-yield id=58 reason=RtosPortYield
+[machine.1]        54000 user-u32 "worker_start" = 54
+[machine.1]        54000 task-resume id=2 reason=scheduler
+[machine.1]        54000 task-yield id=2 reason=Idle
+[machine.1]        55000 task-resume id=1 reason=scheduler
+[machine.1]        55000 task-created id=59 name="worker"
+[machine.1]        55000 task-yield id=1 reason=RtosPortYield
+[machine.1]        55000 task-resume id=42 reason=scheduler
+[machine.1]        55000 task-yield id=42 reason=RtosPortYield
+[machine.1]        55000 user-u32 "worker_done" = 38
+[machine.1]        55000 task-resume id=48 reason=scheduler
+[machine.1]        55000 task-yield id=48 reason=RtosPortYield
+[machine.1]        55000 user-u32 "worker_done" = 44
+[machine.1]        55000 task-resume id=56 reason=scheduler
+[machine.1]        55000 task-yield id=56 reason=RtosPortYield
+[machine.1]        55000 user-u32 "worker_done" = 52
+[machine.1]        55000 task-resume id=58 reason=scheduler
+[machine.1]        55000 task-yield id=58 reason=RtosPortYield
+[machine.1]        55000 user-u32 "worker_done" = 54
+[machine.1]        55000 task-resume id=59 reason=scheduler
+[machine.1]        55000 task-yield id=59 reason=RtosPortYield
+[machine.1]        55000 user-u32 "worker_start" = 55
+[machine.1]        55000 task-resume id=2 reason=scheduler
+[machine.1]        55000 task-yield id=2 reason=Idle
+[machine.1]        56000 task-resume id=1 reason=scheduler
+[machine.1]        56000 task-created id=60 name="worker"
+[machine.1]        56000 task-yield id=1 reason=RtosPortYield
+[machine.1]        56000 task-resume id=60 reason=scheduler
+[machine.1]        56000 task-yield id=60 reason=RtosPortYield
+[machine.1]        56000 user-u32 "worker_start" = 56
+[machine.1]        56000 task-resume id=2 reason=scheduler
+[machine.1]        56000 task-yield id=2 reason=Idle
+[machine.1]        57000 task-resume id=1 reason=scheduler
+[machine.1]        57000 task-created id=61 name="worker"
+[machine.1]        57000 task-yield id=1 reason=RtosPortYield
+[machine.1]        57000 task-resume id=53 reason=scheduler
+[machine.1]        57000 task-yield id=53 reason=RtosPortYield
+[machine.1]        57000 user-u32 "worker_done" = 49
+[machine.1]        57000 task-resume id=61 reason=scheduler
+[machine.1]        57000 task-yield id=61 reason=RtosPortYield
+[machine.1]        57000 user-u32 "worker_start" = 57
+[machine.1]        57000 task-resume id=2 reason=scheduler
+[machine.1]        57000 task-yield id=2 reason=Idle
+[machine.1]        58000 task-resume id=1 reason=scheduler
+[machine.1]        58000 task-created id=62 name="worker"
+[machine.1]        58000 task-yield id=1 reason=RtosPortYield
+[machine.1]        58000 task-resume id=62 reason=scheduler
+[machine.1]        58000 task-yield id=62 reason=RtosPortYield
+[machine.1]        58000 user-u32 "worker_start" = 58
+[machine.1]        58000 task-resume id=2 reason=scheduler
+[machine.1]        58000 task-yield id=2 reason=Idle
+[machine.1]        59000 task-resume id=1 reason=scheduler
+[machine.1]        59000 task-created id=63 name="worker"
+[machine.1]        59000 task-yield id=1 reason=RtosPortYield
+[machine.1]        59000 task-resume id=63 reason=scheduler
+[machine.1]        59000 task-yield id=63 reason=RtosPortYield
+[machine.1]        59000 user-u32 "worker_start" = 59
+[machine.1]        59000 task-resume id=2 reason=scheduler
+[machine.1]        59000 task-yield id=2 reason=Idle
+[machine.1]        60000 task-resume id=1 reason=scheduler
+[machine.1]        60000 task-created id=64 name="worker"
+[machine.1]        60000 task-yield id=1 reason=RtosPortYield
+[machine.1]        60000 task-resume id=64 reason=scheduler
+[machine.1]        60000 task-yield id=64 reason=RtosPortYield
+[machine.1]        60000 user-u32 "worker_start" = 60
+[machine.1]        60000 task-resume id=2 reason=scheduler
+[machine.1]        60000 task-yield id=2 reason=Idle
+[machine.1]        61000 task-resume id=1 reason=scheduler
+[machine.1]        61000 task-created id=65 name="worker"
+[machine.1]        61000 task-yield id=1 reason=RtosPortYield
+[machine.1]        61000 task-resume id=45 reason=scheduler
+[machine.1]        61000 task-yield id=45 reason=RtosPortYield
+[machine.1]        61000 user-u32 "worker_done" = 41
+[machine.1]        61000 task-resume id=47 reason=scheduler
+[machine.1]        61000 task-yield id=47 reason=RtosPortYield
+[machine.1]        61000 user-u32 "worker_done" = 43
+[machine.1]        61000 task-resume id=65 reason=scheduler
+[machine.1]        61000 task-yield id=65 reason=RtosPortYield
+[machine.1]        61000 user-u32 "worker_start" = 61
+[machine.1]        61000 task-resume id=2 reason=scheduler
+[machine.1]        61000 task-yield id=2 reason=Idle
+[machine.1]        62000 task-resume id=1 reason=scheduler
+[machine.1]        62000 task-created id=66 name="worker"
+[machine.1]        62000 task-yield id=1 reason=RtosPortYield
+[machine.1]        62000 task-resume id=66 reason=scheduler
+[machine.1]        62000 task-yield id=66 reason=RtosPortYield
+[machine.1]        62000 user-u32 "worker_start" = 62
+[machine.1]        62000 task-resume id=2 reason=scheduler
+[machine.1]        62000 task-yield id=2 reason=Idle
+[machine.1]        63000 task-resume id=1 reason=scheduler
+[machine.1]        63000 task-created id=67 name="worker"
+[machine.1]        63000 task-yield id=1 reason=RtosPortYield
+[machine.1]        63000 task-resume id=60 reason=scheduler
+[machine.1]        63000 task-yield id=60 reason=RtosPortYield
+[machine.1]        63000 user-u32 "worker_done" = 56
+[machine.1]        63000 task-resume id=67 reason=scheduler
+[machine.1]        63000 task-yield id=67 reason=RtosPortYield
+[machine.1]        63000 user-u32 "worker_start" = 63
+[machine.1]        63000 task-resume id=2 reason=scheduler
+[machine.1]        63000 task-yield id=2 reason=Idle
+[machine.1]        64000 task-resume id=1 reason=scheduler
+[machine.1]        64000 task-created id=68 name="worker"
+[machine.1]        64000 task-yield id=1 reason=RtosPortYield
+[machine.1]        64000 task-resume id=68 reason=scheduler
+[machine.1]        64000 task-yield id=68 reason=RtosPortYield
+[machine.1]        64000 user-u32 "worker_start" = 64
+[machine.1]        64000 task-resume id=2 reason=scheduler
+[machine.1]        64000 task-yield id=2 reason=Idle
+[machine.1]        65000 task-resume id=1 reason=scheduler
+[machine.1]        65000 task-created id=69 name="worker"
+[machine.1]        65000 task-yield id=1 reason=RtosPortYield
+[machine.1]        65000 task-resume id=63 reason=scheduler
+[machine.1]        65000 task-yield id=63 reason=RtosPortYield
+[machine.1]        65000 user-u32 "worker_done" = 59
+[machine.1]        65000 task-resume id=65 reason=scheduler
+[machine.1]        65000 task-yield id=65 reason=RtosPortYield
+[machine.1]        65000 user-u32 "worker_done" = 61
+[machine.1]        65000 task-resume id=69 reason=scheduler
+[machine.1]        65000 task-yield id=69 reason=RtosPortYield
+[machine.1]        65000 user-u32 "worker_start" = 65
+[machine.1]        65000 task-resume id=2 reason=scheduler
+[machine.1]        65000 task-yield id=2 reason=Idle
+[machine.1]        66000 task-resume id=1 reason=scheduler
+[machine.1]        66000 task-created id=70 name="worker"
+[machine.1]        66000 task-yield id=1 reason=RtosPortYield
+[machine.1]        66000 task-resume id=70 reason=scheduler
+[machine.1]        66000 task-yield id=70 reason=RtosPortYield
+[machine.1]        66000 user-u32 "worker_start" = 66
+[machine.1]        66000 task-resume id=2 reason=scheduler
+[machine.1]        66000 task-yield id=2 reason=Idle
+[machine.1]        67000 task-resume id=1 reason=scheduler
+[machine.1]        67000 task-created id=71 name="worker"
+[machine.1]        67000 task-yield id=1 reason=RtosPortYield
+[machine.1]        67000 task-resume id=52 reason=scheduler
+[machine.1]        67000 task-yield id=52 reason=RtosPortYield
+[machine.1]        67000 user-u32 "worker_done" = 48
+[machine.1]        67000 task-resume id=54 reason=scheduler
+[machine.1]        67000 task-yield id=54 reason=RtosPortYield
+[machine.1]        67000 user-u32 "worker_done" = 50
+[machine.1]        67000 task-resume id=62 reason=scheduler
+[machine.1]        67000 task-yield id=62 reason=RtosPortYield
+[machine.1]        67000 user-u32 "worker_done" = 58
+[machine.1]        67000 task-resume id=71 reason=scheduler
+[machine.1]        67000 task-yield id=71 reason=RtosPortYield
+[machine.1]        67000 user-u32 "worker_start" = 67
+[machine.1]        67000 task-resume id=2 reason=scheduler
+[machine.1]        67000 task-yield id=2 reason=Idle
+[machine.1]        68000 task-resume id=1 reason=scheduler
+[machine.1]        68000 task-created id=72 name="worker"
+[machine.1]        68000 task-yield id=1 reason=RtosPortYield
+[machine.1]        68000 task-resume id=72 reason=scheduler
+[machine.1]        68000 task-yield id=72 reason=RtosPortYield
+[machine.1]        68000 user-u32 "worker_start" = 68
+[machine.1]        68000 task-resume id=2 reason=scheduler
+[machine.1]        68000 task-yield id=2 reason=Idle
+[machine.1]        69000 task-resume id=1 reason=scheduler
+[machine.1]        69000 task-created id=73 name="worker"
+[machine.1]        69000 task-yield id=1 reason=RtosPortYield
+[machine.1]        69000 task-resume id=55 reason=scheduler
+[machine.1]        69000 task-yield id=55 reason=RtosPortYield
+[machine.1]        69000 user-u32 "worker_done" = 51
+[machine.1]        69000 task-resume id=57 reason=scheduler
+[machine.1]        69000 task-yield id=57 reason=RtosPortYield
+[machine.1]        69000 user-u32 "worker_done" = 53
+[machine.1]        69000 task-resume id=59 reason=scheduler
+[machine.1]        69000 task-yield id=59 reason=RtosPortYield
+[machine.1]        69000 user-u32 "worker_done" = 55
+[machine.1]        69000 task-resume id=61 reason=scheduler
+[machine.1]        69000 task-yield id=61 reason=RtosPortYield
+[machine.1]        69000 user-u32 "worker_done" = 57
+[machine.1]        69000 task-resume id=73 reason=scheduler
+[machine.1]        69000 task-yield id=73 reason=RtosPortYield
+[machine.1]        69000 user-u32 "worker_start" = 69
+[machine.1]        69000 task-resume id=2 reason=scheduler
+[machine.1]        69000 task-yield id=2 reason=Idle
+[machine.1]        70000 task-resume id=1 reason=scheduler
+[machine.1]        70000 task-created id=74 name="worker"
+[machine.1]        70000 task-yield id=1 reason=RtosPortYield
+[machine.1]        70000 task-resume id=74 reason=scheduler
+[machine.1]        70000 task-yield id=74 reason=RtosPortYield
+[machine.1]        70000 user-u32 "worker_start" = 70
+[machine.1]        70000 task-resume id=2 reason=scheduler
+[machine.1]        70000 task-yield id=2 reason=Idle
+[machine.1]        71000 task-resume id=1 reason=scheduler
+[machine.1]        71000 task-created id=75 name="worker"
+[machine.1]        71000 task-yield id=1 reason=RtosPortYield
+[machine.1]        71000 task-resume id=64 reason=scheduler
+[machine.1]        71000 task-yield id=64 reason=RtosPortYield
+[machine.1]        71000 user-u32 "worker_done" = 60
+[machine.1]        71000 task-resume id=70 reason=scheduler
+[machine.1]        71000 task-yield id=70 reason=RtosPortYield
+[machine.1]        71000 user-u32 "worker_done" = 66
+[machine.1]        71000 task-resume id=74 reason=scheduler
+[machine.1]        71000 task-yield id=74 reason=RtosPortYield
+[machine.1]        71000 user-u32 "worker_done" = 70
+[machine.1]        71000 task-resume id=75 reason=scheduler
+[machine.1]        71000 task-yield id=75 reason=RtosPortYield
+[machine.1]        71000 user-u32 "worker_start" = 71
+[machine.1]        71000 task-resume id=2 reason=scheduler
+[machine.1]        71000 task-yield id=2 reason=Idle
+[machine.1]        72000 task-resume id=1 reason=scheduler
+[machine.1]        72000 task-created id=76 name="worker"
+[machine.1]        72000 task-yield id=1 reason=RtosPortYield
+[machine.1]        72000 task-resume id=76 reason=scheduler
+[machine.1]        72000 task-yield id=76 reason=RtosPortYield
+[machine.1]        72000 user-u32 "worker_start" = 72
+[machine.1]        72000 task-resume id=2 reason=scheduler
+[machine.1]        72000 task-yield id=2 reason=Idle
+[machine.1]        73000 task-resume id=1 reason=scheduler
+[machine.1]        73000 task-created id=77 name="worker"
+[machine.1]        73000 task-yield id=1 reason=RtosPortYield
+[machine.1]        73000 task-resume id=77 reason=scheduler
+[machine.1]        73000 task-yield id=77 reason=RtosPortYield
+[machine.1]        73000 user-u32 "worker_start" = 73
+[machine.1]        73000 task-resume id=2 reason=scheduler
+[machine.1]        73000 task-yield id=2 reason=Idle
+[machine.1]        74000 task-resume id=1 reason=scheduler
+[machine.1]        74000 task-created id=78 name="worker"
+[machine.1]        74000 task-yield id=1 reason=RtosPortYield
+[machine.1]        74000 task-resume id=78 reason=scheduler
+[machine.1]        74000 task-yield id=78 reason=RtosPortYield
+[machine.1]        74000 user-u32 "worker_start" = 74
+[machine.1]        74000 task-resume id=2 reason=scheduler
+[machine.1]        74000 task-yield id=2 reason=Idle
+[machine.1]        75000 task-resume id=1 reason=scheduler
+[machine.1]        75000 task-created id=79 name="worker"
+[machine.1]        75000 task-yield id=1 reason=RtosPortYield
+[machine.1]        75000 task-resume id=66 reason=scheduler
+[machine.1]        75000 task-yield id=66 reason=RtosPortYield
+[machine.1]        75000 user-u32 "worker_done" = 62
+[machine.1]        75000 task-resume id=68 reason=scheduler
+[machine.1]        75000 task-yield id=68 reason=RtosPortYield
+[machine.1]        75000 user-u32 "worker_done" = 64
+[machine.1]        75000 task-resume id=79 reason=scheduler
+[machine.1]        75000 task-yield id=79 reason=RtosPortYield
+[machine.1]        75000 user-u32 "worker_start" = 75
+[machine.1]        75000 task-resume id=2 reason=scheduler
+[machine.1]        75000 task-yield id=2 reason=Idle
+[machine.1]        76000 task-resume id=1 reason=scheduler
+[machine.1]        76000 task-created id=80 name="worker"
+[machine.1]        76000 task-yield id=1 reason=RtosPortYield
+[machine.1]        76000 task-resume id=80 reason=scheduler
+[machine.1]        76000 task-yield id=80 reason=RtosPortYield
+[machine.1]        76000 user-u32 "worker_start" = 76
+[machine.1]        76000 task-resume id=2 reason=scheduler
+[machine.1]        76000 task-yield id=2 reason=Idle
+[machine.1]        77000 task-resume id=1 reason=scheduler
+[machine.1]        77000 task-created id=81 name="worker"
+[machine.1]        77000 task-yield id=1 reason=RtosPortYield
+[machine.1]        77000 task-resume id=73 reason=scheduler
+[machine.1]        77000 task-yield id=73 reason=RtosPortYield
+[machine.1]        77000 user-u32 "worker_done" = 69
+[machine.1]        77000 task-resume id=81 reason=scheduler
+[machine.1]        77000 task-yield id=81 reason=RtosPortYield
+[machine.1]        77000 user-u32 "worker_start" = 77
+[machine.1]        77000 task-resume id=2 reason=scheduler
+[machine.1]        77000 task-yield id=2 reason=Idle
+[machine.1]        78000 task-resume id=1 reason=scheduler
+[machine.1]        78000 task-created id=82 name="worker"
+[machine.1]        78000 task-yield id=1 reason=RtosPortYield
+[machine.1]        78000 task-resume id=82 reason=scheduler
+[machine.1]        78000 task-yield id=82 reason=RtosPortYield
+[machine.1]        78000 user-u32 "worker_start" = 78
+[machine.1]        78000 task-resume id=2 reason=scheduler
+[machine.1]        78000 task-yield id=2 reason=Idle
+[machine.1]        79000 task-resume id=1 reason=scheduler
+[machine.1]        79000 task-created id=83 name="worker"
+[machine.1]        79000 task-yield id=1 reason=RtosPortYield
+[machine.1]        79000 task-resume id=72 reason=scheduler
+[machine.1]        79000 task-yield id=72 reason=RtosPortYield
+[machine.1]        79000 user-u32 "worker_done" = 68
+[machine.1]        79000 task-resume id=76 reason=scheduler
+[machine.1]        79000 task-yield id=76 reason=RtosPortYield
+[machine.1]        79000 user-u32 "worker_done" = 72
+[machine.1]        79000 task-resume id=83 reason=scheduler
+[machine.1]        79000 task-yield id=83 reason=RtosPortYield
+[machine.1]        79000 user-u32 "worker_start" = 79
+[machine.1]        79000 task-resume id=2 reason=scheduler
+[machine.1]        79000 task-yield id=2 reason=Idle
+[machine.1]        80000 task-resume id=1 reason=scheduler
+[machine.1]        80000 task-created id=84 name="worker"
+[machine.1]        80000 task-yield id=1 reason=RtosPortYield
+[machine.1]        80000 task-resume id=84 reason=scheduler
+[machine.1]        80000 task-yield id=84 reason=RtosPortYield
+[machine.1]        80000 user-u32 "worker_start" = 80
+[machine.1]        80000 task-resume id=2 reason=scheduler
+[machine.1]        80000 task-yield id=2 reason=Idle
+[machine.1]        81000 task-resume id=1 reason=scheduler
+[machine.1]        81000 task-created id=85 name="worker"
+[machine.1]        81000 task-yield id=1 reason=RtosPortYield
+[machine.1]        81000 task-resume id=67 reason=scheduler
+[machine.1]        81000 task-yield id=67 reason=RtosPortYield
+[machine.1]        81000 user-u32 "worker_done" = 63
+[machine.1]        81000 task-resume id=79 reason=scheduler
+[machine.1]        81000 task-yield id=79 reason=RtosPortYield
+[machine.1]        81000 user-u32 "worker_done" = 75
+[machine.1]        81000 task-resume id=85 reason=scheduler
+[machine.1]        81000 task-yield id=85 reason=RtosPortYield
+[machine.1]        81000 user-u32 "worker_start" = 81
+[machine.1]        81000 task-resume id=2 reason=scheduler
+[machine.1]        81000 task-yield id=2 reason=Idle
+[machine.1]        82000 task-resume id=1 reason=scheduler
+[machine.1]        82000 task-created id=86 name="worker"
+[machine.1]        82000 task-yield id=1 reason=RtosPortYield
+[machine.1]        82000 task-resume id=86 reason=scheduler
+[machine.1]        82000 task-yield id=86 reason=RtosPortYield
+[machine.1]        82000 user-u32 "worker_start" = 82
+[machine.1]        82000 task-resume id=2 reason=scheduler
+[machine.1]        82000 task-yield id=2 reason=Idle
+[machine.1]        83000 task-resume id=1 reason=scheduler
+[machine.1]        83000 task-created id=87 name="worker"
+[machine.1]        83000 task-yield id=1 reason=RtosPortYield
+[machine.1]        83000 task-resume id=78 reason=scheduler
+[machine.1]        83000 task-yield id=78 reason=RtosPortYield
+[machine.1]        83000 user-u32 "worker_done" = 74
+[machine.1]        83000 task-resume id=82 reason=scheduler
+[machine.1]        83000 task-yield id=82 reason=RtosPortYield
+[machine.1]        83000 user-u32 "worker_done" = 78
+[machine.1]        83000 task-resume id=87 reason=scheduler
+[machine.1]        83000 task-yield id=87 reason=RtosPortYield
+[machine.1]        83000 user-u32 "worker_start" = 83
+[machine.1]        83000 task-resume id=2 reason=scheduler
+[machine.1]        83000 task-yield id=2 reason=Idle
+[machine.1]        84000 task-resume id=1 reason=scheduler
+[machine.1]        84000 task-created id=88 name="worker"
+[machine.1]        84000 task-yield id=1 reason=RtosPortYield
+[machine.1]        84000 task-resume id=88 reason=scheduler
+[machine.1]        84000 task-yield id=88 reason=RtosPortYield
+[machine.1]        84000 user-u32 "worker_start" = 84
+[machine.1]        84000 task-resume id=2 reason=scheduler
+[machine.1]        84000 task-yield id=2 reason=Idle
+[machine.1]        85000 task-resume id=1 reason=scheduler
+[machine.1]        85000 task-created id=89 name="worker"
+[machine.1]        85000 task-yield id=1 reason=RtosPortYield
+[machine.1]        85000 task-resume id=69 reason=scheduler
+[machine.1]        85000 task-yield id=69 reason=RtosPortYield
+[machine.1]        85000 user-u32 "worker_done" = 65
+[machine.1]        85000 task-resume id=71 reason=scheduler
+[machine.1]        85000 task-yield id=71 reason=RtosPortYield
+[machine.1]        85000 user-u32 "worker_done" = 67
+[machine.1]        85000 task-resume id=83 reason=scheduler
+[machine.1]        85000 task-yield id=83 reason=RtosPortYield
+[machine.1]        85000 user-u32 "worker_done" = 79
+[machine.1]        85000 task-resume id=85 reason=scheduler
+[machine.1]        85000 task-yield id=85 reason=RtosPortYield
+[machine.1]        85000 user-u32 "worker_done" = 81
+[machine.1]        85000 task-resume id=89 reason=scheduler
+[machine.1]        85000 task-yield id=89 reason=RtosPortYield
+[machine.1]        85000 user-u32 "worker_start" = 85
+[machine.1]        85000 task-resume id=2 reason=scheduler
+[machine.1]        85000 task-yield id=2 reason=Idle
+[machine.1]        86000 task-resume id=1 reason=scheduler
+[machine.1]        86000 task-created id=90 name="worker"
+[machine.1]        86000 task-yield id=1 reason=RtosPortYield
+[machine.1]        86000 task-resume id=90 reason=scheduler
+[machine.1]        86000 task-yield id=90 reason=RtosPortYield
+[machine.1]        86000 user-u32 "worker_start" = 86
+[machine.1]        86000 task-resume id=2 reason=scheduler
+[machine.1]        86000 task-yield id=2 reason=Idle
+[machine.1]        87000 task-resume id=1 reason=scheduler
+[machine.1]        87000 task-created id=91 name="worker"
+[machine.1]        87000 task-yield id=1 reason=RtosPortYield
+[machine.1]        87000 task-resume id=80 reason=scheduler
+[machine.1]        87000 task-yield id=80 reason=RtosPortYield
+[machine.1]        87000 user-u32 "worker_done" = 76
+[machine.1]        87000 task-resume id=91 reason=scheduler
+[machine.1]        87000 task-yield id=91 reason=RtosPortYield
+[machine.1]        87000 user-u32 "worker_start" = 87
+[machine.1]        87000 task-resume id=2 reason=scheduler
+[machine.1]        87000 task-yield id=2 reason=Idle
+[machine.1]        88000 task-resume id=1 reason=scheduler
+[machine.1]        88000 task-created id=92 name="worker"
+[machine.1]        88000 task-yield id=1 reason=RtosPortYield
+[machine.1]        88000 task-resume id=92 reason=scheduler
+[machine.1]        88000 task-yield id=92 reason=RtosPortYield
+[machine.1]        88000 user-u32 "worker_start" = 88
+[machine.1]        88000 task-resume id=2 reason=scheduler
+[machine.1]        88000 task-yield id=2 reason=Idle
+[machine.1]        89000 task-resume id=1 reason=scheduler
+[machine.1]        89000 task-created id=93 name="worker"
+[machine.1]        89000 task-yield id=1 reason=RtosPortYield
+[machine.1]        89000 task-resume id=75 reason=scheduler
+[machine.1]        89000 task-yield id=75 reason=RtosPortYield
+[machine.1]        89000 user-u32 "worker_done" = 71
+[machine.1]        89000 task-resume id=81 reason=scheduler
+[machine.1]        89000 task-yield id=81 reason=RtosPortYield
+[machine.1]        89000 user-u32 "worker_done" = 77
+[machine.1]        89000 task-resume id=87 reason=scheduler
+[machine.1]        89000 task-yield id=87 reason=RtosPortYield
+[machine.1]        89000 user-u32 "worker_done" = 83
+[machine.1]        89000 task-resume id=89 reason=scheduler
+[machine.1]        89000 task-yield id=89 reason=RtosPortYield
+[machine.1]        89000 user-u32 "worker_done" = 85
+[machine.1]        89000 task-resume id=91 reason=scheduler
+[machine.1]        89000 task-yield id=91 reason=RtosPortYield
+[machine.1]        89000 user-u32 "worker_done" = 87
+[machine.1]        89000 task-resume id=93 reason=scheduler
+[machine.1]        89000 task-yield id=93 reason=RtosPortYield
+[machine.1]        89000 user-u32 "worker_start" = 89
+[machine.1]        89000 task-resume id=2 reason=scheduler
+[machine.1]        89000 task-yield id=2 reason=Idle
+[machine.1]        90000 task-resume id=1 reason=scheduler
+[machine.1]        90000 task-created id=94 name="worker"
+[machine.1]        90000 task-yield id=1 reason=RtosPortYield
+[machine.1]        90000 task-resume id=94 reason=scheduler
+[machine.1]        90000 task-yield id=94 reason=RtosPortYield
+[machine.1]        90000 user-u32 "worker_start" = 90
+[machine.1]        90000 task-resume id=2 reason=scheduler
+[machine.1]        90000 task-yield id=2 reason=Idle
+[machine.1]        91000 task-resume id=1 reason=scheduler
+[machine.1]        91000 task-created id=95 name="worker"
+[machine.1]        91000 task-yield id=1 reason=RtosPortYield
+[machine.1]        91000 task-resume id=95 reason=scheduler
+[machine.1]        91000 task-yield id=95 reason=RtosPortYield
+[machine.1]        91000 user-u32 "worker_start" = 91
+[machine.1]        91000 task-resume id=2 reason=scheduler
+[machine.1]        91000 task-yield id=2 reason=Idle
+[machine.1]        92000 task-resume id=1 reason=scheduler
+[machine.1]        92000 task-created id=96 name="worker"
+[machine.1]        92000 task-yield id=1 reason=RtosPortYield
+[machine.1]        92000 task-resume id=96 reason=scheduler
+[machine.1]        92000 task-yield id=96 reason=RtosPortYield
+[machine.1]        92000 user-u32 "worker_start" = 92
+[machine.1]        92000 task-resume id=2 reason=scheduler
+[machine.1]        92000 task-yield id=2 reason=Idle
+[machine.1]        93000 task-resume id=1 reason=scheduler
+[machine.1]        93000 task-created id=97 name="worker"
+[machine.1]        93000 task-yield id=1 reason=RtosPortYield
+[machine.1]        93000 task-resume id=77 reason=scheduler
+[machine.1]        93000 task-yield id=77 reason=RtosPortYield
+[machine.1]        93000 user-u32 "worker_done" = 73
+[machine.1]        93000 task-resume id=95 reason=scheduler
+[machine.1]        93000 task-yield id=95 reason=RtosPortYield
+[machine.1]        93000 user-u32 "worker_done" = 91
+[machine.1]        93000 task-resume id=97 reason=scheduler
+[machine.1]        93000 task-yield id=97 reason=RtosPortYield
+[machine.1]        93000 user-u32 "worker_start" = 93
+[machine.1]        93000 task-resume id=2 reason=scheduler
+[machine.1]        93000 task-yield id=2 reason=Idle
+[machine.1]        94000 task-resume id=1 reason=scheduler
+[machine.1]        94000 task-created id=98 name="worker"
+[machine.1]        94000 task-yield id=1 reason=RtosPortYield
+[machine.1]        94000 task-resume id=98 reason=scheduler
+[machine.1]        94000 task-yield id=98 reason=RtosPortYield
+[machine.1]        94000 user-u32 "worker_start" = 94
+[machine.1]        94000 task-resume id=2 reason=scheduler
+[machine.1]        94000 task-yield id=2 reason=Idle
+[machine.1]        95000 task-resume id=1 reason=scheduler
+[machine.1]        95000 task-created id=99 name="worker"
+[machine.1]        95000 task-yield id=1 reason=RtosPortYield
+[machine.1]        95000 task-resume id=86 reason=scheduler
+[machine.1]        95000 task-yield id=86 reason=RtosPortYield
+[machine.1]        95000 user-u32 "worker_done" = 82
+[machine.1]        95000 task-resume id=94 reason=scheduler
+[machine.1]        95000 task-yield id=94 reason=RtosPortYield
+[machine.1]        95000 user-u32 "worker_done" = 90
+[machine.1]        95000 task-resume id=96 reason=scheduler
+[machine.1]        95000 task-yield id=96 reason=RtosPortYield
+[machine.1]        95000 user-u32 "worker_done" = 92
+[machine.1]        95000 task-resume id=99 reason=scheduler
+[machine.1]        95000 task-yield id=99 reason=RtosPortYield
+[machine.1]        95000 user-u32 "worker_start" = 95
+[machine.1]        95000 task-resume id=2 reason=scheduler
+[machine.1]        95000 task-yield id=2 reason=Idle
+[machine.1]        96000 task-resume id=1 reason=scheduler
+[machine.1]        96000 task-created id=100 name="worker"
+[machine.1]        96000 task-yield id=1 reason=RtosPortYield
+[machine.1]        96000 task-resume id=100 reason=scheduler
+[machine.1]        96000 task-yield id=100 reason=RtosPortYield
+[machine.1]        96000 user-u32 "worker_start" = 96
+[machine.1]        96000 task-resume id=2 reason=scheduler
+[machine.1]        96000 task-yield id=2 reason=Idle
+[machine.1]        97000 task-resume id=1 reason=scheduler
+[machine.1]        97000 task-created id=101 name="worker"
+[machine.1]        97000 task-yield id=1 reason=RtosPortYield
+[machine.1]        97000 task-resume id=97 reason=scheduler
+[machine.1]        97000 task-yield id=97 reason=RtosPortYield
+[machine.1]        97000 user-u32 "worker_done" = 93
+[machine.1]        97000 task-resume id=101 reason=scheduler
+[machine.1]        97000 task-yield id=101 reason=RtosPortYield
+[machine.1]        97000 user-u32 "worker_start" = 97
+[machine.1]        97000 task-resume id=2 reason=scheduler
+[machine.1]        97000 task-yield id=2 reason=Idle
+[machine.1]        98000 task-resume id=1 reason=scheduler
+[machine.1]        98000 task-created id=102 name="worker"
+[machine.1]        98000 task-yield id=1 reason=RtosPortYield
+[machine.1]        98000 task-resume id=102 reason=scheduler
+[machine.1]        98000 task-yield id=102 reason=RtosPortYield
+[machine.1]        98000 user-u32 "worker_start" = 98
+[machine.1]        98000 task-resume id=2 reason=scheduler
+[machine.1]        98000 task-yield id=2 reason=Idle
+[machine.1]        99000 task-resume id=1 reason=scheduler
+[machine.1]        99000 task-created id=103 name="worker"
+[machine.1]        99000 task-yield id=1 reason=RtosPortYield
+[machine.1]        99000 task-resume id=84 reason=scheduler
+[machine.1]        99000 task-yield id=84 reason=RtosPortYield
+[machine.1]        99000 user-u32 "worker_done" = 80
+[machine.1]        99000 task-resume id=88 reason=scheduler
+[machine.1]        99000 task-yield id=88 reason=RtosPortYield
+[machine.1]        99000 user-u32 "worker_done" = 84
+[machine.1]        99000 task-resume id=90 reason=scheduler
+[machine.1]        99000 task-yield id=90 reason=RtosPortYield
+[machine.1]        99000 user-u32 "worker_done" = 86
+[machine.1]        99000 task-resume id=102 reason=scheduler
+[machine.1]        99000 task-yield id=102 reason=RtosPortYield
+[machine.1]        99000 user-u32 "worker_done" = 98
+[machine.1]        99000 task-resume id=103 reason=scheduler
+[machine.1]        99000 task-yield id=103 reason=RtosPortYield
+[machine.1]        99000 user-u32 "worker_start" = 99
+[machine.1]        99000 task-resume id=2 reason=scheduler
+[machine.1]        99000 task-yield id=2 reason=Idle
+[machine.1]       100000 task-resume id=1 reason=scheduler
+[machine.1]       100000 task-yield id=1 reason=RtosPortYield
+[machine.1]       100000 task-resume id=2 reason=scheduler
+[machine.1]       100000 task-yield id=2 reason=Idle
+[machine.1]       101000 task-resume id=99 reason=scheduler
+[machine.1]       101000 task-yield id=99 reason=RtosPortYield
+[machine.1]       101000 user-u32 "worker_done" = 95
+[machine.1]       101000 task-resume id=101 reason=scheduler
+[machine.1]       101000 task-yield id=101 reason=RtosPortYield
+[machine.1]       101000 user-u32 "worker_done" = 97
+[machine.1]       101000 task-resume id=2 reason=scheduler
+[machine.1]       101000 task-yield id=2 reason=Idle
+[machine.1]       103000 task-resume id=98 reason=scheduler
+[machine.1]       103000 task-yield id=98 reason=RtosPortYield
+[machine.1]       103000 user-u32 "worker_done" = 94
+[machine.1]       103000 task-resume id=2 reason=scheduler
+[machine.1]       103000 task-yield id=2 reason=Idle
+[machine.1]       105000 task-resume id=93 reason=scheduler
+[machine.1]       105000 task-yield id=93 reason=RtosPortYield
+[machine.1]       105000 user-u32 "worker_done" = 89
+[machine.1]       105000 task-resume id=103 reason=scheduler
+[machine.1]       105000 task-yield id=103 reason=RtosPortYield
+[machine.1]       105000 user-u32 "worker_done" = 99
+[machine.1]       105000 task-resume id=2 reason=scheduler
+[machine.1]       105000 task-yield id=2 reason=Idle
+[machine.1]       107000 task-resume id=92 reason=scheduler
+[machine.1]       107000 task-yield id=92 reason=RtosPortYield
+[machine.1]       107000 user-u32 "worker_done" = 88
+[machine.1]       107000 task-resume id=2 reason=scheduler
+[machine.1]       107000 task-yield id=2 reason=Idle
+[machine.1]       115000 task-resume id=100 reason=scheduler
+[machine.1]       115000 task-yield id=100 reason=RtosPortYield
+[machine.1]       115000 user-u32 "worker_done" = 96
+[machine.1]       115000 task-resume id=2 reason=scheduler
+[machine.1]       115000 task-yield id=2 reason=Idle
+[machine.1]       600000 task-resume id=1 reason=scheduler
+[machine.1]       600000 task-yield id=1 reason=RtosPortYield
+[machine.1]       600000 user-u32 "stress_create_done" = 100
+[machine.1]       600000 task-resume id=2 reason=scheduler
+[machine.1]       600000 task-yield id=2 reason=Idle

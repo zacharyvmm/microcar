@@ -11,48 +11,48 @@
 [machine.1]            0 user-u32 "net_demo_boot" = 1
 [machine.1]            0 task-resume id=2 reason=scheduler
 [machine.1]            0 task-yield id=2 reason=Idle
-[machine.1]          100 task-resume id=1 reason=scheduler
-[machine.1]          100 task-yield id=1 reason=RtosPortYield
-[machine.1]          100 user-u32 "eth_send_count" = 1
-[machine.1]          100 user-u32 "eth_send_bytes" = 14
-[machine.1]          100 task-resume id=2 reason=scheduler
-[machine.1]          100 task-yield id=2 reason=Idle
-[machine.1]          200 task-resume id=1 reason=scheduler
-[machine.1]          200 task-yield id=1 reason=RtosPortYield
-[machine.1]          200 user-u32 "eth_send_count" = 2
-[machine.1]          200 user-u32 "eth_send_bytes" = 14
-[machine.1]          200 user-u32 "eth_recv_count" = 1
-[machine.1]          200 user-u32 "eth_recv_bytes" = 14
-[machine.1]          200 user-u32 "eth_recv_first4" = 1212501068
-[machine.1]          200 task-resume id=2 reason=scheduler
-[machine.1]          200 task-yield id=2 reason=Idle
-[machine.1]          300 task-resume id=1 reason=scheduler
-[machine.1]          300 task-yield id=1 reason=RtosPortYield
-[machine.1]          300 user-u32 "eth_send_count" = 3
-[machine.1]          300 user-u32 "eth_send_bytes" = 14
-[machine.1]          300 user-u32 "eth_recv_count" = 2
-[machine.1]          300 user-u32 "eth_recv_bytes" = 14
-[machine.1]          300 user-u32 "eth_recv_first4" = 1212501068
-[machine.1]          300 task-resume id=2 reason=scheduler
-[machine.1]          300 task-yield id=2 reason=Idle
-[machine.1]          400 task-resume id=1 reason=scheduler
-[machine.1]          400 task-yield id=1 reason=RtosPortYield
-[machine.1]          400 user-u32 "eth_send_count" = 4
-[machine.1]          400 user-u32 "eth_send_bytes" = 14
-[machine.1]          400 user-u32 "eth_recv_count" = 3
-[machine.1]          400 user-u32 "eth_recv_bytes" = 14
-[machine.1]          400 user-u32 "eth_recv_first4" = 1212501068
-[machine.1]          400 task-resume id=2 reason=scheduler
-[machine.1]          400 task-yield id=2 reason=Idle
-[machine.1]          500 task-resume id=1 reason=scheduler
-[machine.1]          500 task-yield id=1 reason=RtosPortYield
-[machine.1]          500 user-u32 "eth_send_count" = 5
-[machine.1]          500 user-u32 "eth_send_bytes" = 14
-[machine.1]          500 user-u32 "eth_recv_count" = 4
-[machine.1]          500 user-u32 "eth_recv_bytes" = 14
-[machine.1]          500 user-u32 "eth_recv_first4" = 1212501068
-[machine.1]          500 task-resume id=2 reason=scheduler
-[machine.1]          500 task-yield id=2 reason=Idle
+[machine.1]       100000 task-resume id=1 reason=scheduler
+[machine.1]       100000 task-yield id=1 reason=RtosPortYield
+[machine.1]       100000 user-u32 "eth_send_count" = 1
+[machine.1]       100000 user-u32 "eth_send_bytes" = 14
+[machine.1]       100000 task-resume id=2 reason=scheduler
+[machine.1]       100000 task-yield id=2 reason=Idle
+[machine.1]       200000 task-resume id=1 reason=scheduler
+[machine.1]       200000 task-yield id=1 reason=RtosPortYield
+[machine.1]       200000 user-u32 "eth_send_count" = 2
+[machine.1]       200000 user-u32 "eth_send_bytes" = 14
+[machine.1]       200000 user-u32 "eth_recv_count" = 1
+[machine.1]       200000 user-u32 "eth_recv_bytes" = 14
+[machine.1]       200000 user-u32 "eth_recv_first4" = 1212501068
+[machine.1]       200000 task-resume id=2 reason=scheduler
+[machine.1]       200000 task-yield id=2 reason=Idle
+[machine.1]       300000 task-resume id=1 reason=scheduler
+[machine.1]       300000 task-yield id=1 reason=RtosPortYield
+[machine.1]       300000 user-u32 "eth_send_count" = 3
+[machine.1]       300000 user-u32 "eth_send_bytes" = 14
+[machine.1]       300000 user-u32 "eth_recv_count" = 2
+[machine.1]       300000 user-u32 "eth_recv_bytes" = 14
+[machine.1]       300000 user-u32 "eth_recv_first4" = 1212501068
+[machine.1]       300000 task-resume id=2 reason=scheduler
+[machine.1]       300000 task-yield id=2 reason=Idle
+[machine.1]       400000 task-resume id=1 reason=scheduler
+[machine.1]       400000 task-yield id=1 reason=RtosPortYield
+[machine.1]       400000 user-u32 "eth_send_count" = 4
+[machine.1]       400000 user-u32 "eth_send_bytes" = 14
+[machine.1]       400000 user-u32 "eth_recv_count" = 3
+[machine.1]       400000 user-u32 "eth_recv_bytes" = 14
+[machine.1]       400000 user-u32 "eth_recv_first4" = 1212501068
+[machine.1]       400000 task-resume id=2 reason=scheduler
+[machine.1]       400000 task-yield id=2 reason=Idle
+[machine.1]       500000 task-resume id=1 reason=scheduler
+[machine.1]       500000 task-yield id=1 reason=RtosPortYield
+[machine.1]       500000 user-u32 "eth_send_count" = 5
+[machine.1]       500000 user-u32 "eth_send_bytes" = 14
+[machine.1]       500000 user-u32 "eth_recv_count" = 4
+[machine.1]       500000 user-u32 "eth_recv_bytes" = 14
+[machine.1]       500000 user-u32 "eth_recv_first4" = 1212501068
+[machine.1]       500000 task-resume id=2 reason=scheduler
+[machine.1]       500000 task-yield id=2 reason=Idle
 [machine.2]            0 task-created id=1 name="net_demo"
 [machine.2]            0 user-u32 "microcar_boot_net_demo" = 1
 [machine.2]            0 user-u32 "microcar_tasks_created" = 1
@@ -66,45 +66,45 @@
 [machine.2]            0 user-u32 "net_demo_boot" = 1
 [machine.2]            0 task-resume id=2 reason=scheduler
 [machine.2]            0 task-yield id=2 reason=Idle
-[machine.2]          100 task-resume id=1 reason=scheduler
-[machine.2]          100 task-yield id=1 reason=RtosPortYield
-[machine.2]          100 user-u32 "eth_send_count" = 1
-[machine.2]          100 user-u32 "eth_send_bytes" = 14
-[machine.2]          100 task-resume id=2 reason=scheduler
-[machine.2]          100 task-yield id=2 reason=Idle
-[machine.2]          200 task-resume id=1 reason=scheduler
-[machine.2]          200 task-yield id=1 reason=RtosPortYield
-[machine.2]          200 user-u32 "eth_send_count" = 2
-[machine.2]          200 user-u32 "eth_send_bytes" = 14
-[machine.2]          200 user-u32 "eth_recv_count" = 1
-[machine.2]          200 user-u32 "eth_recv_bytes" = 14
-[machine.2]          200 user-u32 "eth_recv_first4" = 1212501068
-[machine.2]          200 task-resume id=2 reason=scheduler
-[machine.2]          200 task-yield id=2 reason=Idle
-[machine.2]          300 task-resume id=1 reason=scheduler
-[machine.2]          300 task-yield id=1 reason=RtosPortYield
-[machine.2]          300 user-u32 "eth_send_count" = 3
-[machine.2]          300 user-u32 "eth_send_bytes" = 14
-[machine.2]          300 user-u32 "eth_recv_count" = 2
-[machine.2]          300 user-u32 "eth_recv_bytes" = 14
-[machine.2]          300 user-u32 "eth_recv_first4" = 1212501068
-[machine.2]          300 task-resume id=2 reason=scheduler
-[machine.2]          300 task-yield id=2 reason=Idle
-[machine.2]          400 task-resume id=1 reason=scheduler
-[machine.2]          400 task-yield id=1 reason=RtosPortYield
-[machine.2]          400 user-u32 "eth_send_count" = 4
-[machine.2]          400 user-u32 "eth_send_bytes" = 14
-[machine.2]          400 user-u32 "eth_recv_count" = 3
-[machine.2]          400 user-u32 "eth_recv_bytes" = 14
-[machine.2]          400 user-u32 "eth_recv_first4" = 1212501068
-[machine.2]          400 task-resume id=2 reason=scheduler
-[machine.2]          400 task-yield id=2 reason=Idle
-[machine.2]          500 task-resume id=1 reason=scheduler
-[machine.2]          500 task-yield id=1 reason=RtosPortYield
-[machine.2]          500 user-u32 "eth_send_count" = 5
-[machine.2]          500 user-u32 "eth_send_bytes" = 14
-[machine.2]          500 user-u32 "eth_recv_count" = 4
-[machine.2]          500 user-u32 "eth_recv_bytes" = 14
-[machine.2]          500 user-u32 "eth_recv_first4" = 1212501068
-[machine.2]          500 task-resume id=2 reason=scheduler
-[machine.2]          500 task-yield id=2 reason=Idle
+[machine.2]       100000 task-resume id=1 reason=scheduler
+[machine.2]       100000 task-yield id=1 reason=RtosPortYield
+[machine.2]       100000 user-u32 "eth_send_count" = 1
+[machine.2]       100000 user-u32 "eth_send_bytes" = 14
+[machine.2]       100000 task-resume id=2 reason=scheduler
+[machine.2]       100000 task-yield id=2 reason=Idle
+[machine.2]       200000 task-resume id=1 reason=scheduler
+[machine.2]       200000 task-yield id=1 reason=RtosPortYield
+[machine.2]       200000 user-u32 "eth_send_count" = 2
+[machine.2]       200000 user-u32 "eth_send_bytes" = 14
+[machine.2]       200000 user-u32 "eth_recv_count" = 1
+[machine.2]       200000 user-u32 "eth_recv_bytes" = 14
+[machine.2]       200000 user-u32 "eth_recv_first4" = 1212501068
+[machine.2]       200000 task-resume id=2 reason=scheduler
+[machine.2]       200000 task-yield id=2 reason=Idle
+[machine.2]       300000 task-resume id=1 reason=scheduler
+[machine.2]       300000 task-yield id=1 reason=RtosPortYield
+[machine.2]       300000 user-u32 "eth_send_count" = 3
+[machine.2]       300000 user-u32 "eth_send_bytes" = 14
+[machine.2]       300000 user-u32 "eth_recv_count" = 2
+[machine.2]       300000 user-u32 "eth_recv_bytes" = 14
+[machine.2]       300000 user-u32 "eth_recv_first4" = 1212501068
+[machine.2]       300000 task-resume id=2 reason=scheduler
+[machine.2]       300000 task-yield id=2 reason=Idle
+[machine.2]       400000 task-resume id=1 reason=scheduler
+[machine.2]       400000 task-yield id=1 reason=RtosPortYield
+[machine.2]       400000 user-u32 "eth_send_count" = 4
+[machine.2]       400000 user-u32 "eth_send_bytes" = 14
+[machine.2]       400000 user-u32 "eth_recv_count" = 3
+[machine.2]       400000 user-u32 "eth_recv_bytes" = 14
+[machine.2]       400000 user-u32 "eth_recv_first4" = 1212501068
+[machine.2]       400000 task-resume id=2 reason=scheduler
+[machine.2]       400000 task-yield id=2 reason=Idle
+[machine.2]       500000 task-resume id=1 reason=scheduler
+[machine.2]       500000 task-yield id=1 reason=RtosPortYield
+[machine.2]       500000 user-u32 "eth_send_count" = 5
+[machine.2]       500000 user-u32 "eth_send_bytes" = 14
+[machine.2]       500000 user-u32 "eth_recv_count" = 4
+[machine.2]       500000 user-u32 "eth_recv_bytes" = 14
+[machine.2]       500000 user-u32 "eth_recv_first4" = 1212501068
+[machine.2]       500000 task-resume id=2 reason=scheduler
+[machine.2]       500000 task-yield id=2 reason=Idle

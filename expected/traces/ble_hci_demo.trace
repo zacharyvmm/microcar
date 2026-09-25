@@ -12,10 +12,10 @@
 [machine.1]            0 user-u32 "bt_cmd_sent_bytes" = 3
 [machine.1]            0 task-resume id=2 reason=scheduler
 [machine.1]            0 task-yield id=2 reason=Idle
-[machine.1]            1 task-resume id=1 reason=scheduler
-[machine.1]            1 task-yield id=1 reason=RtosPortYield
-[machine.1]            1 user-u32 "bt_polling_events" = 1
-[machine.1]            1 user-u32 "bt_total_recv" = 0
-[machine.1]            1 user-u32 "bt_demo_finished" = 1
-[machine.1]            1 task-resume id=2 reason=scheduler
-[machine.1]            1 task-yield id=2 reason=Idle
+[machine.1]         1000 task-resume id=1 reason=scheduler
+[machine.1]         1000 task-yield id=1 reason=RtosPortYield
+[machine.1]         1000 user-u32 "bt_polling_events" = 1
+[machine.1]         1000 user-u32 "bt_total_recv" = 0
+[machine.1]         1000 user-u32 "bt_demo_finished" = 1
+[machine.1]         1000 task-resume id=2 reason=scheduler
+[machine.1]         1000 task-yield id=2 reason=Idle
