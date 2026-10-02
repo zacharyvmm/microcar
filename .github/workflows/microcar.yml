@@ -11,7 +11,7 @@ env:
   RUSTFLAGS: "-D warnings"
   # Pin to the head of the costar refactor stack (#12 → #16). Repin to the
   # merge commit on main once the stack lands.
-  COSTAR_REF: 82cb8055ce8875cc3b670d6c025791cc1ae98730
+  COSTAR_REF: ef08c42501c176c47d321647898e0d5c046b8451
 
 jobs:
   build-and-test:
