@@ -1529,13 +1529,32 @@ data = "{eth_payload}"
             ev_a.display_hashes, ev_b.display_hashes,
             "seed {seed}: display hashes must differ across sessions"
         );
-        for h in &ev_a.display_hashes {
+        // Both dashboards run the same firmware and legitimately render some
+        // identical frames.  A frame leaks when a session shows content that
+        // only its peer produces on its own (the peer's marker fill).
+        let a_only: Vec<u64> = solo_a
+            .display_hashes
+            .iter()
+            .copied()
+            .filter(|h| !solo_b.display_hashes.contains(h))
+            .collect();
+        let b_only: Vec<u64> = solo_b
+            .display_hashes
+            .iter()
+            .copied()
+            .filter(|h| !solo_a.display_hashes.contains(h))
+            .collect();
+        assert!(
+            !a_only.is_empty() && !b_only.is_empty(),
+            "seed {seed}: each session must render frames its peer does not"
+        );
+        for h in &a_only {
             assert!(
                 !ev_b.display_hashes.contains(h),
                 "seed {seed}: A display hash leaked into B"
             );
         }
-        for h in &ev_b.display_hashes {
+        for h in &b_only {
             assert!(
                 !ev_a.display_hashes.contains(h),
                 "seed {seed}: B display hash leaked into A"
